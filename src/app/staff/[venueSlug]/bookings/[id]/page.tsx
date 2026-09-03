@@ -68,6 +68,7 @@ export default async function BookingDetailsPage({
           <section>
             <h2 className="text-base font-semibold text-zinc-900">Details</h2>
             <ActionForm
+              key={booking.updatedAt.getTime()}
               action={updateBookingDetails}
               className="mt-3 flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5"
             >
@@ -170,6 +171,7 @@ export default async function BookingDetailsPage({
               </p>
             ) : (
               <ActionForm
+                key={[...assignedTableIds].sort().join(",")}
                 action={reassignTables}
                 className="mt-3 flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5"
               >

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { useRouter } from "next/navigation";
 
 export type ActionResult = { error?: string } | void;
 
@@ -19,6 +20,19 @@ export type ActionResult = { error?: string } | void;
  * Anything inside the form that needs pending state (a submit button)
  * reads it itself via useFormStatus() — see SubmitButton — rather than
  * having it threaded down as a prop.
+ *
+ * On a successful (non-redirecting, non-error) submit, we explicitly call
+ * router.refresh() ourselves rather than trusting the action's own
+ * revalidatePath() to keep the page in sync. Without this, forms on this
+ * page (e.g. the booking status <select>) would visibly show the value the
+ * user just saved for a few hundred ms, then snap back to the pre-edit
+ * value — the client Router Cache entry for this route (populated when the
+ * page first loaded) wins a race against the fresh data revalidatePath()
+ * marked stale, even though the database write itself is already
+ * committed (a plain reload always shows the correct saved value). Actions
+ * that redirect() on success — the manual add-booking/add-enquiry flows —
+ * throw internally before reaching the refresh() call, so this doesn't
+ * interfere with those.
  */
 export function ActionForm({
   action,
@@ -29,8 +43,15 @@ export function ActionForm({
   className?: string;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const [state, formAction] = useActionState<ActionResult, FormData>(
-    async (_prevState, formData) => action(formData),
+    async (_prevState, formData) => {
+      const result = await action(formData);
+      if (!result?.error) {
+        router.refresh();
+      }
+      return result;
+    },
     undefined,
   );
 
