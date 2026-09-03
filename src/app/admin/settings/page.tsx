@@ -11,7 +11,9 @@ export default async function SettingsVenuePickerPage() {
   });
 
   return (
-    <div>
+    // See admin/page.tsx's doc comment — every direct child of /admin
+    // supplies its own padding, this one was missing it.
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
       <h1 className="text-xl font-semibold text-zinc-900">Settings</h1>
       <p className="mt-1 text-sm text-zinc-500">Pick a venue to manage its hours, booking types, tables, menus, marketing, and staff.</p>
 
