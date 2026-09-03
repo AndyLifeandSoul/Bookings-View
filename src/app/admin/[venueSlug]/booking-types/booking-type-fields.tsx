@@ -91,17 +91,30 @@ export function BookingTypeFields({
       </label>
 
       {/*
-        min-w-0 on both fieldsets below: fieldset has a hard-coded UA-stylesheet
-        min-width of min-content that Tailwind's `minmax(0,1fr)` grid columns
-        don't override on their own, so at narrower widths each fieldset
-        refused to shrink past its "Min"/"Max" input pair and spilled into
-        the other column — the "Party size and duration minutes overlap" bug.
+        min-w-0 appears three times below (both fieldsets, and every Min/Max
+        label inside them) because this overlap bug had two separate causes
+        stacked on top of each other, and the first fix here only caught the
+        outer one:
+        1. fieldset has a hard-coded UA-stylesheet min-width of min-content
+           that Tailwind's `minmax(0,1fr)` grid columns don't override on
+           their own — min-w-0 on the fieldset itself fixes this layer.
+        2. Deeper: each Min/Max <input> has no explicit width, so its default
+           rendered width (~244px) becomes its <label>'s min-content size.
+           The label is a flex-1 item in a `flex items-center` row, and flex
+           items default to min-width:auto — i.e. they refuse to shrink below
+           that content minimum — so two 244px-minimum labels in one row
+           demand ~496px+gap no matter how narrow their shared row actually
+           is, and the second one spills out past the fieldset's own (now
+           correctly sized) right edge. min-w-0 on the label is what actually
+           lets it shrink to fit; layer 1 alone left this overflow in place,
+           which is why the "Party size and duration minutes overlap" bug
+           was still visible after the previous fix.
       */}
       <div className="grid gap-4 sm:grid-cols-2">
         <fieldset className="flex min-w-0 flex-col gap-2 rounded-md border border-zinc-200 p-3">
           <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Party size</legend>
           <div className="flex items-center gap-2">
-            <label className="flex flex-1 flex-col gap-1">
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="text-sm text-zinc-700">Min</span>
               <input
                 type="number"
@@ -109,10 +122,10 @@ export function BookingTypeFields({
                 min={1}
                 required
                 defaultValue={defaults?.minPartySize ?? 1}
-                className="rounded-md border border-zinc-300 px-3 py-2"
+                className="w-full min-w-0 rounded-md border border-zinc-300 px-3 py-2"
               />
             </label>
-            <label className="flex flex-1 flex-col gap-1">
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="text-sm text-zinc-700">Max</span>
               <input
                 type="number"
@@ -120,7 +133,7 @@ export function BookingTypeFields({
                 min={1}
                 required
                 defaultValue={defaults?.maxPartySize ?? 20}
-                className="rounded-md border border-zinc-300 px-3 py-2"
+                className="w-full min-w-0 rounded-md border border-zinc-300 px-3 py-2"
               />
             </label>
           </div>
@@ -129,7 +142,7 @@ export function BookingTypeFields({
         <fieldset className="flex min-w-0 flex-col gap-2 rounded-md border border-zinc-200 p-3">
           <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Duration (minutes)</legend>
           <div className="flex items-center gap-2">
-            <label className="flex flex-1 flex-col gap-1">
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="text-sm text-zinc-700">Min</span>
               <input
                 type="number"
@@ -138,10 +151,10 @@ export function BookingTypeFields({
                 step={5}
                 required
                 defaultValue={defaults?.minDurationMinutes ?? 90}
-                className="rounded-md border border-zinc-300 px-3 py-2"
+                className="w-full min-w-0 rounded-md border border-zinc-300 px-3 py-2"
               />
             </label>
-            <label className="flex flex-1 flex-col gap-1">
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="text-sm text-zinc-700">Max</span>
               <input
                 type="number"
@@ -150,7 +163,7 @@ export function BookingTypeFields({
                 step={5}
                 required
                 defaultValue={defaults?.maxDurationMinutes ?? 120}
-                className="rounded-md border border-zinc-300 px-3 py-2"
+                className="w-full min-w-0 rounded-md border border-zinc-300 px-3 py-2"
               />
             </label>
           </div>

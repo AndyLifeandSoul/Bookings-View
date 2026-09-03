@@ -7,6 +7,17 @@ export interface StaffVenue {
   id: string;
   slug: string;
   name: string;
+  /// IANA zone (Venue.timezone in schema.prisma, e.g. "Europe/London") — for
+  /// formatting real timestamp columns (Booking.checkedInAt/checkedOutAt/
+  /// createdAt, Message.createdAt) in the venue's own local time. These
+  /// pages render server-side, so `.toLocaleTimeString()` with no explicit
+  /// timeZone uses the *server's* zone (UTC in production), not the
+  /// viewer's browser — silently mislabeling BST times as if they were UTC.
+  /// Doesn't apply to the app's many plain "HH:mm" fields (booking
+  /// startTime/endTime, opening hours, etc) — those are stored venue-local
+  /// with no conversion by design (see Venue.timezone's doc comment) and
+  /// are rendered as-is.
+  timezone: string;
 }
 
 /**
@@ -31,7 +42,7 @@ export async function requireStaffVenue(
 
   const venue = await prisma.venue.findUnique({
     where: { slug: venueSlug },
-    select: { id: true, slug: true, name: true, active: true },
+    select: { id: true, slug: true, name: true, active: true, timezone: true },
   });
   if (!venue || !venue.active) notFound();
 

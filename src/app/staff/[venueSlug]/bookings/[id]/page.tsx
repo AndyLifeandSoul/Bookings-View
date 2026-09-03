@@ -6,6 +6,7 @@ import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { updateBookingDetails, reassignTables, sendReply, checkInBooking, checkOutBooking, undoCheckOut } from "./actions";
 import { TableSelectionFields } from "./table-selection-fields";
+import { naturalSortTables } from "@/lib/tables/natural-sort";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export default async function BookingDetailsPage({
   const { venueSlug, id } = await params;
   const { venue } = await requireStaffVenue(venueSlug);
 
-  const [booking, tables, areas] = await Promise.all([
+  const [booking, tablesRaw, areas] = await Promise.all([
     prisma.booking.findFirst({
       where: { id, venueId: venue.id },
       include: {
@@ -28,14 +29,15 @@ export default async function BookingDetailsPage({
         messages: { orderBy: { createdAt: "asc" }, include: { staffUser: { select: { name: true } } } },
       },
     }),
+    // No orderBy — see naturalSortTables' doc comment.
     prisma.table.findMany({
       where: { venueId: venue.id, active: true },
-      orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
       select: { id: true, label: true, areaId: true },
     }),
     prisma.area.findMany({ where: { venueId: venue.id }, orderBy: { priority: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!booking) notFound();
+  const tables = naturalSortTables(tablesRaw);
 
   const assignedTableIds = new Set(booking.bookingTables.map((bt) => bt.tableId));
 
@@ -71,7 +73,7 @@ export default async function BookingDetailsPage({
           {booking.checkedOutAt ? (
             <>
               <span className="rounded-full bg-zinc-100 px-3 py-1 text-sm font-medium text-zinc-600">
-                Checked out {booking.checkedOutAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} —
+                Checked out {booking.checkedOutAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: venue.timezone })} —
                 table is free
               </span>
               <ActionForm action={undoCheckOut}>
@@ -88,7 +90,7 @@ export default async function BookingDetailsPage({
           ) : booking.checkedInAt ? (
             <>
               <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
-                Checked in {booking.checkedInAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                Checked in {booking.checkedInAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: venue.timezone })}
               </span>
               <ActionForm action={checkOutBooking}>
                 <input type="hidden" name="id" value={booking.id} />
@@ -197,7 +199,7 @@ export default async function BookingDetailsPage({
 
               <div className="text-xs text-zinc-400">
                 {booking.marketingOptIn ? "Opted in to marketing." : "Not opted in to marketing."} Source:{" "}
-                {booking.source}. Created {booking.createdAt.toLocaleString("en-GB")}.
+                {booking.source}. Created {booking.createdAt.toLocaleString("en-GB", { timeZone: venue.timezone })}.
               </div>
 
               <div>
@@ -264,7 +266,7 @@ export default async function BookingDetailsPage({
                       <span>
                         {message.direction === "OUTBOUND" ? `Sent${message.staffUser ? ` by ${message.staffUser.name}` : ""}` : "Received"}
                       </span>
-                      <span>{message.createdAt.toLocaleString("en-GB")}</span>
+                      <span>{message.createdAt.toLocaleString("en-GB", { timeZone: venue.timezone })}</span>
                     </div>
                     {message.subject && <div className="mt-1 font-medium text-zinc-900">{message.subject}</div>}
                     <p className="mt-1 whitespace-pre-wrap text-zinc-700">{message.body}</p>

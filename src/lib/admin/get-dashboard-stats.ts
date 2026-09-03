@@ -6,17 +6,6 @@ export interface CoversByType {
   covers: number;
 }
 
-export interface PendingEnquiry {
-  id: string;
-  venueSlug: string;
-  venueName: string;
-  customerName: string;
-  partySize: number;
-  date: Date;
-  startTime: string;
-  bookingTypeName: string;
-}
-
 export interface DashboardStats {
   bookingsToday: number;
   coversToday: number;
@@ -25,7 +14,6 @@ export interface DashboardStats {
   weekLabel: string;
   /** Grouped by booking type NAME across every venue (e.g. two venues' "Standard Dining" merge into one row) — a cross-estate "how much of X are we doing" view, not broken out per venue. */
   coversByType: CoversByType[];
-  pendingEnquiries: PendingEnquiry[];
 }
 
 function utcDateOnly(d: Date): Date {
@@ -56,7 +44,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const weekEnd = new Date(weekStart);
   weekEnd.setUTCDate(weekStart.getUTCDate() + 7); // exclusive upper bound
 
-  const [todayRows, weekRows, pendingRows] = await Promise.all([
+  const [todayRows, weekRows] = await Promise.all([
     prisma.booking.findMany({
       where: { date: today, status: { not: "CANCELLED" } },
       select: { partySize: true },
@@ -64,20 +52,6 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     prisma.booking.findMany({
       where: { date: { gte: weekStart, lt: weekEnd }, status: { not: "CANCELLED" } },
       select: { partySize: true, bookingType: { select: { name: true } } },
-    }),
-    prisma.booking.findMany({
-      where: { status: "ENQUIRY" },
-      orderBy: [{ date: "asc" }, { startTime: "asc" }],
-      take: 50,
-      select: {
-        id: true,
-        customerName: true,
-        partySize: true,
-        date: true,
-        startTime: true,
-        venue: { select: { slug: true, name: true } },
-        bookingType: { select: { name: true } },
-      },
     }),
   ]);
 
@@ -103,16 +77,6 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     coversThisWeek: weekRows.reduce((sum, r) => sum + r.partySize, 0),
     weekLabel: `${formatShort(weekStart)}–${formatShort(weekEndInclusive)}`,
     coversByType: [...byType.values()].sort((a, b) => b.covers - a.covers),
-    pendingEnquiries: pendingRows.map((r) => ({
-      id: r.id,
-      venueSlug: r.venue.slug,
-      venueName: r.venue.name,
-      customerName: r.customerName,
-      partySize: r.partySize,
-      date: r.date,
-      startTime: r.startTime,
-      bookingTypeName: r.bookingType.name,
-    })),
   };
 }
 

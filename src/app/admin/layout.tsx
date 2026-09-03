@@ -30,6 +30,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         navItems={[
           { href: "/admin", label: "Home", exact: true },
           { href: "/admin/diary", label: "Diary" },
+          { href: "/admin/enquiries", label: "Enquiries" },
+          { href: "/admin/bookings", label: "All bookings" },
           { href: "/admin/settings", label: "Settings", fallback: true },
           { href: "/admin/customers", label: "Customers" },
           // Standalone — not a per-venue concept, so it's not nested under

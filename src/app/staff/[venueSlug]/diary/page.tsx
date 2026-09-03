@@ -4,6 +4,8 @@ import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { getDayWindow } from "@/lib/staff/get-day-window";
 import { DiaryGrid, type DiaryBooking, type DiaryTable } from "./diary-grid";
 import { AddWalkInButton } from "./add-walk-in-button";
+import { RefreshButton } from "./refresh-button";
+import { naturalSortTables } from "@/lib/tables/natural-sort";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,10 @@ export default async function DiaryPage({
   const [tables, bookingRows, bookingTypes, window] = await Promise.all([
     prisma.table.findMany({
       where: { venueId: venue.id, active: true },
-      orderBy: [{ area: { priority: "asc" } }, { sortOrder: "asc" }, { label: "asc" }],
+      // No orderBy here — sorted below with naturalSortTables instead. See
+      // that function's doc comment for why: ordering by area priority put
+      // every unassigned-area table at the bottom (Postgres NULLS LAST),
+      // regardless of its label.
       include: { area: { select: { name: true } } },
     }),
     prisma.booking.findMany({
@@ -42,7 +47,11 @@ export default async function DiaryPage({
     getDayWindow(venue.id, date),
   ]);
 
-  const diaryTables: DiaryTable[] = tables.map((t) => ({ id: t.id, label: t.label, areaName: t.area?.name ?? null }));
+  const diaryTables: DiaryTable[] = naturalSortTables(tables).map((t) => ({
+    id: t.id,
+    label: t.label,
+    areaName: t.area?.name ?? null,
+  }));
   const diaryBookings: DiaryBooking[] = bookingRows.map((b) => ({
     id: b.id,
     customerName: b.customerName,
@@ -72,6 +81,7 @@ export default async function DiaryPage({
             <p className="text-sm text-zinc-500">Drag a booking onto a different table to reseat it.</p>
           </div>
           <div className="flex items-center gap-3">
+            <RefreshButton />
             <Link
               href={`/staff/${venue.slug}/bookings/new?date=${dateStr}`}
               className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-hover)]"

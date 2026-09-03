@@ -7,6 +7,7 @@ import { AreaRow } from "./area-row";
 import { DeleteTableButton } from "./delete-table-button";
 import { DeleteLinkButton } from "./delete-link-button";
 import { createArea, createTableLink } from "./actions";
+import { naturalSortTables } from "@/lib/tables/natural-sort";
 
 export const dynamic = "force-dynamic";
 
@@ -14,15 +15,16 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
   const { venueSlug } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
 
-  const [areas, tables, links] = await Promise.all([
+  const [areas, tablesRaw, links] = await Promise.all([
     prisma.area.findMany({
       where: { venueId: venue.id },
       orderBy: { priority: "asc" },
       include: { _count: { select: { tables: true } } },
     }),
+    // No orderBy — see naturalSortTables' doc comment (plain label:asc string
+    // sort here would put "T10"/"T11" ahead of "T2"..."T9").
     prisma.table.findMany({
       where: { venueId: venue.id },
-      orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
       include: { area: { select: { name: true } } },
     }),
     prisma.tableLink.findMany({
@@ -30,6 +32,7 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
       include: { tableA: { select: { label: true } }, tableB: { select: { label: true } } },
     }),
   ]);
+  const tables = naturalSortTables(tablesRaw);
 
   return (
     <div className="flex flex-col gap-10">
