@@ -85,6 +85,20 @@ model Venue {
   paymentAccountId String?
   paymentAccount   PaymentAccount? @relation(fields: [paymentAccountId], references: [id])
 
+  /// Short code used in customer-facing booking references, e.g. "BB" for
+  /// Black Bear Lodge, "DV8" for DV8 — see formatBookingRef() in
+  /// lib/bookings/booking-reference.ts. Nullable: a venue can exist before
+  /// its code is assigned, in which case its bookings just don't get a
+  /// reference (never blocks booking creation) until this is set.
+  bookingCode String? @unique
+
+  /// Running count of bookings ever made at this venue, incremented once per
+  /// booking (never reset) to generate the trailing digits of bookingRef —
+  /// see formatBookingRef(). Not a count of *current* bookings — it only
+  /// goes up, including for cancelled ones, so two bookings never share a
+  /// reference even after one is cancelled.
+  bookingRefCounter Int @default(0)
+
   bookingTypes           BookingType[]
   tables                 Table[]
   areas                  Area[]
@@ -349,6 +363,14 @@ model Booking {
   partySize Int
   status    BookingStatus @default(ENQUIRY)
   source    BookingSource @default(WIDGET)
+
+  /// Customer-facing confirmation number, e.g. "BB-030901" (Black Bear
+  /// Lodge, 3rd Sept, the venue's 1st-ever booking) — see
+  /// formatBookingRef() in lib/bookings/booking-reference.ts. Null when the
+  /// venue has no bookingCode assigned yet (never blocks booking creation)
+  /// or for a booking made before this feature existed — never backfilled,
+  /// so its absence on an old row isn't a bug.
+  bookingRef String? @unique
 
   customerName  String
   customerEmail String

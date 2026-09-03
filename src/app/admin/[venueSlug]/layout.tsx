@@ -19,7 +19,10 @@ export default async function AdminVenueLayout({
   const nav = [
     { href: `/admin/${venue.slug}/hours`, label: "Opening Hours" },
     { href: `/admin/${venue.slug}/booking-types`, label: "Booking Types" },
+    { href: `/admin/${venue.slug}/tables`, label: "Tables & Areas" },
     { href: `/admin/${venue.slug}/menus`, label: "Pre-order Menus" },
+    { href: `/admin/${venue.slug}/marketing`, label: "Marketing" },
+    ...(session.role === "OWNER" ? [{ href: `/admin/${venue.slug}/staff`, label: "Staff Accounts" }] : []),
   ];
 
   return (

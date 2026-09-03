@@ -4,11 +4,18 @@ import { useRouter, usePathname } from "next/navigation";
 import type { VenueOption } from "@/lib/venues/list-active-venues";
 
 /**
- * Jumps to the same admin section (hours/booking-types/menus) under a
- * different venue. Deliberately doesn't try to preserve a deeper path like
- * an edit page's id — /admin/dv8/booking-types/abc123 switched to another
- * venue would 404 on an id that belongs to dv8, not the new venue — so a
- * venue switch always lands on that section's list page.
+ * Jumps to the same section under a different venue, staying in whichever
+ * app (staff or admin) it was used from — this is rendered both in the
+ * admin layout and on the staff dashboard, for the OWNER/MANAGER sessions
+ * that can see every venue, and switching venue must not silently jump a
+ * staff-diary session into the admin pages (or vice versa). Root
+ * ("staff"/"admin") and section come straight from the current path, so
+ * this needs no per-page configuration to know which one it's in.
+ *
+ * Deliberately doesn't try to preserve a deeper path like an edit page's
+ * id — /admin/dv8/booking-types/abc123 or /staff/dv8/bookings/abc123
+ * switched to another venue would 404 on an id that belongs to dv8, not the
+ * new venue — so a venue switch always lands on that section's list page.
  */
 export function VenueSwitcher({ venues, currentSlug }: { venues: VenueOption[]; currentSlug: string }) {
   const router = useRouter();
@@ -18,8 +25,10 @@ export function VenueSwitcher({ venues, currentSlug }: { venues: VenueOption[]; 
 
   function handleChange(nextSlug: string) {
     if (nextSlug === currentSlug) return;
-    const section = pathname.split("/")[3] ?? "hours";
-    router.push(`/admin/${nextSlug}/${section}`);
+    const segments = pathname.split("/"); // ["", root, venueSlug, section?, ...]
+    const root = segments[1] || "admin";
+    const section = segments[3];
+    router.push(section ? `/${root}/${nextSlug}/${section}` : `/${root}/${nextSlug}`);
   }
 
   return (

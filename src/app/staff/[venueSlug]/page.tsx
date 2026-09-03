@@ -41,6 +41,9 @@ export default async function StaffDashboardPage({ params }: { params: Promise<{
             </p>
           </div>
           <div className="flex items-center gap-4">
+            <Link href={`/staff/${venue.slug}/diary`} className="text-sm text-zinc-500 underline hover:text-zinc-900">
+              Table view
+            </Link>
             {session.role !== "STAFF" && (
               <Link href={`/admin/${venue.slug}/hours`} className="text-sm text-zinc-500 underline hover:text-zinc-900">
                 Admin
@@ -75,14 +78,18 @@ export default async function StaffDashboardPage({ params }: { params: Promise<{
                   </thead>
                   <tbody>
                     {rows.map((booking) => (
-                      <tr key={booking.id} className="border-b border-zinc-100 last:border-0">
+                      <tr key={booking.id} className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50">
                         <td className="px-4 py-2 font-medium text-zinc-900">
-                          {booking.startTime}–{booking.endTime}
+                          <Link href={`/staff/${venue.slug}/bookings/${booking.id}`} className="hover:underline">
+                            {booking.startTime}–{booking.endTime}
+                          </Link>
                         </td>
                         <td className="px-4 py-2">{booking.partySize}</td>
                         <td className="px-4 py-2">{booking.bookingType.name}</td>
                         <td className="px-4 py-2">
-                          <div>{booking.customerName}</div>
+                          <Link href={`/staff/${venue.slug}/bookings/${booking.id}`} className="hover:underline">
+                            {booking.customerName}
+                          </Link>
                           <div className="text-xs text-zinc-500">
                             {booking.customerPhone ?? booking.customerEmail}
                           </div>
