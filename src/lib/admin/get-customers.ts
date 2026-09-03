@@ -42,6 +42,10 @@ export async function getCustomers(filters: CustomerFilters): Promise<Customer[]
   const bookings = await prisma.booking.findMany({
     where: {
       venueId: filters.venueId,
+      // Walk-ins are table blockers, not customers — see Booking.isWalkIn's
+      // doc comment. Excluded here so they never reach the Customers page or
+      // (since this is that page's data source) its CSV export either.
+      isWalkIn: false,
       ...(filters.dateFrom || filters.dateTo
         ? { date: { gte: filters.dateFrom, lte: filters.dateTo } }
         : {}),

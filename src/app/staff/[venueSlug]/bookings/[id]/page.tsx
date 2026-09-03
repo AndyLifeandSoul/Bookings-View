@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db/client";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
-import { updateBookingDetails, reassignTables, sendReply } from "./actions";
+import { updateBookingDetails, reassignTables, sendReply, checkInBooking, checkOutBooking, undoCheckOut } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +62,54 @@ export default async function BookingDetailsPage({
               {formatDate(booking.date)}, {booking.startTime}–{booking.endTime}
             </p>
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200 bg-white p-4">
+          {booking.checkedOutAt ? (
+            <>
+              <span className="rounded-full bg-zinc-100 px-3 py-1 text-sm font-medium text-zinc-600">
+                Checked out {booking.checkedOutAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} —
+                table is free
+              </span>
+              <ActionForm action={undoCheckOut}>
+                <input type="hidden" name="id" value={booking.id} />
+                <input type="hidden" name="venueId" value={venue.id} />
+                <input type="hidden" name="venueSlug" value={venue.slug} />
+                <SubmitButton
+                  label="Undo check-out"
+                  pendingLabel="Undoing…"
+                  className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                />
+              </ActionForm>
+            </>
+          ) : booking.checkedInAt ? (
+            <>
+              <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
+                Checked in {booking.checkedInAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <ActionForm action={checkOutBooking}>
+                <input type="hidden" name="id" value={booking.id} />
+                <input type="hidden" name="venueId" value={venue.id} />
+                <input type="hidden" name="venueSlug" value={venue.slug} />
+                <SubmitButton
+                  label="Check out — free this table"
+                  pendingLabel="Checking out…"
+                  className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800"
+                />
+              </ActionForm>
+            </>
+          ) : (
+            <ActionForm action={checkInBooking}>
+              <input type="hidden" name="id" value={booking.id} />
+              <input type="hidden" name="venueId" value={venue.id} />
+              <input type="hidden" name="venueSlug" value={venue.slug} />
+              <SubmitButton
+                label="Check in"
+                pendingLabel="Checking in…"
+                className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-hover)]"
+              />
+            </ActionForm>
+          )}
         </div>
 
         <div className="mt-8 flex flex-col gap-8">

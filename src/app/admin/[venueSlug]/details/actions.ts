@@ -42,9 +42,19 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
     if (clash) return { error: `Booking code "${bookingCode}" is already used by ${clash.name}.` };
   }
 
+  const maxArrivalsRaw = String(formData.get("maxArrivalsPer30Min") ?? "").trim();
+  let maxArrivalsPer30Min: number | null = null;
+  if (maxArrivalsRaw !== "") {
+    const parsed = Number(maxArrivalsRaw);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return { error: "Max arrivals per 30 minutes must be a positive number, or left blank." };
+    }
+    maxArrivalsPer30Min = Math.trunc(parsed);
+  }
+
   await prisma.venue.update({
     where: { id: venue.id },
-    data: { name, address, phone, email, bookingCode },
+    data: { name, address, phone, email, bookingCode, maxArrivalsPer30Min },
   });
 
   revalidatePath(`/admin/${venue.slug}/details`);

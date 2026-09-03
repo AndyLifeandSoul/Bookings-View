@@ -3,6 +3,7 @@ import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { createManualBooking } from "./actions";
+import { TimeFields } from "./time-fields";
 
 export const dynamic = "force-dynamic";
 
@@ -45,24 +46,9 @@ export default async function NewBookingPage({
             <span className="text-sm font-medium text-zinc-700">Date</span>
             <input type="date" name="date" required defaultValue={defaultDate} className="rounded-md border border-zinc-300 px-3 py-2" />
           </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-zinc-700">Booking type</span>
-            <select name="bookingTypeId" required className="rounded-md border border-zinc-300 px-3 py-2">
-              {bookingTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-zinc-700">Start time</span>
-            <input type="time" name="startTime" required className="rounded-md border border-zinc-300 px-3 py-2" />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-zinc-700">End time</span>
-            <input type="time" name="endTime" required className="rounded-md border border-zinc-300 px-3 py-2" />
-          </label>
+          <TimeFields
+            bookingTypes={bookingTypes.map((t) => ({ id: t.id, name: t.name, minDurationMinutes: t.minDurationMinutes }))}
+          />
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium text-zinc-700">Party size</span>
             <input type="number" name="partySize" min={1} required defaultValue={2} className="rounded-md border border-zinc-300 px-3 py-2" />

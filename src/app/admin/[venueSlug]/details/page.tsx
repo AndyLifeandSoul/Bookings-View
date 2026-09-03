@@ -13,7 +13,16 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
 
   const venue = await prisma.venue.findUniqueOrThrow({
     where: { id: venueRef.id },
-    select: { id: true, slug: true, name: true, address: true, phone: true, email: true, bookingCode: true },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      address: true,
+      phone: true,
+      email: true,
+      bookingCode: true,
+      maxArrivalsPer30Min: true,
+    },
   });
 
   return (
@@ -83,6 +92,23 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
           <span className="text-xs text-zinc-500">
             2-8 letters/numbers, e.g. &quot;DV8&quot;. Shown at the start of every confirmation number this venue
             issues. Changing it only affects new bookings — existing references don&apos;t change.
+          </span>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-zinc-700">Max arrivals in any 30-minute period (optional)</span>
+          <input
+            type="number"
+            name="maxArrivalsPer30Min"
+            min={1}
+            defaultValue={venue.maxArrivalsPer30Min ?? ""}
+            placeholder="e.g. 20"
+            className="w-32 rounded-md border border-zinc-300 px-3 py-2"
+          />
+          <span className="text-xs text-zinc-500">
+            Once confirmed arrivals within any 30-minute window would exceed this many guests, a further booking
+            still comes through — just as an enquiry for staff to confirm manually, regardless of its own party
+            size. Leave blank for no cap.
           </span>
         </label>
 

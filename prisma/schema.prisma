@@ -107,6 +107,17 @@ model Venue {
   /// lib/email/graph-client.ts's doc comment for the whole email design).
   lastInboxSyncAt DateTime?
 
+  /// Caps total covers arriving within any rolling 30-minute window across
+  /// every table/booking type at once — a kitchen/floor-staffing limit, not
+  /// a seating-capacity one (table capacity is already enforced per-table
+  /// by assignTables). Null means no cap (the pre-existing default for
+  /// every venue). This only ever tightens the auto-confirm decision, never
+  /// loosens it: a booking that would already be an ENQUIRY on party-size
+  /// grounds (BookingType.enquiryThresholdPartySize) stays one regardless;
+  /// see wouldExceedArrivalsCap() in lib/bookings/arrivals-cap.ts for the
+  /// exact window check.
+  maxArrivalsPer30Min Int?
+
   bookingTypes           BookingType[]
   tables                 Table[]
   areas                  Area[]
@@ -221,6 +232,33 @@ model BookingType {
   /// or 30 minutes.
   startTimeStepMinutes Int @default(15)
 
+  /// When true, every booking of this type runs from its chosen start time
+  /// until the venue's actual closing time that date (e.g. a quiz night
+  /// that always plays out to close, whatever time that is on a given
+  /// day) — minDurationMinutes/maxDurationMinutes are ignored for offering
+  /// and duration purposes when this is set; the engine computes the end
+  /// time directly from that date's resolved opening window instead. The
+  /// two duration fields still hold a placeholder value (schema requires
+  /// them), never read while this is true — see generate-slots.ts.
+  runsUntilClose Boolean @default(false)
+
+  /// Restricts which day(s) of the week this booking type can be offered
+  /// on, independent of whether the venue itself is open that day — e.g. a
+  /// venue open Tue-Sat might still only offer "Private Hire" on the days
+  /// it's otherwise closed to the public. 0=Sunday..6=Saturday, matching
+  /// OpeningHours.dayOfWeek. Empty (the default) means "every day the venue
+  /// is open" — no extra restriction. Ignored for any date that has rows in
+  /// availableDates below (a one-off/specials type overrides the weekly
+  /// pattern entirely, rather than the two composing).
+  availableDaysOfWeek Int[] @default([])
+
+  /// Earliest/latest a booking of this type can *start*, as "HH:mm" —
+  /// independent of and in addition to the venue's own opening hours (both
+  /// have to allow the time). Null means no extra restriction beyond
+  /// opening hours (the pre-existing behaviour).
+  earliestBookingTime String?
+  latestBookingTime   String?
+
   depositType   DepositType @default(NONE)
   /// Pence. Meaning depends on depositType: a flat amount for FIXED, an
   /// amount per guest for PER_HEAD.
@@ -240,14 +278,33 @@ model BookingType {
   /// longer required to fit an actual table just to get an available slot.
   enquiryThresholdPartySize Int?
 
-  /// Restricts which tables this booking type's auto-assignment is allowed
-  /// to use — e.g. Bottomless Brunch might be restricted to tables 6-10
-  /// while a standard food table booking is left unrestricted. Empty means
-  /// "every active table at the venue" (the pre-existing default). Always
-  /// stored as a table list even when the admin picks it via an area (the
-  /// admin UI's "restrict by area" control just checks every table in that
-  /// area at save time) — see assignTables in generate-slots.ts.
+  /// Legacy direct table restriction — never actually wired up in the admin
+  /// UI (nothing sets this today), superseded by areaPriorities below for
+  /// the "restrict by area, with an order" case the admin UI does support.
+  /// Left in place rather than removed: a future "restrict to these exact
+  /// tables, no area involved" control could still use it cheaply. Always
+  /// empty in practice right now — see assignTables in generate-slots.ts,
+  /// which still honours it first (further narrowing areaPriorities' tables)
+  /// if it's ever populated.
   allowedTables Table[] @relation("BookingTypeAllowedTables")
+
+  /// When non-empty, restricts this booking type's auto-assignment to only
+  /// the tables in these areas (any table in an area not listed here is
+  /// never considered for this booking type), tried in each row's priority
+  /// order — lower fills first, same "exhaust one group before spilling
+  /// into the next" rule as Area.priority, just scoped to this booking type
+  /// instead of venue-wide. Empty (the default) falls back to the
+  /// venue-wide Area.priority ordering across every active table, unchanged
+  /// from the pre-existing behaviour. See assignTables in generate-slots.ts.
+  areaPriorities BookingTypeArea[]
+
+  /// One-off bookable dates for a "specials" type that doesn't follow a
+  /// weekly pattern at all — e.g. a quiz night only run on three manually
+  /// picked evenings. When this has any rows, they're the *only* dates this
+  /// booking type is offered on, and availableDaysOfWeek above is ignored
+  /// entirely for it. Empty (the default) means no such override — ordinary
+  /// availableDaysOfWeek/opening-hours rules apply as normal.
+  availableDates BookingTypeAvailableDate[]
 
   /// Hex colour (e.g. "#7c3aed") shown as a banner/strip on this booking
   /// type's blocks in the staff table diary, so "Bottomless Brunch" and
@@ -275,20 +332,55 @@ model BookingType {
 /// fills first, so the algorithm exhausts one area's capacity before
 /// spilling a booking into the next — see assignTables in generate-slots.ts.
 model Area {
-  id      String @id @default(cuid())
-  venueId String
-  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  name    String
+  id       String @id @default(cuid())
+  venueId  String
+  venue    Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  name     String
   /// Lower number = filled first. Admin-orderable list, not necessarily
   /// contiguous or unique — ties break on Table.sortOrder.
-  priority Int   @default(0)
+  priority Int    @default(0)
 
   tables Table[]
+
+  /// Per-booking-type overrides of this area's fill priority — see
+  /// BookingType.areaPriorities' doc comment. A given Area can be ranked
+  /// differently by different booking types (Food Reservations might fill
+  /// the Patio last, Area Hire might prefer it first).
+  bookingTypeAreas BookingTypeArea[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([venueId, name])
+}
+
+/// Join row giving one (BookingType, Area) pair a fill priority specific to
+/// that booking type — see BookingType.areaPriorities' doc comment for the
+/// full semantics (only takes effect once a booking type has at least one
+/// of these; otherwise the venue-wide Area.priority applies as before).
+model BookingTypeArea {
+  id            String      @id @default(cuid())
+  bookingTypeId String
+  bookingType   BookingType @relation(fields: [bookingTypeId], references: [id], onDelete: Cascade)
+  areaId        String
+  area          Area        @relation(fields: [areaId], references: [id], onDelete: Cascade)
+
+  /// Lower number = filled first, for this booking type only. Same
+  /// tie-break rule as Area.priority (Table.sortOrder within the area).
+  priority Int @default(0)
+
+  @@unique([bookingTypeId, areaId])
+}
+
+/// One manually-picked bookable date for a "specials" booking type — see
+/// BookingType.availableDates' doc comment.
+model BookingTypeAvailableDate {
+  id            String      @id @default(cuid())
+  bookingTypeId String
+  bookingType   BookingType @relation(fields: [bookingTypeId], references: [id], onDelete: Cascade)
+  date          DateTime    @db.Date
+
+  @@unique([bookingTypeId, date])
 }
 
 model Table {
@@ -421,6 +513,27 @@ model Booking {
   /// because every venue shares one login (see StaffUser doc comment) — an
   /// individual name typed here is the only record of who actually took it.
   takenByStaffName String?
+
+  /// A same-day walk-in, created purely to occupy a table and block it from
+  /// auto-assignment/manual conflict-checking — not a real customer
+  /// relationship. Always CONFIRMED, source PHONE, customerName "Walk in",
+  /// no email/phone. Deliberately excluded from the admin Customers page
+  /// and marketing export (see get-customers.ts/marketing-export route) —
+  /// "Walk in" repeated dozens of times isn't a customer list, and none of
+  /// these ever opted into anything.
+  isWalkIn Boolean @default(false)
+
+  /// Arrival/departure, set from the booking details page once a party is
+  /// actually in the venue. checkedOutAt is what actually frees the
+  /// table for new bookings ahead of this booking's formal endTime — a
+  /// booking with checkedOutAt set is treated as vacated and excluded from
+  /// every table-conflict/occupancy check (both the customer-facing
+  /// availability engine and bookings-view's findTableConflicts), full
+  /// stop, regardless of how much of its booked window remains. checkedInAt
+  /// on its own doesn't change any conflict logic — arriving on time isn't
+  /// "early", it's just confirmation the booking happened.
+  checkedInAt  DateTime?
+  checkedOutAt DateTime?
 
   bookingTables BookingTable[]
   payments      Payment[]

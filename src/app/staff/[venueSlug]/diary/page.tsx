@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/client";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { getDayWindow } from "@/lib/staff/get-day-window";
 import { DiaryGrid, type DiaryBooking, type DiaryTable } from "./diary-grid";
+import { AddWalkInButton } from "./add-walk-in-button";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function DiaryPage({
   const prevDate = addDays(dateStr, -1);
   const nextDate = addDays(dateStr, 1);
 
-  const [tables, bookingRows, window] = await Promise.all([
+  const [tables, bookingRows, bookingTypes, window] = await Promise.all([
     prisma.table.findMany({
       where: { venueId: venue.id, active: true },
       orderBy: [{ area: { priority: "asc" } }, { sortOrder: "asc" }, { label: "asc" }],
@@ -32,6 +33,11 @@ export default async function DiaryPage({
       where: { venueId: venue.id, date, status: { not: "CANCELLED" } },
       include: { bookingType: { select: { name: true, color: true } }, bookingTables: { select: { tableId: true } } },
       orderBy: { startTime: "asc" },
+    }),
+    prisma.bookingType.findMany({
+      where: { venueId: venue.id, active: true },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true },
     }),
     getDayWindow(venue.id, date),
   ]);
@@ -47,6 +53,8 @@ export default async function DiaryPage({
     bookingTypeName: b.bookingType.name,
     bookingTypeColor: b.bookingType.color,
     tableIds: b.bookingTables.map((bt) => bt.tableId),
+    checkedInAt: b.checkedInAt ? b.checkedInAt.toISOString() : null,
+    checkedOutAt: b.checkedOutAt ? b.checkedOutAt.toISOString() : null,
   }));
 
   // A day with no weekly hours and no exception is "closed" per getDayWindow
@@ -70,6 +78,13 @@ export default async function DiaryPage({
             >
               Add booking
             </Link>
+            <AddWalkInButton
+              venueId={venue.id}
+              venueSlug={venue.slug}
+              dateStr={dateStr}
+              tables={diaryTables.map((t) => ({ id: t.id, label: t.label }))}
+              bookingTypes={bookingTypes}
+            />
             <Link
               href={`/staff/${venue.slug}/enquiries/new?date=${dateStr}`}
               className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100"

@@ -18,7 +18,9 @@ export interface TableConflict {
  * auto-assignment algorithm (lifeandsoul-bookings' assignTables), so this
  * is deliberately a much simpler pairwise overlap check, not a re-run of
  * that algorithm. CANCELLED bookings never conflict; a booking never
- * conflicts with itself (excludeBookingId).
+ * conflicts with itself (excludeBookingId); a booking that's been checked
+ * out never conflicts either — its table is cleared and bookable again
+ * regardless of how much of its formal window remains (Booking.checkedOutAt).
  */
 export async function findTableConflicts(params: {
   venueId: string;
@@ -41,6 +43,7 @@ export async function findTableConflicts(params: {
       booking: {
         date,
         status: { not: "CANCELLED" },
+        checkedOutAt: null,
         ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
       },
     },

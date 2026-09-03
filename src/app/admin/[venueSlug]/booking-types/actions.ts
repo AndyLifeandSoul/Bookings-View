@@ -27,6 +27,10 @@ interface ParsedFields {
   requiresPreOrder: boolean;
   enquiryThresholdPartySize: number | null;
   color: string | null;
+  runsUntilClose: boolean;
+  earliestBookingTime: string | null;
+  latestBookingTime: string | null;
+  availableDaysOfWeek: number[];
 }
 
 type ParseResult = { ok: true; fields: ParsedFields } | { ok: false; error: string };
@@ -130,6 +134,28 @@ function parseFields(formData: FormData): ParseResult {
   }
   const color = colorRaw || null;
 
+  const runsUntilClose = formData.get("runsUntilClose") === "on";
+
+  const TIME_RE = /^\d{1,2}:\d{2}$/;
+  const earliestBookingTimeRaw = String(formData.get("earliestBookingTime") ?? "").trim();
+  if (earliestBookingTimeRaw && !TIME_RE.test(earliestBookingTimeRaw)) {
+    return { ok: false, error: "Earliest booking time isn't a valid time." };
+  }
+  const earliestBookingTime = earliestBookingTimeRaw || null;
+  const latestBookingTimeRaw = String(formData.get("latestBookingTime") ?? "").trim();
+  if (latestBookingTimeRaw && !TIME_RE.test(latestBookingTimeRaw)) {
+    return { ok: false, error: "Latest booking time isn't a valid time." };
+  }
+  const latestBookingTime = latestBookingTimeRaw || null;
+  if (earliestBookingTime && latestBookingTime && earliestBookingTime > latestBookingTime) {
+    return { ok: false, error: "Earliest booking time must be before latest booking time." };
+  }
+
+  const availableDaysOfWeek = formData
+    .getAll("availableDaysOfWeek")
+    .map((v) => Number(v))
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+
   return {
     ok: true,
     fields: {
@@ -149,8 +175,44 @@ function parseFields(formData: FormData): ParseResult {
       requiresPreOrder,
       enquiryThresholdPartySize,
       color,
+      runsUntilClose,
+      earliestBookingTime,
+      latestBookingTime,
+      availableDaysOfWeek,
     },
   };
+}
+
+/**
+ * Reads the area_<id>_selected/area_<id>_priority pairs booking-type-fields
+ * renders per venue area (see that file) and validates each priority — one
+ * lookup per area rather than parallel array fields, so selection and
+ * priority can never get out of sync by index.
+ */
+async function parseAreaPriorities(
+  formData: FormData,
+  venueId: string,
+): Promise<{ ok: true; rows: { areaId: string; priority: number }[] } | { ok: false; error: string }> {
+  const areas = await prisma.area.findMany({ where: { venueId }, select: { id: true } });
+  const rows: { areaId: string; priority: number }[] = [];
+  for (const area of areas) {
+    if (formData.get(`area_${area.id}_selected`) !== "on") continue;
+    const priorityRaw = Number(formData.get(`area_${area.id}_priority`) ?? 0);
+    if (!Number.isFinite(priorityRaw)) return { ok: false, error: "Area priority must be a number." };
+    rows.push({ areaId: area.id, priority: Math.trunc(priorityRaw) });
+  }
+  return { ok: true, rows };
+}
+
+/** Parses and validates the "Only on specific dates" list — see AvailableDatesField. */
+function parseAvailableDates(formData: FormData): { ok: true; dates: Date[] } | { ok: false; error: string } {
+  const raw = formData.getAll("availableDates").map(String);
+  const dates: Date[] = [];
+  for (const dateStr of raw) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return { ok: false, error: `"${dateStr}" isn't a valid date.` };
+    dates.push(new Date(`${dateStr}T00:00:00.000Z`));
+  }
+  return { ok: true, dates };
 }
 
 export async function createBookingType(formData: FormData): Promise<ActionResult> {
@@ -160,6 +222,10 @@ export async function createBookingType(formData: FormData): Promise<ActionResul
   const parsed = parseFields(formData);
   if (!parsed.ok) return { error: parsed.error };
   const { fields } = parsed;
+  const areaPriorities = await parseAreaPriorities(formData, venue.id);
+  if (!areaPriorities.ok) return { error: areaPriorities.error };
+  const availableDates = parseAvailableDates(formData);
+  if (!availableDates.ok) return { error: availableDates.error };
 
   const existing = await prisma.bookingType.findUnique({
     where: { venueId_slug: { venueId: venue.id, slug: fields.slug } },
@@ -168,7 +234,14 @@ export async function createBookingType(formData: FormData): Promise<ActionResul
     return { error: `A booking type with slug "${fields.slug}" already exists for this venue.` };
   }
 
-  await prisma.bookingType.create({ data: { venueId: venue.id, ...fields } });
+  await prisma.bookingType.create({
+    data: {
+      venueId: venue.id,
+      ...fields,
+      areaPriorities: { createMany: { data: areaPriorities.rows } },
+      availableDates: { createMany: { data: availableDates.dates.map((date) => ({ date })) } },
+    },
+  });
   revalidatePath(`/admin/${venue.slug}/booking-types`);
   redirect(`/admin/${venue.slug}/booking-types`);
 }
@@ -181,6 +254,10 @@ export async function updateBookingType(formData: FormData): Promise<ActionResul
   const parsed = parseFields(formData);
   if (!parsed.ok) return { error: parsed.error };
   const { fields } = parsed;
+  const areaPriorities = await parseAreaPriorities(formData, venue.id);
+  if (!areaPriorities.ok) return { error: areaPriorities.error };
+  const availableDates = parseAvailableDates(formData);
+  if (!availableDates.ok) return { error: availableDates.error };
 
   const existing = await prisma.bookingType.findUnique({
     where: { venueId_slug: { venueId: venue.id, slug: fields.slug } },
@@ -189,16 +266,28 @@ export async function updateBookingType(formData: FormData): Promise<ActionResul
     return { error: `A booking type with slug "${fields.slug}" already exists for this venue.` };
   }
 
-  // updateMany + venueId, not update(where: {id}) — keeps this a no-op
-  // rather than a cross-venue write if the hidden venueId field and the id
-  // ever disagree (e.g. a stale form left open after switching venues).
-  const result = await prisma.bookingType.updateMany({
-    where: { id, venueId: venue.id },
-    data: fields,
-  });
-  if (result.count === 0) {
-    return { error: "Booking type not found for this venue." };
-  }
+  const owned = await prisma.bookingType.findFirst({ where: { id, venueId: venue.id }, select: { id: true } });
+  if (!owned) return { error: "Booking type not found for this venue." };
+
+  // Whole-row replace for both join tables, in the same transaction as the
+  // scalar update — simpler and safer than diffing old vs. new rows, and
+  // these tables are small (a handful of areas/dates per booking type at
+  // most).
+  await prisma.$transaction([
+    prisma.bookingType.updateMany({ where: { id, venueId: venue.id }, data: fields }),
+    prisma.bookingTypeArea.deleteMany({ where: { bookingTypeId: id } }),
+    ...(areaPriorities.rows.length > 0
+      ? [prisma.bookingTypeArea.createMany({ data: areaPriorities.rows.map((r) => ({ ...r, bookingTypeId: id })) })]
+      : []),
+    prisma.bookingTypeAvailableDate.deleteMany({ where: { bookingTypeId: id } }),
+    ...(availableDates.dates.length > 0
+      ? [
+          prisma.bookingTypeAvailableDate.createMany({
+            data: availableDates.dates.map((date) => ({ date, bookingTypeId: id })),
+          }),
+        ]
+      : []),
+  ]);
 
   revalidatePath(`/admin/${venue.slug}/booking-types`);
   redirect(`/admin/${venue.slug}/booking-types`);

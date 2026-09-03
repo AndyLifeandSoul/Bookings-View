@@ -22,6 +22,10 @@ export interface DiaryBooking {
   bookingTypeColor: string | null;
   /** Every table this booking currently occupies — a combined booking shows up on each of its rows. */
   tableIds: string[];
+  /** ISO string once staff have marked this booking arrived, else null — see Booking.checkedInAt. */
+  checkedInAt: string | null;
+  /** ISO string once staff have cleared this booking's table, else null — see Booking.checkedOutAt. A checked-out booking still occupies its row here (so staff can see what just left) but is excluded from every server-side conflict check. */
+  checkedOutAt: string | null;
 }
 
 /**
@@ -118,6 +122,14 @@ export function DiaryGrid({
   }
 
   function BookingBlock({ booking, fromTableId }: { booking: DiaryBooking; fromTableId: string | null }) {
+    // Checked-out bookings stay on the grid (so staff can see what just left)
+    // but are dimmed and badged "OUT" since their table is already free
+    // again server-side — see Booking.checkedOutAt.
+    const checkInOutTitle = booking.checkedOutAt
+      ? " · checked out, table free"
+      : booking.checkedInAt
+        ? " · checked in"
+        : "";
     return (
       <Link
         href={`/staff/${venueSlug}/bookings/${booking.id}`}
@@ -125,15 +137,20 @@ export function DiaryGrid({
         onDragStart={(e) => {
           e.dataTransfer.setData("text/plain", JSON.stringify({ bookingId: booking.id, fromTableId } satisfies DragPayload));
         }}
-        title={`${booking.bookingTypeName} · ${booking.customerName} · ${booking.partySize} guests · ${booking.startTime}-${booking.endTime}`}
-        className={`absolute top-1 bottom-1 flex flex-col overflow-hidden rounded-md border text-xs leading-tight shadow-sm hover:z-10 hover:shadow-md ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"}`}
+        title={`${booking.bookingTypeName} · ${booking.customerName} · ${booking.partySize} guests · ${booking.startTime}-${booking.endTime}${checkInOutTitle}`}
+        className={`absolute top-1 bottom-1 flex flex-col overflow-hidden rounded-md border text-xs leading-tight shadow-sm hover:z-10 hover:shadow-md ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"} ${booking.checkedOutAt ? "opacity-50" : ""}`}
         style={{ left: `${pctLeft(toMinutes(booking.startTime))}%`, width: `${pctWidth(toMinutes(booking.startTime), toMinutes(booking.endTime))}%` }}
       >
         <span
-          className="truncate px-2 py-0.5 text-[10px] font-semibold text-white"
+          className="flex items-center justify-between gap-1 px-2 py-0.5 text-[10px] font-semibold text-white"
           style={{ background: colourForBookingType(booking.bookingTypeName, booking.bookingTypeColor) }}
         >
-          {booking.bookingTypeName}
+          <span className="truncate">{booking.bookingTypeName}</span>
+          {booking.checkedOutAt ? (
+            <span className="shrink-0 rounded-sm bg-black/30 px-1">OUT</span>
+          ) : booking.checkedInAt ? (
+            <span className="shrink-0 rounded-sm bg-black/30 px-1">IN</span>
+          ) : null}
         </span>
         <span className="flex flex-1 flex-col justify-center overflow-hidden px-2">
           <span className="truncate font-medium">{booking.customerName}</span>

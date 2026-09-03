@@ -175,3 +175,63 @@ export async function markMessagesRead(formData: FormData): Promise<ActionResult
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   revalidatePath(`/staff/${venueSlug}/messages`);
 }
+
+/**
+ * Marks a booking as arrived. Doesn't affect table-conflict/availability
+ * checks at all (see Booking.checkedInAt's doc comment) — purely a record
+ * of "they're here", so staff can see who's actually in at a glance.
+ */
+export async function checkInBooking(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { id: true } });
+  if (!booking) return { error: "Booking not found for this venue." };
+
+  await prisma.booking.update({ where: { id }, data: { checkedInAt: new Date() } });
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+  revalidatePath(`/staff/${venueSlug}/diary`);
+}
+
+/**
+ * Marks a booking's table as cleared — from this point on it's excluded
+ * from every table-conflict/availability check regardless of how much of
+ * its formally booked window remains, so it's immediately bookable again.
+ * See Booking.checkedOutAt's doc comment.
+ */
+export async function checkOutBooking(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { id: true } });
+  if (!booking) return { error: "Booking not found for this venue." };
+
+  // checkedInAt is deliberately left untouched (not cleared) — checking out
+  // still implies they were checked in at some point, and "when did they
+  // arrive" stays a useful fact after the table's freed up.
+  await prisma.booking.update({ where: { id }, data: { checkedOutAt: new Date() } });
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+  revalidatePath(`/staff/${venueSlug}/diary`);
+}
+
+/** Undoes an accidental check-out — the table goes back to being occupied by this booking for conflict-checking purposes. */
+export async function undoCheckOut(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { id: true } });
+  if (!booking) return { error: "Booking not found for this venue." };
+
+  await prisma.booking.update({ where: { id }, data: { checkedOutAt: null } });
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+  revalidatePath(`/staff/${venueSlug}/diary`);
+}

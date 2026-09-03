@@ -1,14 +1,35 @@
 import type { BookingType } from "@/generated/prisma";
 import { SubmitButton } from "@/components/submit-button";
+import { AvailableDatesField } from "./available-dates-field";
+
+const DAYS_OF_WEEK = [
+  { value: 0, label: "Sun" },
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+];
+
+type BookingTypeDefaults = BookingType & {
+  availableDates?: { date: Date }[];
+  areaPriorities?: { areaId: string; priority: number }[];
+};
 
 /** Shared field markup for the create and edit forms — kept as one component so the two forms can't drift apart. */
 export function BookingTypeFields({
   defaults,
+  areas,
   submitLabel,
 }: {
-  defaults?: BookingType;
+  defaults?: BookingTypeDefaults;
+  /** Every active area for this venue, for the area-priority picker below — see Andy's spec on BookingTypeArea. */
+  areas: { id: string; name: string }[];
   submitLabel: string;
 }) {
+  const selectedAreaPriority = new Map((defaults?.areaPriorities ?? []).map((p) => [p.areaId, p.priority]));
+  const selectedDays = new Set(defaults?.availableDaysOfWeek ?? []);
   return (
     <div className="flex flex-col gap-5 rounded-lg border border-zinc-200 bg-white p-5">
       {defaults && <input type="hidden" name="id" value={defaults.id} />}
@@ -153,6 +174,114 @@ export function BookingTypeFields({
           />
         </label>
       </div>
+
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          name="runsUntilClose"
+          defaultChecked={defaults?.runsUntilClose ?? false}
+          className="h-4 w-4 rounded border-zinc-300"
+        />
+        <span className="text-sm font-medium text-zinc-700">
+          Runs until close <span className="font-normal text-zinc-500">(e.g. Quiz Night — ignores the duration fields above; every booking runs to that day&apos;s closing time)</span>
+        </span>
+      </label>
+
+      <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
+        <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Booking window</legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm text-zinc-700">Earliest booking time (optional)</span>
+            <input
+              type="time"
+              name="earliestBookingTime"
+              defaultValue={defaults?.earliestBookingTime ?? ""}
+              className="rounded-md border border-zinc-300 px-3 py-2"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm text-zinc-700">Latest booking time (optional)</span>
+            <input
+              type="time"
+              name="latestBookingTime"
+              defaultValue={defaults?.latestBookingTime ?? ""}
+              className="rounded-md border border-zinc-300 px-3 py-2"
+            />
+          </label>
+        </div>
+        <span className="text-xs text-zinc-500">
+          Narrows the venue&apos;s own opening hours for this type only — a booking can&apos;t start earlier or later
+          than these times (it can still run past &quot;latest&quot;, it just can&apos;t start after it). Leave both
+          blank to use the full opening hours.
+        </span>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
+        <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Available days</legend>
+        <div className="flex flex-wrap gap-3">
+          {DAYS_OF_WEEK.map((d) => (
+            <label key={d.value} className="flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-sm">
+              <input
+                type="checkbox"
+                name="availableDaysOfWeek"
+                value={d.value}
+                defaultChecked={selectedDays.has(d.value)}
+                className="h-4 w-4 rounded border-zinc-300"
+              />
+              {d.label}
+            </label>
+          ))}
+        </div>
+        <span className="text-xs text-zinc-500">
+          Leave every day unchecked to allow any day the venue&apos;s open. Ignored on any date listed below.
+        </span>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
+        <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Only on specific dates (optional)</legend>
+        <AvailableDatesField defaultDates={(defaults?.availableDates ?? []).map((d) => d.date.toISOString().slice(0, 10))} />
+        <span className="text-xs text-zinc-500">
+          For a one-off special (e.g. a single Quiz Night date) rather than a weekly pattern. When any date is set
+          here, it completely replaces the day-of-week setting above — this type is offered on these dates only.
+        </span>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
+        <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Area restriction &amp; priority</legend>
+        {areas.length === 0 ? (
+          <p className="text-sm text-zinc-500">No areas set up for this venue yet — see Tables &amp; Areas.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {areas.map((area) => (
+              <div key={area.id} className="flex items-center gap-3 rounded-md border border-zinc-200 px-3 py-2">
+                <label className="flex flex-1 items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name={`area_${area.id}_selected`}
+                    defaultChecked={selectedAreaPriority.has(area.id)}
+                    className="h-4 w-4 rounded border-zinc-300"
+                  />
+                  {area.name}
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-zinc-500">
+                  Priority
+                  <input
+                    type="number"
+                    name={`area_${area.id}_priority`}
+                    defaultValue={selectedAreaPriority.get(area.id) ?? 0}
+                    className="w-16 rounded-md border border-zinc-300 px-2 py-1"
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
+        <span className="text-xs text-zinc-500">
+          Tick an area to restrict this type to only its tables (e.g. a wreath-making event assigned to the Shop
+          tables only) — lower priority number fills first. Leave every area unticked to allow every table,
+          venue-wide priority order unchanged.
+        </span>
+      </fieldset>
 
       <label className="flex flex-col gap-1">
         <span className="text-sm font-medium text-zinc-700">Enquiry above this many guests (optional)</span>
