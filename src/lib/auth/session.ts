@@ -29,9 +29,15 @@ function getSecretKey(): Uint8Array {
 
 export interface StaffSessionClaims extends JWTPayload {
   staffUserId: string;
-  venueId: string;
-  venueSlug: string;
-  venueName: string;
+  /// Null for OWNER/MANAGER — those roles are venue-independent (see
+  /// StaffUser.venueId in schema.prisma) and aren't tied to one venue at
+  /// login time. The admin app resolves which venue is currently being
+  /// administered from the /admin/[venueSlug] route segment instead of
+  /// relying on this — see requireAdminVenue(). A STAFF session always has
+  /// these set (enforced at account-creation time, not by the DB).
+  venueId: string | null;
+  venueSlug: string | null;
+  venueName: string | null;
   role: StaffRole;
   name: string;
   email: string;

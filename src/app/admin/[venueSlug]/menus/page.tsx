@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db/client";
-import { requireAdminSession } from "@/lib/admin/require-admin-session";
+import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
 
 export const dynamic = "force-dynamic";
 
-export default async function MenusPage() {
-  const session = await requireAdminSession();
+export default async function MenusPage({ params }: { params: Promise<{ venueSlug: string }> }) {
+  const { venueSlug } = await params;
+  const { venue } = await requireAdminVenue(venueSlug);
 
   const menus = await prisma.menu.findMany({
-    where: { venueId: session.venueId },
+    where: { venueId: venue.id },
     orderBy: { name: "asc" },
     include: {
       bookingType: { select: { name: true } },
@@ -27,7 +28,7 @@ export default async function MenusPage() {
           </p>
         </div>
         <Link
-          href="/admin/menus/new"
+          href={`/admin/${venue.slug}/menus/new`}
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
         >
           New menu
@@ -64,7 +65,10 @@ export default async function MenusPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <Link href={`/admin/menus/${menu.id}`} className="text-sm text-zinc-600 underline hover:text-zinc-900">
+                    <Link
+                      href={`/admin/${venue.slug}/menus/${menu.id}`}
+                      className="text-sm text-zinc-600 underline hover:text-zinc-900"
+                    >
                       Manage
                     </Link>
                   </td>

@@ -87,8 +87,10 @@ model Venue {
 
   bookingTypes           BookingType[]
   tables                 Table[]
+  areas                  Area[]
   openingHours           OpeningHours[]
   openingHoursExceptions OpeningHoursException[]
+  openingHoursBlocks     OpeningHoursBlock[]
   bookings               Booking[]
   enquiries              Enquiry[]
   menus                  Menu[]
@@ -133,6 +135,27 @@ model OpeningHoursException {
   note     String?
 
   @@unique([venueId, date])
+}
+
+/// A carve-out within an otherwise-open day — a private event from 14:00 to
+/// 18:00 on a day the venue is normally open 12:00-22:00, say. Unlike
+/// OpeningHoursException (which entirely replaces the day's hours),
+/// multiple blocks can apply to one date, and whatever the day's hours are
+/// (weekly or exception) still apply outside the blocked range(s). The
+/// availability engine subtracts these ranges from whatever window it
+/// resolved for the date — see subtractBlocks() in opening-window.ts.
+model OpeningHoursBlock {
+  id       String   @id @default(cuid())
+  venueId  String
+  venue    Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  date     DateTime @db.Date
+  startsAt String
+  endsAt   String
+  note     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([venueId, date])
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +206,27 @@ model BookingType {
 
   requiresPreOrder Boolean @default(false)
 
+  /// Above this party size, a booking of this type is created as ENQUIRY
+  /// instead of auto-confirming, for staff to review and confirm manually —
+  /// e.g. a table for 10 books instantly, a table for 20 needs a human.
+  /// Null means always auto-confirm (no enquiry threshold). An enquiry
+  /// booking skips table auto-assignment (see generateAvailableSlots'
+  /// enquiry-mode branch) since staff sort out the table when they confirm;
+  /// this is also the fix for the pre-existing "party too big for any
+  /// single table gets zero slots" dead end noted in generate-slots.ts —
+  /// once a booking type has a threshold, an over-threshold party is no
+  /// longer required to fit an actual table just to get an available slot.
+  enquiryThresholdPartySize Int?
+
+  /// Restricts which tables this booking type's auto-assignment is allowed
+  /// to use — e.g. Bottomless Brunch might be restricted to tables 6-10
+  /// while a standard food table booking is left unrestricted. Empty means
+  /// "every active table at the venue" (the pre-existing default). Always
+  /// stored as a table list even when the admin picks it via an area (the
+  /// admin UI's "restrict by area" control just checks every table in that
+  /// area at save time) — see assignTables in generate-slots.ts.
+  allowedTables Table[] @relation("BookingTypeAllowedTables")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -196,6 +240,27 @@ model BookingType {
 // Tables
 // ---------------------------------------------------------------------------
 
+/// A named grouping of tables sharing a location — "Downstairs", "Upstairs",
+/// "Terrace". `priority` controls fill order for auto-assignment: lower
+/// fills first, so the algorithm exhausts one area's capacity before
+/// spilling a booking into the next — see assignTables in generate-slots.ts.
+model Area {
+  id      String @id @default(cuid())
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  name    String
+  /// Lower number = filled first. Admin-orderable list, not necessarily
+  /// contiguous or unique — ties break on Table.sortOrder.
+  priority Int   @default(0)
+
+  tables Table[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([venueId, name])
+}
+
 model Table {
   id        String  @id @default(cuid())
   venueId   String
@@ -205,13 +270,50 @@ model Table {
   maxCovers Int
   active    Boolean @default(true)
 
+  /// Nullable — a table not yet assigned to an area is still fully
+  /// bookable, just treated as the lowest-priority group by assignTables.
+  areaId String?
+  area   Area?   @relation(fields: [areaId], references: [id])
+
+  /// Display order in the staff diary's table-timeline view (bookings-view's
+  /// /staff/diary) — lets "T1, T2, ... T13, Booth 1, Booth 2" stay in that
+  /// order rather than sorting "T10" before "T2" as strings. Also the
+  /// tie-breaker for auto-assignment ordering within an area.
+  sortOrder Int @default(0)
+
   // Deliberately no x/y layout coordinates yet — Phase 1 assigns bookings to
   // tables from a list, the visual drag-drop floor plan is Phase 3. Adding
   // layout fields later is a non-breaking migration.
 
-  bookingTables BookingTable[]
+  bookingTables          BookingTable[]
+  allowedForBookingTypes BookingType[]  @relation("BookingTypeAllowedTables")
+
+  /// Symmetric adjacency — physically neighbouring tables that can be
+  /// combined onto one booking together, and that the auto-assignment
+  /// spacing rule tries to avoid double-booking side by side. Split into two
+  /// relations because Prisma models a self-relation as directed; TableLink
+  /// rows themselves are meant as unordered pairs (see linkedTableIds() in
+  /// generate-slots.ts, which reads both sides).
+  tableLinksAsA TableLink[] @relation("TableLinkA")
+  tableLinksAsB TableLink[] @relation("TableLinkB")
 
   @@unique([venueId, label])
+}
+
+/// One physical adjacency between two tables at the same venue — admin-set,
+/// not inferred from sortOrder, because display order and floor layout
+/// don't always match (Booth 3 might sit next to T1, not T2). Used two ways:
+/// combining tables to seat a party bigger than any single table, and
+/// preferring to leave a gap between two *different* parties' tables when
+/// picking among several tables that would each fit alone.
+model TableLink {
+  id       String @id @default(cuid())
+  tableAId String
+  tableA   Table  @relation("TableLinkA", fields: [tableAId], references: [id], onDelete: Cascade)
+  tableBId String
+  tableB   Table  @relation("TableLinkB", fields: [tableBId], references: [id], onDelete: Cascade)
+
+  @@unique([tableAId, tableBId])
 }
 
 // ---------------------------------------------------------------------------
@@ -253,9 +355,16 @@ model Booking {
   customerPhone String?
   notes         String?
 
+  /// Customer opted in to marketing communications at booking time — shown
+  /// as a checkbox on the customer booking form, exported/filtered on in
+  /// bookings-view's admin customer list. Never inferred, only ever what the
+  /// customer actually ticked.
+  marketingOptIn Boolean @default(false)
+
   bookingTables BookingTable[]
   payments      Payment[]
   preOrder      PreOrder?
+  messages      Message[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -425,12 +534,19 @@ enum StaffRole {
 }
 
 model StaffUser {
-  id        String    @id @default(cuid())
-  venueId   String
-  venue     Venue     @relation(fields: [venueId], references: [id])
-  name      String
-  email     String    @unique
-  role      StaffRole @default(STAFF)
+  id      String    @id @default(cuid())
+  /// Null for OWNER/MANAGER — those roles are venue-independent and see/
+  /// manage every venue from one login, not scoped to any single one. A
+  /// STAFF login is always tied to exactly one venue (its diary is the only
+  /// thing a STAFF session can see), so venueId is required in practice for
+  /// that role even though the column itself is nullable — enforced in
+  /// application code (bookings-view's staff-create action), not a DB
+  /// constraint, since this table has no writers outside that one app.
+  venueId String?
+  venue   Venue?    @relation(fields: [venueId], references: [id])
+  name    String
+  email   String    @unique
+  role    StaffRole @default(STAFF)
 
   /// bcrypt hash, never the plaintext password. Login is email+password,
   /// handled entirely in the bookings-view app — no OAuth/SSO in scope yet.
@@ -442,4 +558,35 @@ model StaffUser {
 
   lastLoginAt DateTime?
   createdAt   DateTime  @default(now())
+
+  sentMessages Message[]
+}
+
+enum MessageDirection {
+  OUTBOUND
+  INBOUND
+}
+
+/// A record of one email to/from a customer about a specific booking —
+/// the history shown on the booking details page in bookings-view. Sending
+/// isn't wired up yet (needs an email provider decision — see that app's
+/// README), so nothing writes OUTBOUND rows until that's connected; the
+/// model exists now so the booking details page has somewhere real to read
+/// from rather than a placeholder.
+model Message {
+  id          String           @id @default(cuid())
+  bookingId   String
+  booking     Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  direction   MessageDirection
+  subject     String?
+  body        String
+  /// Who sent an OUTBOUND message. Null for INBOUND (the customer has no
+  /// StaffUser row) and null for OUTBOUND messages sent by an automated
+  /// flow (e.g. a future booking-confirmation email) rather than a person.
+  staffUserId String?
+  staffUser   StaffUser?       @relation(fields: [staffUserId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
 }

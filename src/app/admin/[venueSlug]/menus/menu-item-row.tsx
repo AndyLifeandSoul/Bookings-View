@@ -5,7 +5,7 @@ import { deleteMenuItem, updateMenuItem } from "./actions";
 import type { ActionResult } from "@/components/action-form";
 import type { MenuItem } from "@/generated/prisma";
 
-export function MenuItemRow({ item, menuId }: { item: MenuItem; menuId: string }) {
+export function MenuItemRow({ item, menuId, venueId }: { item: MenuItem; menuId: string; venueId: string }) {
   const [updateState, updateAction, updatePending] = useActionState<ActionResult, FormData>(
     async (_prevState, formData) => updateMenuItem(formData),
     undefined,
@@ -21,6 +21,7 @@ export function MenuItemRow({ item, menuId }: { item: MenuItem; menuId: string }
         <form action={updateAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="id" value={item.id} />
           <input type="hidden" name="menuId" value={menuId} />
+          <input type="hidden" name="venueId" value={venueId} />
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-zinc-500">Name</span>
             <input

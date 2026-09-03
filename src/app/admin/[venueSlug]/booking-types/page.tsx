@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db/client";
-import { requireAdminSession } from "@/lib/admin/require-admin-session";
+import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
 import { DeleteBookingTypeButton } from "./delete-button";
 
 export const dynamic = "force-dynamic";
 
-export default async function BookingTypesPage() {
-  const session = await requireAdminSession();
+export default async function BookingTypesPage({ params }: { params: Promise<{ venueSlug: string }> }) {
+  const { venueSlug } = await params;
+  const { venue } = await requireAdminVenue(venueSlug);
 
   const bookingTypes = await prisma.bookingType.findMany({
-    where: { venueId: session.venueId },
+    where: { venueId: venue.id },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 
@@ -23,7 +24,7 @@ export default async function BookingTypesPage() {
           </p>
         </div>
         <Link
-          href="/admin/booking-types/new"
+          href={`/admin/${venue.slug}/booking-types/new`}
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
         >
           New booking type
@@ -43,6 +44,7 @@ export default async function BookingTypesPage() {
                 <th className="px-4 py-2">Party size</th>
                 <th className="px-4 py-2">Duration</th>
                 <th className="px-4 py-2">Deposit</th>
+                <th className="px-4 py-2">Enquiry above</th>
                 <th className="px-4 py-2">Pre-order</th>
                 <th className="px-4 py-2">Status</th>
                 <th className="px-4 py-2" />
@@ -62,6 +64,9 @@ export default async function BookingTypesPage() {
                     {bt.minDurationMinutes}–{bt.maxDurationMinutes} min
                   </td>
                   <td className="px-4 py-2.5">{depositLabel(bt.depositType, bt.depositAmount)}</td>
+                  <td className="px-4 py-2.5">
+                    {bt.enquiryThresholdPartySize != null ? `${bt.enquiryThresholdPartySize} guests` : "—"}
+                  </td>
                   <td className="px-4 py-2.5">{bt.requiresPreOrder ? "Yes" : "—"}</td>
                   <td className="px-4 py-2.5">
                     <span
@@ -75,12 +80,12 @@ export default async function BookingTypesPage() {
                   <td className="px-4 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-3">
                       <Link
-                        href={`/admin/booking-types/${bt.id}`}
+                        href={`/admin/${venue.slug}/booking-types/${bt.id}`}
                         className="text-sm text-zinc-600 underline hover:text-zinc-900"
                       >
                         Edit
                       </Link>
-                      <DeleteBookingTypeButton id={bt.id} name={bt.name} />
+                      <DeleteBookingTypeButton id={bt.id} name={bt.name} venueId={venue.id} />
                     </div>
                   </td>
                 </tr>

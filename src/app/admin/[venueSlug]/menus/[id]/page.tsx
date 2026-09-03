@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/client";
-import { requireAdminSession } from "@/lib/admin/require-admin-session";
+import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { createMenuItem, updateMenu } from "../actions";
@@ -9,17 +9,21 @@ import { DeleteMenuButton } from "../delete-menu-button";
 
 export const dynamic = "force-dynamic";
 
-export default async function MenuDetailPage({ params }: PageProps<"/admin/menus/[id]">) {
-  const { id } = await params;
-  const session = await requireAdminSession();
+export default async function MenuDetailPage({
+  params,
+}: {
+  params: Promise<{ venueSlug: string; id: string }>;
+}) {
+  const { venueSlug, id } = await params;
+  const { venue } = await requireAdminVenue(venueSlug);
 
   const [menu, bookingTypes] = await Promise.all([
     prisma.menu.findFirst({
-      where: { id, venueId: session.venueId },
+      where: { id, venueId: venue.id },
       include: { items: { orderBy: { name: "asc" } } },
     }),
     prisma.bookingType.findMany({
-      where: { venueId: session.venueId },
+      where: { venueId: venue.id },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
@@ -35,6 +39,7 @@ export default async function MenuDetailPage({ params }: PageProps<"/admin/menus
           className="mt-3 flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5"
         >
           <input type="hidden" name="id" value={menu.id} />
+          <input type="hidden" name="venueId" value={venue.id} />
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium text-zinc-700">Name</span>
@@ -83,7 +88,7 @@ export default async function MenuDetailPage({ params }: PageProps<"/admin/menus
             />
           </div>
         </ActionForm>
-        <DeleteMenuButton id={menu.id} name={menu.name} />
+        <DeleteMenuButton id={menu.id} name={menu.name} venueId={venue.id} />
       </section>
 
       <section>
@@ -95,7 +100,7 @@ export default async function MenuDetailPage({ params }: PageProps<"/admin/menus
             <table className="w-full min-w-[720px] text-left text-sm">
               <tbody>
                 {menu.items.map((item) => (
-                  <MenuItemRow key={item.id} item={item} menuId={menu.id} />
+                  <MenuItemRow key={item.id} item={item} menuId={menu.id} venueId={venue.id} />
                 ))}
               </tbody>
             </table>
@@ -107,6 +112,7 @@ export default async function MenuDetailPage({ params }: PageProps<"/admin/menus
           className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-zinc-200 bg-white p-4"
         >
           <input type="hidden" name="menuId" value={menu.id} />
+          <input type="hidden" name="venueId" value={venue.id} />
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-zinc-500">Name</span>
             <input

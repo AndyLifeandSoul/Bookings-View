@@ -1,22 +1,28 @@
 import { prisma } from "@/lib/db/client";
-import { requireAdminSession } from "@/lib/admin/require-admin-session";
+import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
-import { addException, saveWeeklyHours } from "./actions";
+import { addException, addOpeningHoursBlock, saveWeeklyHours } from "./actions";
 import { DeleteExceptionButton } from "./delete-exception-button";
+import { DeleteBlockButton } from "./delete-block-button";
 
 export const dynamic = "force-dynamic";
 
 const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export default async function HoursPage() {
-  const session = await requireAdminSession();
+export default async function HoursPage({ params }: { params: Promise<{ venueSlug: string }> }) {
+  const { venueSlug } = await params;
+  const { venue } = await requireAdminVenue(venueSlug);
 
-  const [weeklyHours, exceptions] = await Promise.all([
-    prisma.openingHours.findMany({ where: { venueId: session.venueId } }),
+  const [weeklyHours, exceptions, blocks] = await Promise.all([
+    prisma.openingHours.findMany({ where: { venueId: venue.id } }),
     prisma.openingHoursException.findMany({
-      where: { venueId: session.venueId },
+      where: { venueId: venue.id },
       orderBy: { date: "asc" },
+    }),
+    prisma.openingHoursBlock.findMany({
+      where: { venueId: venue.id },
+      orderBy: [{ date: "asc" }, { startsAt: "asc" }],
     }),
   ]);
 
@@ -25,6 +31,8 @@ export default async function HoursPage() {
   const todayDateOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   const upcomingExceptions = exceptions.filter((e) => e.date >= todayDateOnly);
   const pastExceptions = exceptions.filter((e) => e.date < todayDateOnly);
+  const upcomingBlocks = blocks.filter((b) => b.date >= todayDateOnly);
+  const pastBlocks = blocks.filter((b) => b.date < todayDateOnly);
 
   return (
     <div className="flex flex-col gap-10">
@@ -38,6 +46,7 @@ export default async function HoursPage() {
           action={saveWeeklyHours}
           className="mt-4 overflow-hidden rounded-lg border border-zinc-200 bg-white"
         >
+          <input type="hidden" name="venueId" value={venue.id} />
           <table className="w-full text-left text-sm">
             <thead className="border-b border-zinc-200 text-xs uppercase text-zinc-500">
               <tr>
@@ -125,7 +134,7 @@ export default async function HoursPage() {
                     </td>
                     <td className="px-4 py-2.5 text-zinc-500">{exception.note ?? "—"}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <DeleteExceptionButton id={exception.id} />
+                      <DeleteExceptionButton id={exception.id} venueId={venue.id} />
                     </td>
                   </tr>
                 ))}
@@ -138,6 +147,7 @@ export default async function HoursPage() {
           action={addException}
           className="mt-4 flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-4 sm:flex-row sm:items-end sm:flex-wrap"
         >
+          <input type="hidden" name="venueId" value={venue.id} />
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium text-zinc-700">Date</span>
             <input type="date" name="date" required className="rounded-md border border-zinc-300 px-3 py-2" />
@@ -186,7 +196,104 @@ export default async function HoursPage() {
                       </td>
                       <td className="px-4 py-2.5 text-zinc-500">{exception.note ?? "—"}</td>
                       <td className="px-4 py-2.5 text-right">
-                        <DeleteExceptionButton id={exception.id} />
+                        <DeleteExceptionButton id={exception.id} venueId={venue.id} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-base font-semibold text-zinc-900">Blocked periods</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Carve a private event or closure out of an otherwise-open day, leaving the hours either side still
+          bookable — e.g. open 12:00–22:00 but blocked 14:00–18:00 for a private hire. Unlike a special date above,
+          this doesn&apos;t replace the whole day&apos;s hours, and more than one can apply to the same date.
+        </p>
+
+        {upcomingBlocks.length > 0 && (
+          <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200 bg-white">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-zinc-200 text-xs uppercase text-zinc-500">
+                <tr>
+                  <th className="px-4 py-2">Date</th>
+                  <th className="px-4 py-2">Blocked</th>
+                  <th className="px-4 py-2">Note</th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {upcomingBlocks.map((block) => (
+                  <tr key={block.id} className="border-b border-zinc-100 last:border-0">
+                    <td className="px-4 py-2.5 font-medium text-zinc-900">{formatDate(block.date)}</td>
+                    <td className="px-4 py-2.5">
+                      {block.startsAt}–{block.endsAt}
+                    </td>
+                    <td className="px-4 py-2.5 text-zinc-500">{block.note ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <DeleteBlockButton id={block.id} venueId={venue.id} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <ActionForm
+          action={addOpeningHoursBlock}
+          className="mt-4 flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-4 sm:flex-row sm:items-end sm:flex-wrap"
+        >
+          <input type="hidden" name="venueId" value={venue.id} />
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Date</span>
+            <input type="date" name="date" required className="rounded-md border border-zinc-300 px-3 py-2" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Blocked from</span>
+            <input type="time" name="startsAt" required className="rounded-md border border-zinc-300 px-2 py-2" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Blocked until</span>
+            <input type="time" name="endsAt" required className="rounded-md border border-zinc-300 px-2 py-2" />
+          </label>
+          <label className="flex flex-1 flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Note (optional)</span>
+            <input
+              type="text"
+              name="note"
+              placeholder="e.g. Private event"
+              className="rounded-md border border-zinc-300 px-3 py-2"
+            />
+          </label>
+          <SubmitButton
+            label="Add blocked period"
+            pendingLabel="Adding…"
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+          />
+        </ActionForm>
+
+        {pastBlocks.length > 0 && (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm text-zinc-500">
+              {pastBlocks.length} past blocked period{pastBlocks.length === 1 ? "" : "s"}
+            </summary>
+            <div className="mt-2 overflow-hidden rounded-lg border border-zinc-200 bg-white">
+              <table className="w-full text-left text-sm">
+                <tbody>
+                  {pastBlocks.map((block) => (
+                    <tr key={block.id} className="border-b border-zinc-100 last:border-0">
+                      <td className="px-4 py-2.5 font-medium text-zinc-900">{formatDate(block.date)}</td>
+                      <td className="px-4 py-2.5 text-zinc-500">
+                        {block.startsAt}–{block.endsAt}
+                      </td>
+                      <td className="px-4 py-2.5 text-zinc-500">{block.note ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <DeleteBlockButton id={block.id} venueId={venue.id} />
                       </td>
                     </tr>
                   ))}

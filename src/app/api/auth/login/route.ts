@@ -29,14 +29,21 @@ export async function POST(request: NextRequest) {
 
   if (!staffUser || !staffUser.active) return genericError();
 
+  // Defensive, shouldn't happen: staff-account creation always requires a
+  // venue for a STAFF role. Only OWNER/MANAGER are meant to have none.
+  if (staffUser.role === "STAFF" && !staffUser.venue) {
+    console.error(`StaffUser ${staffUser.id} has role STAFF but no venue assigned — refusing login.`);
+    return genericError();
+  }
+
   const passwordMatches = await verifyPassword(password, staffUser.passwordHash);
   if (!passwordMatches) return genericError();
 
   const token = await createSessionToken({
     staffUserId: staffUser.id,
-    venueId: staffUser.venue.id,
-    venueSlug: staffUser.venue.slug,
-    venueName: staffUser.venue.name,
+    venueId: staffUser.venue?.id ?? null,
+    venueSlug: staffUser.venue?.slug ?? null,
+    venueName: staffUser.venue?.name ?? null,
     role: staffUser.role,
     name: staffUser.name,
     email: staffUser.email,
@@ -44,7 +51,10 @@ export async function POST(request: NextRequest) {
 
   await prisma.staffUser.update({ where: { id: staffUser.id }, data: { lastLoginAt: new Date() } });
 
-  const response = NextResponse.json({ ok: true, staff: { name: staffUser.name, role: staffUser.role, venueName: staffUser.venue.name } });
+  const response = NextResponse.json({
+    ok: true,
+    staff: { name: staffUser.name, role: staffUser.role, venueName: staffUser.venue?.name ?? null },
+  });
   const { name: cookieName, ...options } = sessionCookieOptions();
   response.cookies.set(cookieName, token, options);
   return response;

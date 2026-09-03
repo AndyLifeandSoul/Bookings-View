@@ -25,9 +25,19 @@ interface ParsedFields {
   depositType: DepositType;
   depositAmount: number | null;
   requiresPreOrder: boolean;
+  enquiryThresholdPartySize: number | null;
 }
 
 type ParseResult = { ok: true; fields: ParsedFields } | { ok: false; error: string };
+
+/** venueId comes from a hidden form field (set from the page's route param) — admin sessions are venue-independent, see requireAdminVenue(). */
+async function resolveVenue(formData: FormData): Promise<{ id: string; slug: string } | { error: string }> {
+  const venueId = String(formData.get("venueId") ?? "").trim();
+  if (!venueId) return { error: "Missing venue." };
+  const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { id: true, slug: true } });
+  if (!venue) return { error: "Unknown venue." };
+  return venue;
+}
 
 /** Shared by create and update. Returns a discriminated union rather than throwing — see ActionForm's doc comment for why. */
 function parseFields(formData: FormData): ParseResult {
@@ -97,6 +107,22 @@ function parseFields(formData: FormData): ParseResult {
 
   const requiresPreOrder = formData.get("requiresPreOrder") === "on";
 
+  const enquiryThresholdRaw = String(formData.get("enquiryThresholdPartySize") ?? "").trim();
+  let enquiryThresholdPartySize: number | null = null;
+  if (enquiryThresholdRaw !== "") {
+    const parsed = Number(enquiryThresholdRaw);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return { ok: false, error: "Enquiry threshold must be a positive number of guests, or left blank." };
+    }
+    if (parsed > maxPartySize) {
+      return {
+        ok: false,
+        error: "Enquiry threshold can't be above the type's max party size — nothing would ever exceed it.",
+      };
+    }
+    enquiryThresholdPartySize = parsed;
+  }
+
   return {
     ok: true,
     fields: {
@@ -114,62 +140,70 @@ function parseFields(formData: FormData): ParseResult {
       depositType,
       depositAmount,
       requiresPreOrder,
+      enquiryThresholdPartySize,
     },
   };
 }
 
 export async function createBookingType(formData: FormData): Promise<ActionResult> {
-  const session = await requireAdminSession();
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
   const parsed = parseFields(formData);
   if (!parsed.ok) return { error: parsed.error };
   const { fields } = parsed;
 
   const existing = await prisma.bookingType.findUnique({
-    where: { venueId_slug: { venueId: session.venueId, slug: fields.slug } },
+    where: { venueId_slug: { venueId: venue.id, slug: fields.slug } },
   });
   if (existing) {
     return { error: `A booking type with slug "${fields.slug}" already exists for this venue.` };
   }
 
-  await prisma.bookingType.create({ data: { venueId: session.venueId, ...fields } });
-  revalidatePath("/admin/booking-types");
-  redirect("/admin/booking-types");
+  await prisma.bookingType.create({ data: { venueId: venue.id, ...fields } });
+  revalidatePath(`/admin/${venue.slug}/booking-types`);
+  redirect(`/admin/${venue.slug}/booking-types`);
 }
 
 export async function updateBookingType(formData: FormData): Promise<ActionResult> {
-  const session = await requireAdminSession();
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
   const id = String(formData.get("id") ?? "");
   const parsed = parseFields(formData);
   if (!parsed.ok) return { error: parsed.error };
   const { fields } = parsed;
 
   const existing = await prisma.bookingType.findUnique({
-    where: { venueId_slug: { venueId: session.venueId, slug: fields.slug } },
+    where: { venueId_slug: { venueId: venue.id, slug: fields.slug } },
   });
   if (existing && existing.id !== id) {
     return { error: `A booking type with slug "${fields.slug}" already exists for this venue.` };
   }
 
-  // updateMany + venueId, not update(where: {id}) — an id alone would let a
-  // request touch another venue's booking type by guessing at ids.
+  // updateMany + venueId, not update(where: {id}) — keeps this a no-op
+  // rather than a cross-venue write if the hidden venueId field and the id
+  // ever disagree (e.g. a stale form left open after switching venues).
   const result = await prisma.bookingType.updateMany({
-    where: { id, venueId: session.venueId },
+    where: { id, venueId: venue.id },
     data: fields,
   });
   if (result.count === 0) {
     return { error: "Booking type not found for this venue." };
   }
 
-  revalidatePath("/admin/booking-types");
-  redirect("/admin/booking-types");
+  revalidatePath(`/admin/${venue.slug}/booking-types`);
+  redirect(`/admin/${venue.slug}/booking-types`);
 }
 
 export async function deleteBookingType(formData: FormData): Promise<ActionResult> {
-  const session = await requireAdminSession();
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
   const id = String(formData.get("id") ?? "");
 
   const bookingType = await prisma.bookingType.findFirst({
-    where: { id, venueId: session.venueId },
+    where: { id, venueId: venue.id },
     select: { name: true },
   });
   if (!bookingType) return { error: "Booking type not found for this venue." };
@@ -179,13 +213,13 @@ export async function deleteBookingType(formData: FormData): Promise<ActionResul
     // Real bookings reference this row — hard-deleting would either fail on
     // the FK or, worse, cascade and destroy booking history. Deactivating
     // is the only safe path once a type has ever been used.
-    await prisma.bookingType.updateMany({ where: { id, venueId: session.venueId }, data: { active: false } });
-    revalidatePath("/admin/booking-types");
+    await prisma.bookingType.updateMany({ where: { id, venueId: venue.id }, data: { active: false } });
+    revalidatePath(`/admin/${venue.slug}/booking-types`);
     return {
       error: `"${bookingType.name}" has ${bookingCount} booking(s) against it, so it can't be deleted — deactivated instead.`,
     };
   }
 
-  await prisma.bookingType.deleteMany({ where: { id, venueId: session.venueId } });
-  revalidatePath("/admin/booking-types");
+  await prisma.bookingType.deleteMany({ where: { id, venueId: venue.id } });
+  revalidatePath(`/admin/${venue.slug}/booking-types`);
 }

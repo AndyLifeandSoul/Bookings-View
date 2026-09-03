@@ -141,6 +141,22 @@ export function BookingTypeFields({
         </label>
       </div>
 
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-zinc-700">Enquiry above this many guests (optional)</span>
+        <input
+          type="number"
+          name="enquiryThresholdPartySize"
+          min={1}
+          defaultValue={defaults?.enquiryThresholdPartySize ?? ""}
+          placeholder="e.g. 12"
+          className="w-32 rounded-md border border-zinc-300 px-3 py-2"
+        />
+        <span className="text-xs text-zinc-500">
+          A party at or under this size books instantly. Above it, the booking is created as an enquiry for staff to
+          confirm manually instead of auto-confirming. Leave blank to always auto-confirm.
+        </span>
+      </label>
+
       <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
         <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Deposit</legend>
         <div className="grid gap-4 sm:grid-cols-2">

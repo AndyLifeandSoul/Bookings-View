@@ -10,7 +10,7 @@ import type { ActionResult } from "@/components/action-form";
  * error to alarm over — it's confirmation the action did something sane —
  * so it renders inline next to the row rather than as a red banner.
  */
-export function DeleteBookingTypeButton({ id, name }: { id: string; name: string }) {
+export function DeleteBookingTypeButton({ id, name, venueId }: { id: string; name: string; venueId: string }) {
   const [state, formAction, pending] = useActionState<ActionResult, FormData>(
     async (_prevState, formData) => deleteBookingType(formData),
     undefined,
@@ -25,6 +25,7 @@ export function DeleteBookingTypeButton({ id, name }: { id: string; name: string
         }}
       >
         <input type="hidden" name="id" value={id} />
+        <input type="hidden" name="venueId" value={venueId} />
         <button type="submit" disabled={pending} className="text-sm text-red-600 underline hover:text-red-800 disabled:opacity-50">
           {pending ? "Deleting…" : "Delete"}
         </button>

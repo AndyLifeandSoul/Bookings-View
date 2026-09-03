@@ -1,15 +1,16 @@
 import { prisma } from "@/lib/db/client";
-import { requireAdminSession } from "@/lib/admin/require-admin-session";
+import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { createMenu } from "../actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewMenuPage() {
-  const session = await requireAdminSession();
+export default async function NewMenuPage({ params }: { params: Promise<{ venueSlug: string }> }) {
+  const { venueSlug } = await params;
+  const { venue } = await requireAdminVenue(venueSlug);
   const bookingTypes = await prisma.bookingType.findMany({
-    where: { venueId: session.venueId },
+    where: { venueId: venue.id },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
@@ -18,6 +19,7 @@ export default async function NewMenuPage() {
     <div className="flex flex-col gap-4">
       <h2 className="text-base font-semibold text-zinc-900">New menu</h2>
       <ActionForm action={createMenu} className="flex flex-col gap-5 rounded-lg border border-zinc-200 bg-white p-5">
+        <input type="hidden" name="venueId" value={venue.id} />
         <label className="flex flex-col gap-1">
           <span className="text-sm font-medium text-zinc-700">Name</span>
           <input
