@@ -5,6 +5,7 @@ import { getDayWindow } from "@/lib/staff/get-day-window";
 import { DiaryGrid, type DiaryBooking, type DiaryTable } from "./diary-grid";
 import { AddWalkInButton } from "./add-walk-in-button";
 import { RefreshButton } from "./refresh-button";
+import { DateJump } from "./date-jump";
 import { naturalSortTables } from "@/lib/tables/natural-sort";
 
 export const dynamic = "force-dynamic";
@@ -114,7 +115,7 @@ export default async function DiaryPage({
           >
             ← Prev
           </Link>
-          <span className="text-sm font-medium text-zinc-900">{formatDate(date)}</span>
+          <DateJump venueSlug={venue.slug} dateStr={dateStr} label={formatDate(date)} />
           <Link
             href={`/staff/${venue.slug}/diary?date=${nextDate}`}
             className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-100"
