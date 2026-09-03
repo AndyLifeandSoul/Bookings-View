@@ -13,8 +13,12 @@ export default async function MarketingPage({ params }: { params: Promise<{ venu
     select: { customerName: true, customerEmail: true, customerPhone: true, date: true },
   });
 
+  // marketingOptIn only ever comes from the customer widget, which always
+  // collects an email — but Booking.customerEmail is nullable in general
+  // (see its doc comment), so this still guards rather than assuming.
   const byEmail = new Map<string, { name: string; email: string; phone: string | null; lastBookingDate: Date }>();
   for (const b of bookings) {
+    if (!b.customerEmail) continue;
     const key = b.customerEmail.toLowerCase();
     if (!byEmail.has(key)) {
       byEmail.set(key, { name: b.customerName, email: b.customerEmail, phone: b.customerPhone, lastBookingDate: b.date });

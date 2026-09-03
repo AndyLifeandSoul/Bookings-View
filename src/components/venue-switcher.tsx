@@ -17,7 +17,16 @@ import type { VenueOption } from "@/lib/venues/list-active-venues";
  * switched to another venue would 404 on an id that belongs to dv8, not the
  * new venue — so a venue switch always lands on that section's list page.
  */
-export function VenueSwitcher({ venues, currentSlug }: { venues: VenueOption[]; currentSlug: string }) {
+export function VenueSwitcher({
+  venues,
+  currentSlug,
+  variant = "light",
+}: {
+  venues: VenueOption[];
+  currentSlug: string;
+  /** "dark" for use inside TopBar (staff app's dark top nav); "light" (default) for the venue-settings sub-nav, which sits on the page's white/zinc-50 background. */
+  variant?: "light" | "dark";
+}) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -36,7 +45,11 @@ export function VenueSwitcher({ venues, currentSlug }: { venues: VenueOption[]; 
       value={currentSlug}
       onChange={(e) => handleChange(e.target.value)}
       aria-label="Switch venue"
-      className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm font-medium text-zinc-700"
+      className={
+        variant === "dark"
+          ? "rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm font-medium text-zinc-100"
+          : "rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm font-medium text-zinc-700"
+      }
     >
       {venues.map((v) => (
         <option key={v.slug} value={v.slug}>

@@ -15,12 +15,12 @@ export default async function StaffRootPage() {
   if (!session) redirect("/login");
 
   if (session.venueSlug) {
-    redirect(`/staff/${session.venueSlug}`);
+    redirect(`/staff/${session.venueSlug}/diary`);
   }
 
   const venues = await listActiveVenues();
   if (venues.length === 0) {
     return <div className="px-4 py-8 text-zinc-600 sm:px-8">No venues exist yet.</div>;
   }
-  redirect(`/staff/${venues[0].slug}`);
+  redirect(`/staff/${venues[0].slug}/diary`);
 }

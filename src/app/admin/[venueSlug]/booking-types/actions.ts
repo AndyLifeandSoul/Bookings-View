@@ -26,6 +26,7 @@ interface ParsedFields {
   depositAmount: number | null;
   requiresPreOrder: boolean;
   enquiryThresholdPartySize: number | null;
+  color: string | null;
 }
 
 type ParseResult = { ok: true; fields: ParsedFields } | { ok: false; error: string };
@@ -123,6 +124,12 @@ function parseFields(formData: FormData): ParseResult {
     enquiryThresholdPartySize = parsed;
   }
 
+  const colorRaw = String(formData.get("color") ?? "").trim();
+  if (colorRaw && !/^#[0-9a-fA-F]{6}$/.test(colorRaw)) {
+    return { ok: false, error: `"${colorRaw}" isn't a valid colour.` };
+  }
+  const color = colorRaw || null;
+
   return {
     ok: true,
     fields: {
@@ -141,6 +148,7 @@ function parseFields(formData: FormData): ParseResult {
       depositAmount,
       requiresPreOrder,
       enquiryThresholdPartySize,
+      color,
     },
   };
 }

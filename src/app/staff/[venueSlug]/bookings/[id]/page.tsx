@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db/client";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
-import { updateBookingDetails, reassignTables } from "./actions";
+import { updateBookingDetails, reassignTables, sendReply } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +35,17 @@ export default async function BookingDetailsPage({
   if (!booking) notFound();
 
   const assignedTableIds = new Set(booking.bookingTables.map((bt) => bt.tableId));
+
+  // Opening this page is what counts as "read" — same reasoning email
+  // clients use for marking a message read on open. Fire-and-forget: a
+  // failure here shouldn't block rendering the page.
+  const hasUnread = booking.messages.some((m) => m.direction === "INBOUND" && !m.read);
+  if (hasUnread) {
+    await prisma.message.updateMany({
+      where: { bookingId: booking.id, direction: "INBOUND", read: false },
+      data: { read: true },
+    });
+  }
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-8 sm:py-12">
@@ -80,13 +91,12 @@ export default async function BookingDetailsPage({
                   <input
                     type="email"
                     name="customerEmail"
-                    required
-                    defaultValue={booking.customerEmail}
+                    defaultValue={booking.customerEmail ?? ""}
                     className="rounded-md border border-zinc-300 px-3 py-2"
                   />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-zinc-700">Phone (optional)</span>
+                  <span className="text-sm font-medium text-zinc-700">Phone</span>
                   <input
                     type="tel"
                     name="customerPhone"
@@ -94,6 +104,7 @@ export default async function BookingDetailsPage({
                     className="rounded-md border border-zinc-300 px-3 py-2"
                   />
                 </label>
+                <p className="-mt-2 text-xs text-zinc-500 sm:col-span-2">At least one of email or phone is required.</p>
                 <label className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-zinc-700">Party size</span>
                   <input
@@ -196,7 +207,8 @@ export default async function BookingDetailsPage({
           <section>
             <h2 className="text-base font-semibold text-zinc-900">Messages</h2>
             <p className="mt-1 text-sm text-zinc-500">
-              Sending isn&apos;t connected yet (needs an email provider decision), so this is history only.
+              Emailed to/from the customer via this venue&apos;s mailbox. If no venue email is set (Settings → Venue
+              Details) or Microsoft 365 isn&apos;t connected yet, replies are still logged here, just not actually sent.
             </p>
             {booking.messages.length === 0 ? (
               <p className="mt-3 rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-500">
@@ -218,6 +230,29 @@ export default async function BookingDetailsPage({
                 ))}
               </div>
             )}
+
+            <ActionForm action={sendReply} className="mt-3 flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4">
+              <input type="hidden" name="id" value={booking.id} />
+              <input type="hidden" name="venueId" value={venue.id} />
+              <input type="hidden" name="venueSlug" value={venue.slug} />
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">Reply</span>
+                <textarea
+                  name="body"
+                  required
+                  rows={3}
+                  placeholder="Write a reply to the customer…"
+                  className="rounded-md border border-zinc-300 px-3 py-2"
+                />
+              </label>
+              <div>
+                <SubmitButton
+                  label="Send reply"
+                  pendingLabel="Sending…"
+                  className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+                />
+              </div>
+            </ActionForm>
           </section>
         </div>
       </div>

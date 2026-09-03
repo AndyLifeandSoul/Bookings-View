@@ -2,8 +2,6 @@ import Link from "next/link";
 import { prisma } from "@/lib/db/client";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { getDayWindow } from "@/lib/staff/get-day-window";
-import { listActiveVenues } from "@/lib/venues/list-active-venues";
-import { VenueSwitcher } from "@/components/venue-switcher";
 import { DiaryGrid, type DiaryBooking, type DiaryTable } from "./diary-grid";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +15,7 @@ export default async function DiaryPage({
 }) {
   const { venueSlug } = await params;
   const { date: dateParam } = await searchParams;
-  const { session, venue } = await requireStaffVenue(venueSlug);
-
-  // Same reasoning as the list dashboard — only OWNER/MANAGER get a
-  // switcher, since a STAFF session only has the one venue it's tied to.
-  const venues = session.role === "STAFF" ? [] : await listActiveVenues();
+  const { venue } = await requireStaffVenue(venueSlug);
 
   const dateStr = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayStr();
   const date = new Date(`${dateStr}T00:00:00.000Z`);
@@ -36,7 +30,7 @@ export default async function DiaryPage({
     }),
     prisma.booking.findMany({
       where: { venueId: venue.id, date, status: { not: "CANCELLED" } },
-      include: { bookingType: { select: { name: true } }, bookingTables: { select: { tableId: true } } },
+      include: { bookingType: { select: { name: true, color: true } }, bookingTables: { select: { tableId: true } } },
       orderBy: { startTime: "asc" },
     }),
     getDayWindow(venue.id, date),
@@ -51,6 +45,7 @@ export default async function DiaryPage({
     startTime: b.startTime,
     endTime: b.endTime,
     bookingTypeName: b.bookingType.name,
+    bookingTypeColor: b.bookingType.color,
     tableIds: b.bookingTables.map((bt) => bt.tableId),
   }));
 
@@ -61,19 +56,30 @@ export default async function DiaryPage({
   const effectiveWindow = window.closed && diaryBookings.length > 0 ? widenToFit(diaryBookings) : window;
 
   return (
-    <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-8 sm:py-12">
+    <div className="flex flex-1 flex-col px-4 py-8 sm:py-12">
       <div className="mx-auto w-full max-w-5xl">
         <div className="flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold text-zinc-900">{venue.name} — Table diary</h1>
-              <VenueSwitcher venues={venues} currentSlug={venue.slug} />
-            </div>
+            <h1 className="text-2xl font-semibold text-zinc-900">{venue.name} — Table diary</h1>
             <p className="text-sm text-zinc-500">Drag a booking onto a different table to reseat it.</p>
           </div>
-          <Link href={`/staff/${venue.slug}`} className="text-sm text-zinc-500 underline hover:text-zinc-900">
-            List view
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/staff/${venue.slug}/bookings/new?date=${dateStr}`}
+              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-hover)]"
+            >
+              Add booking
+            </Link>
+            <Link
+              href={`/staff/${venue.slug}/enquiries/new?date=${dateStr}`}
+              className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
+            >
+              Add enquiry
+            </Link>
+            <Link href={`/staff/${venue.slug}/list`} className="text-sm text-zinc-500 underline hover:text-zinc-900">
+              List view
+            </Link>
+          </div>
         </div>
 
         <div className="mt-4 flex items-center gap-3">

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/client";
 import { getCurrentStaffSession } from "@/lib/auth/session";
 import { findTableConflicts } from "@/lib/staff/table-conflicts";
+import { sendMailAs } from "@/lib/email/graph-client";
 import type { ActionResult } from "@/components/action-form";
 import type { BookingStatus } from "@/generated/prisma";
 
@@ -38,10 +39,12 @@ export async function updateBookingDetails(formData: FormData): Promise<ActionRe
   if (!booking) return { error: "Booking not found for this venue." };
 
   const customerName = String(formData.get("customerName") ?? "").trim();
-  const customerEmail = String(formData.get("customerEmail") ?? "").trim();
   if (!customerName) return { error: "Customer name is required." };
-  if (!customerEmail || !customerEmail.includes("@")) return { error: "A valid customer email is required." };
+  const customerEmailRaw = String(formData.get("customerEmail") ?? "").trim();
+  if (customerEmailRaw && !customerEmailRaw.includes("@")) return { error: "Email doesn't look valid." };
+  const customerEmail = customerEmailRaw || null;
   const customerPhone = String(formData.get("customerPhone") ?? "").trim() || null;
+  if (!customerEmail && !customerPhone) return { error: "Enter at least one of email or phone." };
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
   const partySizeRaw = Number(formData.get("partySize"));
@@ -103,4 +106,72 @@ export async function reassignTables(formData: FormData): Promise<ActionResult> 
   ]);
 
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+}
+
+/**
+ * Sends a reply as the venue's mailbox (Venue.email) via Graph and logs it
+ * as an OUTBOUND Message either way — even when Graph isn't configured or
+ * the send fails, so staff always have a record of what they meant to say,
+ * with the send failure surfaced as the action's error rather than losing
+ * the message text. read defaults to true for OUTBOUND (see Message.read's
+ * doc comment), so this never shows up as something needing attention.
+ */
+export async function sendReply(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) return { error: "Message can't be empty." };
+
+  const booking = await prisma.booking.findFirst({
+    where: { id, venueId },
+    select: { id: true, customerEmail: true, bookingRef: true, venue: { select: { name: true, email: true } } },
+  });
+  if (!booking) return { error: "Booking not found for this venue." };
+
+  const session = await getCurrentStaffSession();
+  const subject = `Re: your booking${booking.bookingRef ? ` ${booking.bookingRef}` : ""} at ${booking.venue.name}`;
+
+  let sendError: string | null = null;
+  if (!booking.venue.email) {
+    sendError = "This venue has no email address set (Settings → Venue Details) — logged only, not sent.";
+  } else if (!booking.customerEmail) {
+    sendError = "This booking has no customer email on file — logged only, not sent.";
+  } else {
+    const result = await sendMailAs(booking.venue.email, booking.customerEmail, subject, body);
+    if (!result.ok) sendError = `Logged, but sending failed: ${result.error}`;
+  }
+
+  await prisma.message.create({
+    data: {
+      bookingId: id,
+      direction: "OUTBOUND",
+      subject,
+      body,
+      staffUserId: session?.staffUserId,
+    },
+  });
+
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+  if (sendError) return { error: sendError };
+}
+
+/** Marks every unread inbound message on this booking read — called when staff open/action a booking from the Messages tab. */
+export async function markMessagesRead(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  await prisma.message.updateMany({
+    where: { bookingId: id, direction: "INBOUND", read: false, booking: { venueId } },
+    data: { read: true },
+  });
+
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+  revalidatePath(`/staff/${venueSlug}/messages`);
 }

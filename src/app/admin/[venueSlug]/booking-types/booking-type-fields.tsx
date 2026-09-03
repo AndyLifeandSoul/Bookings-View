@@ -56,6 +56,19 @@ export function BookingTypeFields({
         </span>
       </label>
 
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-zinc-700">Diary colour</span>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            name="color"
+            defaultValue={defaults?.color ?? "#7c3aed"}
+            className="h-9 w-14 cursor-pointer rounded-md border border-zinc-300 p-1"
+          />
+          <span className="text-xs text-zinc-500">Shown as the banner on this type&apos;s blocks in the staff table diary.</span>
+        </div>
+      </label>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
           <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Party size</legend>

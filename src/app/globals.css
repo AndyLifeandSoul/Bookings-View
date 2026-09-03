@@ -18,8 +18,17 @@
  */
 :root {
   color-scheme: light;
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f6f6f8;
+  --foreground: #18181b;
+
+  /* Brand accent — used sparingly and consistently across the new nav
+   * chrome, primary buttons, active tab states, and status badges, so the
+   * app reads as one designed tool rather than a stack of unstyled admin
+   * forms. Indigo rather than the previous all-zinc monochrome palette. */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef2ff;
+  --accent-soft-text: #4338ca;
 }
 
 @theme inline {
@@ -32,5 +41,40 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Consistent, visible keyboard focus everywhere — the previous browser
+ * default outline was inconsistent across form controls, links, and
+ * buttons. Doesn't touch mouse-click focus (:focus-visible only). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Every native text/number/date/time input, select, and textarea in this
+ * app shares this look already via repeated Tailwind classes
+ * (border-zinc-300, rounded-md, px-3 py-2) — this just gives them a
+ * slightly smoother focus transition and a consistent accent focus ring
+ * (overriding Tailwind's default blue) without having to touch every form. */
+input,
+select,
+textarea {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+
+/* Thin, unobtrusive scrollbar for the horizontally-scrolling tables/diary
+ * grid rather than the chunky OS default — most visible on the diary. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
 }

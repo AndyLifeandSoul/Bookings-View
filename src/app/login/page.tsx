@@ -5,7 +5,9 @@ export const dynamic = "force-dynamic";
 /** Only reachable when not already logged in — middleware.ts redirects an existing session straight to /staff. */
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
-  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/staff";
+  // "/" is the role-aware landing resolver (see its page.tsx) — OWNER/
+  // MANAGER land on the admin dashboard, STAFF on their venue's diary.
+  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 px-4 py-16">

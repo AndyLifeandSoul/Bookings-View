@@ -70,16 +70,8 @@ export async function createStaffUser(formData: FormData): Promise<CreateStaffRe
   const passwordHash = await hashPassword(plaintextPassword);
 
   await prisma.staffUser.create({ data: { name, email, role, venueId, passwordHash } });
-  revalidatePath(`/admin/${await venueSlugForRevalidate()}/staff`);
+  revalidatePath("/admin/staff");
   return { generatedPassword: plaintextPassword };
-}
-
-async function venueSlugForRevalidate(): Promise<string> {
-  // The staff list isn't actually scoped to one venue (see page.tsx), but
-  // revalidatePath needs *a* concrete path — any venue's /staff URL
-  // revalidates the same shared list.
-  const venue = await prisma.venue.findFirst({ select: { slug: true } });
-  return venue?.slug ?? "dv8";
 }
 
 export async function toggleStaffActive(formData: FormData): Promise<ActionResult> {
@@ -91,7 +83,7 @@ export async function toggleStaffActive(formData: FormData): Promise<ActionResul
   if (!staffUser) return { error: "Account not found." };
 
   await prisma.staffUser.update({ where: { id }, data: { active: !staffUser.active } });
-  revalidatePath(`/admin/${await venueSlugForRevalidate()}/staff`);
+  revalidatePath("/admin/staff");
 }
 
 export async function resetStaffPassword(formData: FormData): Promise<CreateStaffResult> {

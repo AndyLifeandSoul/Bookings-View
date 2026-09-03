@@ -18,8 +18,26 @@ export interface DiaryBooking {
   startTime: string;
   endTime: string;
   bookingTypeName: string;
+  /** Admin-set hex colour for this booking's type (see BookingType.color) — null falls back to colourForBookingType()'s deterministic palette below. */
+  bookingTypeColor: string | null;
   /** Every table this booking currently occupies — a combined booking shows up on each of its rows. */
   tableIds: string[];
+}
+
+/**
+ * Small fixed palette a booking type's colour banner falls back to when no
+ * admin colour has been set (BookingType.color is null) — picked
+ * deterministically from the booking type's own name so the same type
+ * always gets the same fallback colour on every render, without needing a
+ * colour actually stored anywhere.
+ */
+const FALLBACK_PALETTE = ["#7c3aed", "#0891b2", "#c2410c", "#15803d", "#be185d", "#4338ca", "#a16207", "#0f766e"];
+
+function colourForBookingType(bookingTypeName: string, explicitColor: string | null): string {
+  if (explicitColor) return explicitColor;
+  let hash = 0;
+  for (let i = 0; i < bookingTypeName.length; i++) hash = (hash * 31 + bookingTypeName.charCodeAt(i)) >>> 0;
+  return FALLBACK_PALETTE[hash % FALLBACK_PALETTE.length];
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -107,13 +125,21 @@ export function DiaryGrid({
         onDragStart={(e) => {
           e.dataTransfer.setData("text/plain", JSON.stringify({ bookingId: booking.id, fromTableId } satisfies DragPayload));
         }}
-        title={`${booking.customerName} · ${booking.partySize} guests · ${booking.startTime}-${booking.endTime}`}
-        className={`absolute top-1 bottom-1 flex flex-col justify-center overflow-hidden rounded-md border px-2 text-xs leading-tight shadow-sm hover:z-10 hover:shadow-md ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"}`}
+        title={`${booking.bookingTypeName} · ${booking.customerName} · ${booking.partySize} guests · ${booking.startTime}-${booking.endTime}`}
+        className={`absolute top-1 bottom-1 flex flex-col overflow-hidden rounded-md border text-xs leading-tight shadow-sm hover:z-10 hover:shadow-md ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"}`}
         style={{ left: `${pctLeft(toMinutes(booking.startTime))}%`, width: `${pctWidth(toMinutes(booking.startTime), toMinutes(booking.endTime))}%` }}
       >
-        <span className="truncate font-medium">{booking.customerName}</span>
-        <span className="truncate opacity-80">
-          {booking.partySize} · {booking.startTime}
+        <span
+          className="truncate px-2 py-0.5 text-[10px] font-semibold text-white"
+          style={{ background: colourForBookingType(booking.bookingTypeName, booking.bookingTypeColor) }}
+        >
+          {booking.bookingTypeName}
+        </span>
+        <span className="flex flex-1 flex-col justify-center overflow-hidden px-2">
+          <span className="truncate font-medium">{booking.customerName}</span>
+          <span className="truncate opacity-80">
+            {booking.partySize} · {booking.startTime}
+          </span>
         </span>
       </Link>
     );
@@ -155,7 +181,7 @@ export function DiaryGrid({
                   <div className="font-medium text-zinc-900">{table.label}</div>
                   {table.areaName && <div className="text-xs text-zinc-400">{table.areaName}</div>}
                 </div>
-                <div className="relative h-14 flex-1">
+                <div className="relative h-16 flex-1">
                   {hourMarks.map((m) => (
                     <div key={m} className="absolute top-0 bottom-0 w-px bg-zinc-100" style={{ left: `${pctLeft(m)}%` }} />
                   ))}
@@ -185,8 +211,13 @@ export function DiaryGrid({
                     JSON.stringify({ bookingId: booking.id, fromTableId: null } satisfies DragPayload),
                   );
                 }}
-                className={`rounded-md border px-3 py-1.5 text-xs shadow-sm ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"}`}
+                className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs shadow-sm ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"}`}
               >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: colourForBookingType(booking.bookingTypeName, booking.bookingTypeColor) }}
+                  title={booking.bookingTypeName}
+                />
                 <span className="font-medium">{booking.customerName}</span> · {booking.partySize} ·{" "}
                 {booking.startTime}-{booking.endTime}
               </Link>

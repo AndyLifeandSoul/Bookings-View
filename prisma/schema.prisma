@@ -99,6 +99,14 @@ model Venue {
   /// reference even after one is cancelled.
   bookingRefCounter Int @default(0)
 
+  /// High-water mark for the inbound-email poll (bookings-view's
+  /// /api/cron/poll-inbox) — only messages received after this are fetched
+  /// from the venue's mailbox on the next run, so the same reply is never
+  /// turned into two Message rows. Null until the poll has run at least
+  /// once for this venue (or until email is configured at all — see
+  /// lib/email/graph-client.ts's doc comment for the whole email design).
+  lastInboxSyncAt DateTime?
+
   bookingTypes           BookingType[]
   tables                 Table[]
   areas                  Area[]
@@ -241,6 +249,14 @@ model BookingType {
   /// area at save time) — see assignTables in generate-slots.ts.
   allowedTables Table[] @relation("BookingTypeAllowedTables")
 
+  /// Hex colour (e.g. "#7c3aed") shown as a banner/strip on this booking
+  /// type's blocks in the staff table diary, so "Bottomless Brunch" and
+  /// "Standard Dining" are visually distinguishable at a glance. Nullable —
+  /// admin-set, not required; the diary falls back to a deterministic
+  /// colour picked from a fixed palette (hashed on id) when this is unset,
+  /// see colourForBookingType() in bookings-view's diary-grid.tsx.
+  color String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -373,15 +389,38 @@ model Booking {
   bookingRef String? @unique
 
   customerName  String
-  customerEmail String
+  /// Nullable — the customer widget still always requires it (validated at
+  /// the API layer, not the DB), but a same-day manual "Add booking" in
+  /// bookings-view needs neither email nor phone (see that flow's actions.ts
+  /// doc comment), so at least one of the two, not both, is what the DB
+  /// actually enforces nothing about. Anything that dedupes bookings by
+  /// customer (get-customers.ts, marketing-export) has to account for this
+  /// being null.
+  customerEmail String?
   customerPhone String?
   notes         String?
+
+  /// Optional — added to the customer booking form specifically to power
+  /// the admin Customers page's "birthday" filter (a "who's got a birthday
+  /// this month" marketing list). Nothing backfills this for bookings made
+  /// before the field existed; its absence on an old row isn't a bug. Date
+  /// only (no year requirement in the UI, but stored as a full date — the
+  /// birthday filter reads month+day off it and ignores the year).
+  customerDateOfBirth DateTime? @db.Date
 
   /// Customer opted in to marketing communications at booking time — shown
   /// as a checkbox on the customer booking form, exported/filtered on in
   /// bookings-view's admin customer list. Never inferred, only ever what the
   /// customer actually ticked.
   marketingOptIn Boolean @default(false)
+
+  /// Free-text name of whoever took this booking over the phone/in person —
+  /// set only by the manual "Add booking"/"Add enquiry" flows in
+  /// bookings-view (source PHONE), never by the customer widget (WIDGET) or
+  /// left blank for those. Free text rather than a StaffUser relation
+  /// because every venue shares one login (see StaffUser doc comment) — an
+  /// individual name typed here is the only record of who actually took it.
+  takenByStaffName String?
 
   bookingTables BookingTable[]
   payments      Payment[]
@@ -607,6 +646,14 @@ model Message {
   /// flow (e.g. a future booking-confirmation email) rather than a person.
   staffUserId String?
   staffUser   StaffUser?       @relation(fields: [staffUserId], references: [id])
+
+  /// Drives the Messages tab (bookings-view's /staff/[venueSlug]/messages,
+  /// "bookings with unread messages"). Only meaningful for INBOUND — an
+  /// OUTBOUND row defaults to true (whoever sent it has obviously "read"
+  /// it) so it never shows up as needing attention; the inbound-poll job
+  /// explicitly sets false when it creates a row from a customer reply, and
+  /// staff mark it back to true from the booking details page.
+  read Boolean @default(true)
 
   createdAt DateTime @default(now())
 

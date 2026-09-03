@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/client";
-import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
+import { requireAdminSession } from "@/lib/admin/require-admin-session";
 import { listActiveVenues } from "@/lib/venues/list-active-venues";
 import { CreateStaffForm } from "./create-staff-form";
 import { ToggleActiveButton, ResetPasswordButton } from "./staff-row-actions";
@@ -8,17 +8,16 @@ import { ToggleActiveButton, ResetPasswordButton } from "./staff-row-actions";
 export const dynamic = "force-dynamic";
 
 /**
- * Not actually scoped to :venueSlug — staff accounts aren't a per-venue
- * concept (OWNER/MANAGER see every venue; STAFF's one venue is just a field
- * on the row) — but it lives under /admin/[venueSlug] like every other
- * admin page so the venue switcher and nav keep working the same way. The
- * route param is only used to run the same requireAdminVenue() guard
- * everything else here uses.
+ * Standalone top-level tab (/admin/staff), not nested under any venue —
+ * staff accounts aren't a per-venue concept (OWNER/MANAGER see every venue;
+ * STAFF's one venue is just a field on the row), so this doesn't belong in
+ * a venue's settings sub-nav. OWNER-only, checked here (redirect) and again
+ * in every action in ./actions.ts (defence in depth, same as the rest of
+ * /admin).
  */
-export default async function StaffAccountsPage({ params }: { params: Promise<{ venueSlug: string }> }) {
-  const { venueSlug } = await params;
-  const { session } = await requireAdminVenue(venueSlug);
-  if (session.role !== "OWNER") redirect(`/admin/${venueSlug}/hours`);
+export default async function StaffAccountsPage() {
+  const session = await requireAdminSession();
+  if (session.role !== "OWNER") redirect("/admin");
 
   const [staffUsers, venues] = await Promise.all([
     prisma.staffUser.findMany({
@@ -29,16 +28,14 @@ export default async function StaffAccountsPage({ params }: { params: Promise<{ 
   ]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-base font-semibold text-zinc-900">Staff accounts</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Owner and Manager logins see every venue from one account. Staff logins are tied to exactly one venue&apos;s
-          diary.
-        </p>
-      </div>
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-8 sm:py-10">
+      <h1 className="text-xl font-semibold text-zinc-900">Staff accounts</h1>
+      <p className="mt-1 text-sm text-zinc-500">
+        Owner and Manager logins see every venue from one account. Staff logins are tied to exactly one venue&apos;s
+        diary.
+      </p>
 
-      <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-zinc-200 bg-white">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="border-b border-zinc-200 text-xs uppercase text-zinc-500">
             <tr>
@@ -80,8 +77,8 @@ export default async function StaffAccountsPage({ params }: { params: Promise<{ 
         </table>
       </div>
 
-      <div>
-        <h3 className="text-sm font-semibold text-zinc-900">New account</h3>
+      <div className="mt-8">
+        <h2 className="text-sm font-semibold text-zinc-900">New account</h2>
         <div className="mt-3">
           <CreateStaffForm venues={venues} />
         </div>

@@ -28,13 +28,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ven
   // One row per customer — the most recent booking's name/phone win, since
   // that's the freshest contact detail for someone who's booked more than
   // once, but every opted-in booking still counts toward "has opted in".
+  // Keyed by email when present, else phone (see Booking.customerEmail's
+  // doc comment on why either can be missing) — in practice marketing
+  // opt-in only ever comes from the customer widget, which always collects
+  // an email, so the phone/booking-id fallbacks below are just defensive.
   const byEmail = new Map<string, { name: string; email: string; phone: string; lastBookingDate: string }>();
   for (const b of bookings) {
-    const key = b.customerEmail.toLowerCase();
-    if (!byEmail.has(key)) {
+    const key = b.customerEmail ? b.customerEmail.toLowerCase() : b.customerPhone ? `phone:${b.customerPhone}` : null;
+    if (key && !byEmail.has(key)) {
       byEmail.set(key, {
         name: b.customerName,
-        email: b.customerEmail,
+        email: b.customerEmail ?? "",
         phone: b.customerPhone ?? "",
         lastBookingDate: b.date.toISOString().slice(0, 10),
       });

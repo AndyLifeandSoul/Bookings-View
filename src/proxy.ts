@@ -30,7 +30,10 @@ export async function proxy(request: NextRequest) {
   const session = token ? await verifySessionToken(token) : null;
 
   if (pathname === "/login") {
-    if (session) return NextResponse.redirect(new URL("/staff", request.url));
+    // "/" is the role-aware landing resolver (see src/app/page.tsx) —
+    // OWNER/MANAGER land on the admin dashboard, STAFF on their venue's
+    // diary, rather than everyone always landing on /staff.
+    if (session) return NextResponse.redirect(new URL("/", request.url));
     return NextResponse.next();
   }
 
