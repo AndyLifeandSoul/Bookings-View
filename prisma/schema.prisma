@@ -3,13 +3,13 @@
 // `prisma migrate deploy` against the shared production database on every
 // deploy). This copy exists only so `prisma generate` here can produce a
 // Prisma Client for this app's own queries. NEVER run `prisma migrate dev`
-// or `prisma migrate deploy` from this repo — it has no migrations
+// or `prisma migrate deploy` from this repo, it has no migrations
 // directory of its own on purpose, so doing so would fail loudly rather
 // than silently create a second, conflicting migration history against the
 // same database. When the schema changes, change it in
 // `lifeandsoul-bookings` first, then copy the result here.
 //
-// Life & Soul bookings platform — core schema
+// Life & Soul bookings platform, core schema
 //
 // Key modelling decisions (see README for the full reasoning):
 // - PaymentAccount is separate from Venue and is many-venues-to-one-account,
@@ -44,12 +44,12 @@ enum PaymentProviderKind {
 }
 
 /// One row per real-world Dojo merchant account. `code` is used to look up
-/// the matching DOJO_API_KEY_<code> / DOJO_WEBHOOK_SECRET_<code> env vars —
+/// the matching DOJO_API_KEY_<code> / DOJO_WEBHOOK_SECRET_<code> env vars,
 /// see lib/payments/get-provider.ts. Nothing secret is ever stored in the DB.
 model PaymentAccount {
   id        String              @id @default(cuid())
   name      String // e.g. "DV8", "Life & Soul Group"
-  code      String              @unique // e.g. "DV8", "LIFE_AND_SOUL" — matches env var suffix
+  code      String              @unique // e.g. "DV8", "LIFE_AND_SOUL", matches env var suffix
   provider  PaymentProviderKind @default(DOJO)
   createdAt DateTime            @default(now())
   updatedAt DateTime            @updatedAt
@@ -71,7 +71,7 @@ model Venue {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Real-world contact details — also what satisfies Dojo's "contact
+  // Real-world contact details, also what satisfies Dojo's "contact
   // details" website checklist item per venue, and what booking
   // confirmation emails will show as the "from" venue in Phase 2.
   address String?
@@ -80,35 +80,35 @@ model Venue {
 
   // Nullable on purpose: a venue can exist (and take non-deposit bookings
   // or enquiries) before its Dojo merchant account assignment is settled.
-  // Arriba is the current example — not part of either named Dojo account
+  // Arriba is the current example, not part of either named Dojo account
   // yet, see seed.ts.
   paymentAccountId String?
   paymentAccount   PaymentAccount? @relation(fields: [paymentAccountId], references: [id])
 
   /// Short code used in customer-facing booking references, e.g. "BB" for
-  /// Black Bear Lodge, "DV8" for DV8 — see formatBookingRef() in
+  /// Black Bear Lodge, "DV8" for DV8, see formatBookingRef() in
   /// lib/bookings/booking-reference.ts. Nullable: a venue can exist before
   /// its code is assigned, in which case its bookings just don't get a
   /// reference (never blocks booking creation) until this is set.
   bookingCode String? @unique
 
   /// Running count of bookings ever made at this venue, incremented once per
-  /// booking (never reset) to generate the trailing digits of bookingRef —
-  /// see formatBookingRef(). Not a count of *current* bookings — it only
+  /// booking (never reset) to generate the trailing digits of bookingRef,
+  /// see formatBookingRef(). Not a count of *current* bookings, it only
   /// goes up, including for cancelled ones, so two bookings never share a
   /// reference even after one is cancelled.
   bookingRefCounter Int @default(0)
 
   /// High-water mark for the inbound-email poll (bookings-view's
-  /// /api/cron/poll-inbox) — only messages received after this are fetched
+  /// /api/cron/poll-inbox), only messages received after this are fetched
   /// from the venue's mailbox on the next run, so the same reply is never
   /// turned into two Message rows. Null until the poll has run at least
-  /// once for this venue (or until email is configured at all — see
+  /// once for this venue (or until email is configured at all, see
   /// lib/email/graph-client.ts's doc comment for the whole email design).
   lastInboxSyncAt DateTime?
 
   /// Caps total covers arriving within any rolling 30-minute window across
-  /// every table/booking type at once — a kitchen/floor-staffing limit, not
+  /// every table/booking type at once, a kitchen/floor-staffing limit, not
   /// a seating-capacity one (table capacity is already enforced per-table
   /// by assignTables). Null means no cap (the pre-existing default for
   /// every venue). This only ever tightens the auto-confirm decision, never
@@ -170,13 +170,13 @@ model OpeningHoursException {
   @@unique([venueId, date])
 }
 
-/// A carve-out within an otherwise-open day — a private event from 14:00 to
+/// A carve-out within an otherwise-open day, a private event from 14:00 to
 /// 18:00 on a day the venue is normally open 12:00-22:00, say. Unlike
 /// OpeningHoursException (which entirely replaces the day's hours),
 /// multiple blocks can apply to one date, and whatever the day's hours are
 /// (weekly or exception) still apply outside the blocked range(s). The
 /// availability engine subtracts these ranges from whatever window it
-/// resolved for the date — see subtractBlocks() in opening-window.ts.
+/// resolved for the date, see subtractBlocks() in opening-window.ts.
 model OpeningHoursBlock {
   id       String   @id @default(cuid())
   venueId  String
@@ -203,20 +203,20 @@ enum DepositType {
 
 /// How a booking of this type gets its table(s), once staff assign them
 /// (see BookingType.tableFillMode). Only matters at staff-confirmation
-/// time in bookings-view — the customer-facing engine (assignTables in
+/// time in bookings-view, the customer-facing engine (assignTables in
 /// generate-slots.ts) is never reached for a type that always enquires
 /// (see enquiryThresholdPartySize), which is the case for every type that
 /// uses WHOLE_AREA/WHOLE_VENUE today.
 enum TableFillMode {
-  /// The ordinary case — staff (or auto-assignment) pick just enough
+  /// The ordinary case, staff (or auto-assignment) pick just enough
   /// tables to fit the party, per areaPriorities/Area.priority order.
   PER_BOOKING
   /// Staff pick one area for this booking and every table in it gets
-  /// reserved, regardless of party size — e.g. Andy's Area Hire ("can use
+  /// reserved, regardless of party size, e.g. Andy's Area Hire ("can use
   /// any area and automatically reserves every table in that area").
   WHOLE_AREA
   /// Every active table in the venue gets reserved, regardless of party
-  /// size — e.g. Andy's Full Venue Hire ("automatically uses every table
+  /// size, e.g. Andy's Full Venue Hire ("automatically uses every table
   /// in the venue regardless of booking size").
   WHOLE_VENUE
 }
@@ -255,24 +255,24 @@ model BookingType {
   /// When true, every booking of this type runs from its chosen start time
   /// until the venue's actual closing time that date (e.g. a quiz night
   /// that always plays out to close, whatever time that is on a given
-  /// day) — minDurationMinutes/maxDurationMinutes are ignored for offering
+  /// day), minDurationMinutes/maxDurationMinutes are ignored for offering
   /// and duration purposes when this is set; the engine computes the end
   /// time directly from that date's resolved opening window instead. The
   /// two duration fields still hold a placeholder value (schema requires
-  /// them), never read while this is true — see generate-slots.ts.
+  /// them), never read while this is true, see generate-slots.ts.
   runsUntilClose Boolean @default(false)
 
   /// Restricts which day(s) of the week this booking type can be offered
-  /// on, independent of whether the venue itself is open that day — e.g. a
+  /// on, independent of whether the venue itself is open that day, e.g. a
   /// venue open Tue-Sat might still only offer "Private Hire" on the days
   /// it's otherwise closed to the public. 0=Sunday..6=Saturday, matching
   /// OpeningHours.dayOfWeek. Empty (the default) means "every day the venue
-  /// is open" — no extra restriction. Ignored for any date that has rows in
+  /// is open", no extra restriction. Ignored for any date that has rows in
   /// availableDates below (a one-off/specials type overrides the weekly
   /// pattern entirely, rather than the two composing).
   availableDaysOfWeek Int[] @default([])
 
-  /// Earliest/latest a booking of this type can *start*, as "HH:mm" —
+  /// Earliest/latest a booking of this type can *start*, as "HH:mm",
   /// independent of and in addition to the venue's own opening hours (both
   /// have to allow the time). Null means no extra restriction beyond
   /// opening hours (the pre-existing behaviour).
@@ -291,23 +291,23 @@ model BookingType {
   requiresPreOrder Boolean @default(false)
 
   /// Above this party size, a booking of this type is created as ENQUIRY
-  /// instead of auto-confirming, for staff to review and confirm manually —
+  /// instead of auto-confirming, for staff to review and confirm manually,
   /// e.g. a table for 10 books instantly, a table for 20 needs a human.
   /// Null means always auto-confirm (no enquiry threshold). An enquiry
   /// booking skips table auto-assignment (see generateAvailableSlots'
   /// enquiry-mode branch) since staff sort out the table when they confirm;
   /// this is also the fix for the pre-existing "party too big for any
-  /// single table gets zero slots" dead end noted in generate-slots.ts —
+  /// single table gets zero slots" dead end noted in generate-slots.ts,
   /// once a booking type has a threshold, an over-threshold party is no
   /// longer required to fit an actual table just to get an available slot.
   enquiryThresholdPartySize Int?
 
-  /// Legacy direct table restriction — never actually wired up in the admin
+  /// Legacy direct table restriction, never actually wired up in the admin
   /// UI (nothing sets this today), superseded by areaPriorities below for
   /// the "restrict by area, with an order" case the admin UI does support.
   /// Left in place rather than removed: a future "restrict to these exact
   /// tables, no area involved" control could still use it cheaply. Always
-  /// empty in practice right now — see assignTables in generate-slots.ts,
+  /// empty in practice right now, see assignTables in generate-slots.ts,
   /// which still honours it first (further narrowing areaPriorities' tables)
   /// if it's ever populated.
   allowedTables Table[] @relation("BookingTypeAllowedTables")
@@ -315,24 +315,31 @@ model BookingType {
   /// When non-empty, restricts this booking type's auto-assignment to only
   /// the tables in these areas (any table in an area not listed here is
   /// never considered for this booking type), tried in each row's priority
-  /// order — lower fills first, same "exhaust one group before spilling
+  /// order, lower fills first, same "exhaust one group before spilling
   /// into the next" rule as Area.priority, just scoped to this booking type
   /// instead of venue-wide. Empty (the default) falls back to the
   /// venue-wide Area.priority ordering across every active table, unchanged
   /// from the pre-existing behaviour. See assignTables in generate-slots.ts.
   areaPriorities BookingTypeArea[]
 
-  /// One-off bookable dates for a "specials" type that doesn't follow a
-  /// weekly pattern at all — e.g. a quiz night only run on three manually
-  /// picked evenings. When this has any rows, they're the *only* dates this
-  /// booking type is offered on, and availableDaysOfWeek above is ignored
-  /// entirely for it. Empty (the default) means no such override — ordinary
-  /// availableDaysOfWeek/opening-hours rules apply as normal.
-  availableDates BookingTypeAvailableDate[]
+  /// Per-date exceptions to availableDaysOfWeek, "date override" in the
+  /// admin UI. Each row picks one date, an optional startTime/endTime
+  /// window, and whether it forces that date/window OPEN (allow=true,
+  /// overriding availableDaysOfWeek, e.g. a quiz night run on three
+  /// one-off evenings, or opening a normally-closed Wednesday 18:00-20:00
+  /// for a private function) or CLOSED (allow=false, e.g. blocking this
+  /// type on a bank holiday, or carving 2 hours out of an otherwise open
+  /// day for a deep clean). No startTime/endTime = the whole date. See
+  /// resolveBookingTypeDateWindows in generate-slots.ts for exact
+  /// semantics (multiple rows on the same date compose: allow rows add
+  /// windows, close rows remove them, applied in no particular order since
+  /// union/subtract are both commutative here). Empty (the default) means
+  /// no override, ordinary availableDaysOfWeek/opening-hours rules apply.
+  dateOverrides BookingTypeDateOverride[]
 
   /// Hex colour (e.g. "#7c3aed") shown as a banner/strip on this booking
   /// type's blocks in the staff table diary, so "Bottomless Brunch" and
-  /// "Standard Dining" are visually distinguishable at a glance. Nullable —
+  /// "Standard Dining" are visually distinguishable at a glance. Nullable,
   /// admin-set, not required; the diary falls back to a deterministic
   /// colour picked from a fixed palette (hashed on id) when this is unset,
   /// see colourForBookingType() in bookings-view's diary-grid.tsx.
@@ -351,22 +358,22 @@ model BookingType {
 // Tables
 // ---------------------------------------------------------------------------
 
-/// A named grouping of tables sharing a location — "Downstairs", "Upstairs",
+/// A named grouping of tables sharing a location, "Downstairs", "Upstairs",
 /// "Terrace". `priority` controls fill order for auto-assignment: lower
 /// fills first, so the algorithm exhausts one area's capacity before
-/// spilling a booking into the next — see assignTables in generate-slots.ts.
+/// spilling a booking into the next, see assignTables in generate-slots.ts.
 model Area {
   id       String @id @default(cuid())
   venueId  String
   venue    Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
   name     String
   /// Lower number = filled first. Admin-orderable list, not necessarily
-  /// contiguous or unique — ties break on Table.sortOrder.
+  /// contiguous or unique, ties break on Table.sortOrder.
   priority Int    @default(0)
 
   tables Table[]
 
-  /// Per-booking-type overrides of this area's fill priority — see
+  /// Per-booking-type overrides of this area's fill priority, see
   /// BookingType.areaPriorities' doc comment. A given Area can be ranked
   /// differently by different booking types (Food Reservations might fill
   /// the Patio last, Area Hire might prefer it first).
@@ -379,7 +386,7 @@ model Area {
 }
 
 /// Join row giving one (BookingType, Area) pair a fill priority specific to
-/// that booking type — see BookingType.areaPriorities' doc comment for the
+/// that booking type, see BookingType.areaPriorities' doc comment for the
 /// full semantics (only takes effect once a booking type has at least one
 /// of these; otherwise the venue-wide Area.priority applies as before).
 model BookingTypeArea {
@@ -396,15 +403,23 @@ model BookingTypeArea {
   @@unique([bookingTypeId, areaId])
 }
 
-/// One manually-picked bookable date for a "specials" booking type — see
-/// BookingType.availableDates' doc comment.
-model BookingTypeAvailableDate {
+/// One date-specific open/close override for a booking type, see
+/// BookingType.dateOverrides' doc comment for the full semantics.
+model BookingTypeDateOverride {
   id            String      @id @default(cuid())
   bookingTypeId String
   bookingType   BookingType @relation(fields: [bookingTypeId], references: [id], onDelete: Cascade)
   date          DateTime    @db.Date
 
-  @@unique([bookingTypeId, date])
+  /// Both set together or both null, a null pair means "the whole date".
+  startTime String?
+  endTime   String?
+
+  /// true = force bookable (even if availableDaysOfWeek says no). false =
+  /// force closed (even if availableDaysOfWeek says yes).
+  allow Boolean
+
+  @@index([bookingTypeId, date])
 }
 
 model Table {
@@ -416,25 +431,25 @@ model Table {
   maxCovers Int
   active    Boolean @default(true)
 
-  /// Nullable — a table not yet assigned to an area is still fully
+  /// Nullable, a table not yet assigned to an area is still fully
   /// bookable, just treated as the lowest-priority group by assignTables.
   areaId String?
   area   Area?   @relation(fields: [areaId], references: [id])
 
   /// Display order in the staff diary's table-timeline view (bookings-view's
-  /// /staff/diary) — lets "T1, T2, ... T13, Booth 1, Booth 2" stay in that
+  /// /staff/diary), lets "T1, T2, ... T13, Booth 1, Booth 2" stay in that
   /// order rather than sorting "T10" before "T2" as strings. Also the
   /// tie-breaker for auto-assignment ordering within an area.
   sortOrder Int @default(0)
 
-  // Deliberately no x/y layout coordinates yet — Phase 1 assigns bookings to
+  // Deliberately no x/y layout coordinates yet, Phase 1 assigns bookings to
   // tables from a list, the visual drag-drop floor plan is Phase 3. Adding
   // layout fields later is a non-breaking migration.
 
   bookingTables          BookingTable[]
   allowedForBookingTypes BookingType[]  @relation("BookingTypeAllowedTables")
 
-  /// Symmetric adjacency — physically neighbouring tables that can be
+  /// Symmetric adjacency, physically neighbouring tables that can be
   /// combined onto one booking together, and that the auto-assignment
   /// spacing rule tries to avoid double-booking side by side. Split into two
   /// relations because Prisma models a self-relation as directed; TableLink
@@ -446,7 +461,7 @@ model Table {
   @@unique([venueId, label])
 }
 
-/// One physical adjacency between two tables at the same venue — admin-set,
+/// One physical adjacency between two tables at the same venue, admin-set,
 /// not inferred from sortOrder, because display order and floor layout
 /// don't always match (Booth 3 might sit next to T1, not T2). Used two ways:
 /// combining tables to seat a party bigger than any single table, and
@@ -490,22 +505,22 @@ model Booking {
 
   date      DateTime @db.Date
   startTime String // "HH:mm", venue-local
-  endTime   String // "HH:mm", venue-local — derived from chosen duration
+  endTime   String // "HH:mm", venue-local, derived from chosen duration
 
   partySize Int
   status    BookingStatus @default(ENQUIRY)
   source    BookingSource @default(WIDGET)
 
   /// Customer-facing confirmation number, e.g. "BB-030901" (Black Bear
-  /// Lodge, 3rd Sept, the venue's 1st-ever booking) — see
+  /// Lodge, 3rd Sept, the venue's 1st-ever booking), see
   /// formatBookingRef() in lib/bookings/booking-reference.ts. Null when the
   /// venue has no bookingCode assigned yet (never blocks booking creation)
-  /// or for a booking made before this feature existed — never backfilled,
+  /// or for a booking made before this feature existed, never backfilled,
   /// so its absence on an old row isn't a bug.
   bookingRef String? @unique
 
   customerName  String
-  /// Nullable — the customer widget still always requires it (validated at
+  /// Nullable, the customer widget still always requires it (validated at
   /// the API layer, not the DB), but a same-day manual "Add booking" in
   /// bookings-view needs neither email nor phone (see that flow's actions.ts
   /// doc comment), so at least one of the two, not both, is what the DB
@@ -516,45 +531,45 @@ model Booking {
   customerPhone String?
   notes         String?
 
-  /// Optional — added to the customer booking form specifically to power
+  /// Optional, added to the customer booking form specifically to power
   /// the admin Customers page's "birthday" filter (a "who's got a birthday
   /// this month" marketing list). Nothing backfills this for bookings made
   /// before the field existed; its absence on an old row isn't a bug. Date
-  /// only (no year requirement in the UI, but stored as a full date — the
+  /// only (no year requirement in the UI, but stored as a full date, the
   /// birthday filter reads month+day off it and ignores the year).
   customerDateOfBirth DateTime? @db.Date
 
-  /// Customer opted in to marketing communications at booking time — shown
+  /// Customer opted in to marketing communications at booking time, shown
   /// as a checkbox on the customer booking form, exported/filtered on in
   /// bookings-view's admin customer list. Never inferred, only ever what the
   /// customer actually ticked.
   marketingOptIn Boolean @default(false)
 
-  /// Free-text name of whoever took this booking over the phone/in person —
+  /// Free-text name of whoever took this booking over the phone/in person,
   /// set only by the manual "Add booking"/"Add enquiry" flows in
   /// bookings-view (source PHONE), never by the customer widget (WIDGET) or
   /// left blank for those. Free text rather than a StaffUser relation
-  /// because every venue shares one login (see StaffUser doc comment) — an
+  /// because every venue shares one login (see StaffUser doc comment), an
   /// individual name typed here is the only record of who actually took it.
   takenByStaffName String?
 
   /// A same-day walk-in, created purely to occupy a table and block it from
-  /// auto-assignment/manual conflict-checking — not a real customer
+  /// auto-assignment/manual conflict-checking, not a real customer
   /// relationship. Always CONFIRMED, source PHONE, customerName "Walk in",
   /// no email/phone. Deliberately excluded from the admin Customers page
-  /// and marketing export (see get-customers.ts/marketing-export route) —
+  /// and marketing export (see get-customers.ts/marketing-export route),
   /// "Walk in" repeated dozens of times isn't a customer list, and none of
   /// these ever opted into anything.
   isWalkIn Boolean @default(false)
 
   /// Arrival/departure, set from the booking details page once a party is
   /// actually in the venue. checkedOutAt is what actually frees the
-  /// table for new bookings ahead of this booking's formal endTime — a
+  /// table for new bookings ahead of this booking's formal endTime, a
   /// booking with checkedOutAt set is treated as vacated and excluded from
   /// every table-conflict/occupancy check (both the customer-facing
   /// availability engine and bookings-view's findTableConflicts), full
   /// stop, regardless of how much of its booked window remains. checkedInAt
-  /// on its own doesn't change any conflict logic — arriving on time isn't
+  /// on its own doesn't change any conflict logic, arriving on time isn't
   /// "early", it's just confirmation the booking happened.
   checkedInAt  DateTime?
   checkedOutAt DateTime?
@@ -717,7 +732,7 @@ model Payment {
 // This table is read/written by the separate `bookings-view` app (staff
 // dashboard + admin, kept off this app's domain on purpose so a customer
 // booking widget embedded on venue websites never shares an origin with a
-// staff login). This schema is THE canonical one for the shared database —
+// staff login). This schema is THE canonical one for the shared database,
 // only this repo's pre-deploy command runs `prisma migrate deploy`.
 // bookings-view keeps its own copy of this file (for its own generated
 // Prisma client) but must never run its own migration against this DB.
@@ -733,11 +748,11 @@ enum StaffRole {
 
 model StaffUser {
   id      String    @id @default(cuid())
-  /// Null for OWNER/MANAGER — those roles are venue-independent and see/
+  /// Null for OWNER/MANAGER, those roles are venue-independent and see/
   /// manage every venue from one login, not scoped to any single one. A
   /// STAFF login is always tied to exactly one venue (its diary is the only
   /// thing a STAFF session can see), so venueId is required in practice for
-  /// that role even though the column itself is nullable — enforced in
+  /// that role even though the column itself is nullable, enforced in
   /// application code (bookings-view's staff-create action), not a DB
   /// constraint, since this table has no writers outside that one app.
   venueId String?
@@ -747,7 +762,7 @@ model StaffUser {
   role    StaffRole @default(STAFF)
 
   /// bcrypt hash, never the plaintext password. Login is email+password,
-  /// handled entirely in the bookings-view app — no OAuth/SSO in scope yet.
+  /// handled entirely in the bookings-view app, no OAuth/SSO in scope yet.
   passwordHash String
 
   /// Lets a login be disabled (someone leaves, a password needs rotating)
@@ -765,9 +780,9 @@ enum MessageDirection {
   INBOUND
 }
 
-/// A record of one email to/from a customer about a specific booking —
+/// A record of one email to/from a customer about a specific booking,
 /// the history shown on the booking details page in bookings-view. Sending
-/// isn't wired up yet (needs an email provider decision — see that app's
+/// isn't wired up yet (needs an email provider decision, see that app's
 /// README), so nothing writes OUTBOUND rows until that's connected; the
 /// model exists now so the booking details page has somewhere real to read
 /// from rather than a placeholder.
@@ -785,7 +800,7 @@ model Message {
   staffUser   StaffUser?       @relation(fields: [staffUserId], references: [id])
 
   /// Drives the Messages tab (bookings-view's /staff/[venueSlug]/messages,
-  /// "bookings with unread messages"). Only meaningful for INBOUND — an
+  /// "bookings with unread messages"). Only meaningful for INBOUND, an
   /// OUTBOUND row defaults to true (whoever sent it has obviously "read"
   /// it) so it never shows up as needing attention; the inbound-poll job
   /// explicitly sets false when it creates a row from a customer reply, and

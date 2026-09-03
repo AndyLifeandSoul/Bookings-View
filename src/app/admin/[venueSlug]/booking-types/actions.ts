@@ -37,7 +37,7 @@ interface ParsedFields {
 
 type ParseResult = { ok: true; fields: ParsedFields } | { ok: false; error: string };
 
-/** venueId comes from a hidden form field (set from the page's route param) — admin sessions are venue-independent, see requireAdminVenue(). */
+/** venueId comes from a hidden form field (set from the page's route param), admin sessions are venue-independent, see requireAdminVenue(). */
 async function resolveVenue(formData: FormData): Promise<{ id: string; slug: string } | { error: string }> {
   const venueId = String(formData.get("venueId") ?? "").trim();
   if (!venueId) return { error: "Missing venue." };
@@ -46,7 +46,7 @@ async function resolveVenue(formData: FormData): Promise<{ id: string; slug: str
   return venue;
 }
 
-/** Shared by create and update. Returns a discriminated union rather than throwing — see ActionForm's doc comment for why. */
+/** Shared by create and update. Returns a discriminated union rather than throwing, see ActionForm's doc comment for why. */
 function parseFields(formData: FormData): ParseResult {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Name is required." };
@@ -74,7 +74,7 @@ function parseFields(formData: FormData): ParseResult {
     minPartySize < 1 ||
     maxPartySize < minPartySize
   ) {
-    return { ok: false, error: "Party size range is invalid — max must be at least min, and min at least 1." };
+    return { ok: false, error: "Party size range is invalid: max must be at least min, and min at least 1." };
   }
 
   const minDurationMinutes = Number(formData.get("minDurationMinutes"));
@@ -85,7 +85,7 @@ function parseFields(formData: FormData): ParseResult {
     minDurationMinutes < 15 ||
     maxDurationMinutes < minDurationMinutes
   ) {
-    return { ok: false, error: "Duration range is invalid — max must be at least min, and min at least 15 minutes." };
+    return { ok: false, error: "Duration range is invalid: max must be at least min, and min at least 15 minutes." };
   }
 
   const durationStepMinutes = Number(formData.get("durationStepMinutes") ?? 30);
@@ -124,7 +124,7 @@ function parseFields(formData: FormData): ParseResult {
     if (parsed > maxPartySize) {
       return {
         ok: false,
-        error: "Enquiry threshold can't be above the type's max party size — nothing would ever exceed it.",
+        error: "Enquiry threshold can't be above the type's max party size. Nothing would ever exceed it.",
       };
     }
     enquiryThresholdPartySize = parsed;
@@ -194,7 +194,7 @@ function parseFields(formData: FormData): ParseResult {
 
 /**
  * Reads the area_<id>_selected/area_<id>_priority pairs booking-type-fields
- * renders per venue area (see that file) and validates each priority — one
+ * renders per venue area (see that file) and validates each priority, one
  * lookup per area rather than parallel array fields, so selection and
  * priority can never get out of sync by index.
  */
@@ -213,15 +213,34 @@ async function parseAreaPriorities(
   return { ok: true, rows };
 }
 
-/** Parses and validates the "Only on specific dates" list — see AvailableDatesField. */
-function parseAvailableDates(formData: FormData): { ok: true; dates: Date[] } | { ok: false; error: string } {
-  const raw = formData.getAll("availableDates").map(String);
-  const dates: Date[] = [];
-  for (const dateStr of raw) {
+/**
+ * Parses and validates the "Date override" rows, see DateOverrideField.
+ * The four field names are parallel arrays (one entry per row, in the same
+ * order the rows were rendered), not nested per-row field names, since
+ * every input in a row always submits exactly one value (a <select> for
+ * the allow/close mode, never a checkbox), so a row can never silently
+ * drop out of index alignment with the others.
+ */
+function parseDateOverrides(
+  formData: FormData,
+): { ok: true; rows: { date: Date; startTime: string | null; endTime: string | null; allow: boolean }[] } | { ok: false; error: string } {
+  const dates = formData.getAll("dateOverrideDate").map(String);
+  const startTimes = formData.getAll("dateOverrideStartTime").map(String);
+  const endTimes = formData.getAll("dateOverrideEndTime").map(String);
+  const modes = formData.getAll("dateOverrideMode").map(String);
+
+  const rows: { date: Date; startTime: string | null; endTime: string | null; allow: boolean }[] = [];
+  for (let i = 0; i < dates.length; i++) {
+    const dateStr = dates[i];
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return { ok: false, error: `"${dateStr}" isn't a valid date.` };
-    dates.push(new Date(`${dateStr}T00:00:00.000Z`));
+    const startTime = startTimes[i]?.trim() || null;
+    const endTime = endTimes[i]?.trim() || null;
+    if ((startTime == null) !== (endTime == null)) {
+      return { ok: false, error: `Date override for ${dateStr}: set both a start and end time, or leave both blank.` };
+    }
+    rows.push({ date: new Date(`${dateStr}T00:00:00.000Z`), startTime, endTime, allow: modes[i] === "allow" });
   }
-  return { ok: true, dates };
+  return { ok: true, rows };
 }
 
 export async function createBookingType(formData: FormData): Promise<ActionResult> {
@@ -233,8 +252,8 @@ export async function createBookingType(formData: FormData): Promise<ActionResul
   const { fields } = parsed;
   const areaPriorities = await parseAreaPriorities(formData, venue.id);
   if (!areaPriorities.ok) return { error: areaPriorities.error };
-  const availableDates = parseAvailableDates(formData);
-  if (!availableDates.ok) return { error: availableDates.error };
+  const dateOverrides = parseDateOverrides(formData);
+  if (!dateOverrides.ok) return { error: dateOverrides.error };
 
   const existing = await prisma.bookingType.findUnique({
     where: { venueId_slug: { venueId: venue.id, slug: fields.slug } },
@@ -248,7 +267,7 @@ export async function createBookingType(formData: FormData): Promise<ActionResul
       venueId: venue.id,
       ...fields,
       areaPriorities: { createMany: { data: areaPriorities.rows } },
-      availableDates: { createMany: { data: availableDates.dates.map((date) => ({ date })) } },
+      dateOverrides: { createMany: { data: dateOverrides.rows } },
     },
   });
   revalidatePath(`/admin/${venue.slug}/booking-types`);
@@ -265,8 +284,8 @@ export async function updateBookingType(formData: FormData): Promise<ActionResul
   const { fields } = parsed;
   const areaPriorities = await parseAreaPriorities(formData, venue.id);
   if (!areaPriorities.ok) return { error: areaPriorities.error };
-  const availableDates = parseAvailableDates(formData);
-  if (!availableDates.ok) return { error: availableDates.error };
+  const dateOverrides = parseDateOverrides(formData);
+  if (!dateOverrides.ok) return { error: dateOverrides.error };
 
   const existing = await prisma.bookingType.findUnique({
     where: { venueId_slug: { venueId: venue.id, slug: fields.slug } },
@@ -279,20 +298,20 @@ export async function updateBookingType(formData: FormData): Promise<ActionResul
   if (!owned) return { error: "Booking type not found for this venue." };
 
   // Whole-row replace for both join tables, in the same transaction as the
-  // scalar update — simpler and safer than diffing old vs. new rows, and
-  // these tables are small (a handful of areas/dates per booking type at
-  // most).
+  // scalar update, simpler and safer than diffing old vs. new rows, and
+  // these tables are small (a handful of areas/overrides per booking type
+  // at most).
   await prisma.$transaction([
     prisma.bookingType.updateMany({ where: { id, venueId: venue.id }, data: fields }),
     prisma.bookingTypeArea.deleteMany({ where: { bookingTypeId: id } }),
     ...(areaPriorities.rows.length > 0
       ? [prisma.bookingTypeArea.createMany({ data: areaPriorities.rows.map((r) => ({ ...r, bookingTypeId: id })) })]
       : []),
-    prisma.bookingTypeAvailableDate.deleteMany({ where: { bookingTypeId: id } }),
-    ...(availableDates.dates.length > 0
+    prisma.bookingTypeDateOverride.deleteMany({ where: { bookingTypeId: id } }),
+    ...(dateOverrides.rows.length > 0
       ? [
-          prisma.bookingTypeAvailableDate.createMany({
-            data: availableDates.dates.map((date) => ({ date, bookingTypeId: id })),
+          prisma.bookingTypeDateOverride.createMany({
+            data: dateOverrides.rows.map((r) => ({ ...r, bookingTypeId: id })),
           }),
         ]
       : []),
@@ -316,13 +335,13 @@ export async function deleteBookingType(formData: FormData): Promise<ActionResul
 
   const bookingCount = await prisma.booking.count({ where: { bookingTypeId: id } });
   if (bookingCount > 0) {
-    // Real bookings reference this row — hard-deleting would either fail on
+    // Real bookings reference this row, hard-deleting would either fail on
     // the FK or, worse, cascade and destroy booking history. Deactivating
     // is the only safe path once a type has ever been used.
     await prisma.bookingType.updateMany({ where: { id, venueId: venue.id }, data: { active: false } });
     revalidatePath(`/admin/${venue.slug}/booking-types`);
     return {
-      error: `"${bookingType.name}" has ${bookingCount} booking(s) against it, so it can't be deleted — deactivated instead.`,
+      error: `"${bookingType.name}" has ${bookingCount} booking(s) against it, so it can't be deleted. It's been deactivated instead.`,
     };
   }
 
