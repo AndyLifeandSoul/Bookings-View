@@ -5,10 +5,11 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/client";
 import { requireAdminSession } from "@/lib/admin/require-admin-session";
 import type { ActionResult } from "@/components/action-form";
-import type { DepositType } from "@/generated/prisma";
+import type { DepositType, TableFillMode } from "@/generated/prisma";
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const DEPOSIT_TYPES: DepositType[] = ["NONE", "FIXED", "PER_HEAD"];
+const TABLE_FILL_MODES: TableFillMode[] = ["PER_BOOKING", "WHOLE_AREA", "WHOLE_VENUE"];
 
 interface ParsedFields {
   name: string;
@@ -31,6 +32,7 @@ interface ParsedFields {
   earliestBookingTime: string | null;
   latestBookingTime: string | null;
   availableDaysOfWeek: number[];
+  tableFillMode: TableFillMode;
 }
 
 type ParseResult = { ok: true; fields: ParsedFields } | { ok: false; error: string };
@@ -156,6 +158,12 @@ function parseFields(formData: FormData): ParseResult {
     .map((v) => Number(v))
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
 
+  const tableFillModeRaw = String(formData.get("tableFillMode") ?? "PER_BOOKING");
+  if (!TABLE_FILL_MODES.includes(tableFillModeRaw as TableFillMode)) {
+    return { ok: false, error: `Invalid table fill mode: "${tableFillModeRaw}"` };
+  }
+  const tableFillMode = tableFillModeRaw as TableFillMode;
+
   return {
     ok: true,
     fields: {
@@ -179,6 +187,7 @@ function parseFields(formData: FormData): ParseResult {
       earliestBookingTime,
       latestBookingTime,
       availableDaysOfWeek,
+      tableFillMode,
     },
   };
 }

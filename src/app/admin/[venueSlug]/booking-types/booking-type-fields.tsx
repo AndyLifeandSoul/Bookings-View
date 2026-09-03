@@ -284,6 +284,25 @@ export function BookingTypeFields({
       </fieldset>
 
       <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-zinc-700">Table fill mode</span>
+        <select
+          name="tableFillMode"
+          defaultValue={defaults?.tableFillMode ?? "PER_BOOKING"}
+          className="w-64 rounded-md border border-zinc-300 px-3 py-2"
+        >
+          <option value="PER_BOOKING">Per booking — just enough tables to fit the party</option>
+          <option value="WHOLE_AREA">Whole area — staff pick one area, every table in it is reserved</option>
+          <option value="WHOLE_VENUE">Whole venue — every table is reserved</option>
+        </select>
+        <span className="text-xs text-zinc-500">
+          For Area Hire / Full Venue Hire-style types where a booking blocks a whole area or the whole venue
+          regardless of party size, not just enough tables to fit. Adds a one-click &quot;fill this area&quot;/&quot;select
+          every table&quot; helper to the Tables section on this type&apos;s bookings, instead of ticking tables one by
+          one. Leave as &quot;Per booking&quot; for everything else.
+        </span>
+      </label>
+
+      <label className="flex flex-col gap-1">
         <span className="text-sm font-medium text-zinc-700">Enquiry above this many guests (optional)</span>
         <input
           type="number"

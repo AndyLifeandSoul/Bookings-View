@@ -201,6 +201,26 @@ enum DepositType {
   PER_HEAD
 }
 
+/// How a booking of this type gets its table(s), once staff assign them
+/// (see BookingType.tableFillMode). Only matters at staff-confirmation
+/// time in bookings-view — the customer-facing engine (assignTables in
+/// generate-slots.ts) is never reached for a type that always enquires
+/// (see enquiryThresholdPartySize), which is the case for every type that
+/// uses WHOLE_AREA/WHOLE_VENUE today.
+enum TableFillMode {
+  /// The ordinary case — staff (or auto-assignment) pick just enough
+  /// tables to fit the party, per areaPriorities/Area.priority order.
+  PER_BOOKING
+  /// Staff pick one area for this booking and every table in it gets
+  /// reserved, regardless of party size — e.g. Andy's Area Hire ("can use
+  /// any area and automatically reserves every table in that area").
+  WHOLE_AREA
+  /// Every active table in the venue gets reserved, regardless of party
+  /// size — e.g. Andy's Full Venue Hire ("automatically uses every table
+  /// in the venue regardless of booking size").
+  WHOLE_VENUE
+}
+
 /// e.g. "Standard Dining", "Bottomless Brunch", "Private Hire". Drives the
 /// booking flow: customers pick a BookingType before date/guests/time, and
 /// the type's own duration bounds constrain what times/durations can be
@@ -258,6 +278,10 @@ model BookingType {
   /// opening hours (the pre-existing behaviour).
   earliestBookingTime String?
   latestBookingTime   String?
+
+  /// See TableFillMode's doc comment. Default PER_BOOKING is the
+  /// pre-existing behaviour for every type that isn't an area/venue hire.
+  tableFillMode TableFillMode @default(PER_BOOKING)
 
   depositType   DepositType @default(NONE)
   /// Pence. Meaning depends on depositType: a flat amount for FIXED, an

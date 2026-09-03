@@ -5,6 +5,7 @@ import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { updateBookingDetails, reassignTables, sendReply, checkInBooking, checkOutBooking, undoCheckOut } from "./actions";
+import { TableSelectionFields } from "./table-selection-fields";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +19,11 @@ export default async function BookingDetailsPage({
   const { venueSlug, id } = await params;
   const { venue } = await requireStaffVenue(venueSlug);
 
-  const [booking, tables] = await Promise.all([
+  const [booking, tables, areas] = await Promise.all([
     prisma.booking.findFirst({
       where: { id, venueId: venue.id },
       include: {
-        bookingType: { select: { name: true } },
+        bookingType: { select: { name: true, tableFillMode: true } },
         bookingTables: { select: { tableId: true } },
         messages: { orderBy: { createdAt: "asc" }, include: { staffUser: { select: { name: true } } } },
       },
@@ -30,7 +31,9 @@ export default async function BookingDetailsPage({
     prisma.table.findMany({
       where: { venueId: venue.id, active: true },
       orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+      select: { id: true, label: true, areaId: true },
     }),
+    prisma.area.findMany({ where: { venueId: venue.id }, orderBy: { priority: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!booking) notFound();
 
@@ -226,23 +229,12 @@ export default async function BookingDetailsPage({
                 <input type="hidden" name="id" value={booking.id} />
                 <input type="hidden" name="venueId" value={venue.id} />
                 <input type="hidden" name="venueSlug" value={venue.slug} />
-                <div className="flex flex-wrap gap-3">
-                  {tables.map((table) => (
-                    <label
-                      key={table.id}
-                      className="flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-1.5 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        name="tableIds"
-                        value={table.id}
-                        defaultChecked={assignedTableIds.has(table.id)}
-                        className="h-4 w-4 rounded border-zinc-300"
-                      />
-                      {table.label}
-                    </label>
-                  ))}
-                </div>
+                <TableSelectionFields
+                  tables={tables}
+                  areas={areas}
+                  initialSelectedIds={[...assignedTableIds]}
+                  tableFillMode={booking.bookingType.tableFillMode}
+                />
                 <div>
                   <SubmitButton
                     label="Save table assignment"
