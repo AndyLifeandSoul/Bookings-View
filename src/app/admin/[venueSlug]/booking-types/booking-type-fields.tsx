@@ -253,7 +253,8 @@ export function BookingTypeFields({
           ))}
         </div>
         <span className="text-xs text-zinc-500">
-          Leave every day unchecked to allow any day the venue&apos;s open. A date override below can still force a
+          Leave every day unchecked to close this type every day of the week, for a specials-only type that&apos;s
+          only ever bookable on dates added below (e.g. Quiz Night). A date override below can still force a
           specific date open or closed regardless of this.
         </span>
       </fieldset>
