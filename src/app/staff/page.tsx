@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentStaffSession } from "@/lib/auth/session";
 import { getUpcomingBookingsForVenue } from "@/lib/staff/get-bookings-for-venue";
-import { LogoutButton } from "./logout-button";
+import { LogoutButton } from "@/components/logout-button";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,14 @@ export default async function StaffDashboardPage() {
               {session.name} · {roleLabel(session.role)}
             </p>
           </div>
-          <LogoutButton />
+          <div className="flex items-center gap-4">
+            {session.role !== "STAFF" && (
+              <Link href="/admin/hours" className="text-sm text-zinc-500 underline hover:text-zinc-900">
+                Admin
+              </Link>
+            )}
+            <LogoutButton />
+          </div>
         </div>
 
         <div className="mt-8 flex flex-col gap-8">

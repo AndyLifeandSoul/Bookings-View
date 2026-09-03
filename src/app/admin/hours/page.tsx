@@ -1,0 +1,211 @@
+import { prisma } from "@/lib/db/client";
+import { requireAdminSession } from "@/lib/admin/require-admin-session";
+import { ActionForm } from "@/components/action-form";
+import { SubmitButton } from "@/components/submit-button";
+import { addException, saveWeeklyHours } from "./actions";
+import { DeleteExceptionButton } from "./delete-exception-button";
+
+export const dynamic = "force-dynamic";
+
+const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export default async function HoursPage() {
+  const session = await requireAdminSession();
+
+  const [weeklyHours, exceptions] = await Promise.all([
+    prisma.openingHours.findMany({ where: { venueId: session.venueId } }),
+    prisma.openingHoursException.findMany({
+      where: { venueId: session.venueId },
+      orderBy: { date: "asc" },
+    }),
+  ]);
+
+  const byDay = new Map(weeklyHours.map((row) => [row.dayOfWeek, row]));
+  const today = new Date();
+  const todayDateOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const upcomingExceptions = exceptions.filter((e) => e.date >= todayDateOnly);
+  const pastExceptions = exceptions.filter((e) => e.date < todayDateOnly);
+
+  return (
+    <div className="flex flex-col gap-10">
+      <section>
+        <h2 className="text-base font-semibold text-zinc-900">Weekly opening hours</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          A day left checked as closed ignores its times. Closing time earlier than opening time is treated as past
+          midnight — e.g. 12:00–02:00 is a valid Friday.
+        </p>
+        <ActionForm
+          action={saveWeeklyHours}
+          className="mt-4 overflow-hidden rounded-lg border border-zinc-200 bg-white"
+        >
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-zinc-200 text-xs uppercase text-zinc-500">
+              <tr>
+                <th className="px-4 py-2">Day</th>
+                <th className="px-4 py-2">Closed</th>
+                <th className="px-4 py-2">Opens</th>
+                <th className="px-4 py-2">Closes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {DAY_LABELS.map((label, day) => {
+                const existing = byDay.get(day);
+                return (
+                  <tr key={day} className="border-b border-zinc-100 last:border-0">
+                    <td className="px-4 py-2.5 font-medium text-zinc-900">{label}</td>
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="checkbox"
+                        name={`closed-${day}`}
+                        defaultChecked={!existing}
+                        className="h-4 w-4 rounded border-zinc-300"
+                      />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="time"
+                        name={`opensAt-${day}`}
+                        defaultValue={existing?.opensAt ?? "18:00"}
+                        className="rounded-md border border-zinc-300 px-2 py-1"
+                      />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="time"
+                        name={`closesAt-${day}`}
+                        defaultValue={existing?.closesAt ?? "23:00"}
+                        className="rounded-md border border-zinc-300 px-2 py-1"
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="border-t border-zinc-200 bg-zinc-50 px-4 py-3">
+            <SubmitButton
+              label="Save weekly hours"
+              pendingLabel="Saving…"
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+            />
+          </div>
+        </ActionForm>
+      </section>
+
+      <section>
+        <h2 className="text-base font-semibold text-zinc-900">Special dates</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          One-off overrides for a specific date — a closure, a bank holiday, extended NYE hours. Where a date has an
+          entry here, it completely replaces the weekly hours above for that date.
+        </p>
+
+        {upcomingExceptions.length > 0 && (
+          <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200 bg-white">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-zinc-200 text-xs uppercase text-zinc-500">
+                <tr>
+                  <th className="px-4 py-2">Date</th>
+                  <th className="px-4 py-2">Hours</th>
+                  <th className="px-4 py-2">Note</th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {upcomingExceptions.map((exception) => (
+                  <tr key={exception.id} className="border-b border-zinc-100 last:border-0">
+                    <td className="px-4 py-2.5 font-medium text-zinc-900">{formatDate(exception.date)}</td>
+                    <td className="px-4 py-2.5">
+                      {exception.isClosed ? (
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                          Closed
+                        </span>
+                      ) : (
+                        `${exception.opensAt}–${exception.closesAt}`
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-zinc-500">{exception.note ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <DeleteExceptionButton id={exception.id} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <ActionForm
+          action={addException}
+          className="mt-4 flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-4 sm:flex-row sm:items-end sm:flex-wrap"
+        >
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Date</span>
+            <input type="date" name="date" required className="rounded-md border border-zinc-300 px-3 py-2" />
+          </label>
+          <label className="flex items-center gap-2 pb-2">
+            <input type="checkbox" name="isClosed" className="h-4 w-4 rounded border-zinc-300" />
+            <span className="text-sm font-medium text-zinc-700">Closed all day</span>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Opens</span>
+            <input type="time" name="opensAt" className="rounded-md border border-zinc-300 px-2 py-2" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Closes</span>
+            <input type="time" name="closesAt" className="rounded-md border border-zinc-300 px-2 py-2" />
+          </label>
+          <label className="flex flex-1 flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Note (optional)</span>
+            <input
+              type="text"
+              name="note"
+              placeholder="e.g. Private hire"
+              className="rounded-md border border-zinc-300 px-3 py-2"
+            />
+          </label>
+          <SubmitButton
+            label="Add date"
+            pendingLabel="Adding…"
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+          />
+        </ActionForm>
+
+        {pastExceptions.length > 0 && (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm text-zinc-500">
+              {pastExceptions.length} past special date{pastExceptions.length === 1 ? "" : "s"}
+            </summary>
+            <div className="mt-2 overflow-hidden rounded-lg border border-zinc-200 bg-white">
+              <table className="w-full text-left text-sm">
+                <tbody>
+                  {pastExceptions.map((exception) => (
+                    <tr key={exception.id} className="border-b border-zinc-100 last:border-0">
+                      <td className="px-4 py-2.5 font-medium text-zinc-900">{formatDate(exception.date)}</td>
+                      <td className="px-4 py-2.5 text-zinc-500">
+                        {exception.isClosed ? "Closed" : `${exception.opensAt}–${exception.closesAt}`}
+                      </td>
+                      <td className="px-4 py-2.5 text-zinc-500">{exception.note ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <DeleteExceptionButton id={exception.id} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
