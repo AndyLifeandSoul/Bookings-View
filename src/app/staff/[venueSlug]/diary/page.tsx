@@ -82,7 +82,7 @@ export default async function DiaryPage({
               venueId={venue.id}
               venueSlug={venue.slug}
               dateStr={dateStr}
-              tables={diaryTables.map((t) => ({ id: t.id, label: t.label }))}
+              tables={diaryTables}
               bookingTypes={bookingTypes}
             />
             <Link

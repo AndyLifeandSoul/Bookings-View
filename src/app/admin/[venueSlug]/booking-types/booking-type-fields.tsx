@@ -90,8 +90,15 @@ export function BookingTypeFields({
         </div>
       </label>
 
+      {/*
+        min-w-0 on both fieldsets below: fieldset has a hard-coded UA-stylesheet
+        min-width of min-content that Tailwind's `minmax(0,1fr)` grid columns
+        don't override on their own, so at narrower widths each fieldset
+        refused to shrink past its "Min"/"Max" input pair and spilled into
+        the other column — the "Party size and duration minutes overlap" bug.
+      */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
+        <fieldset className="flex min-w-0 flex-col gap-2 rounded-md border border-zinc-200 p-3">
           <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Party size</legend>
           <div className="flex items-center gap-2">
             <label className="flex flex-1 flex-col gap-1">
@@ -119,7 +126,7 @@ export function BookingTypeFields({
           </div>
         </fieldset>
 
-        <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
+        <fieldset className="flex min-w-0 flex-col gap-2 rounded-md border border-zinc-200 p-3">
           <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Duration (minutes)</legend>
           <div className="flex items-center gap-2">
             <label className="flex flex-1 flex-col gap-1">
