@@ -1,0 +1,445 @@
+// MIRRORED FILE, NOT CANONICAL. The `lifeandsoul-bookings` repo owns this
+// schema and its migration history (its pre-deploy command runs
+// `prisma migrate deploy` against the shared production database on every
+// deploy). This copy exists only so `prisma generate` here can produce a
+// Prisma Client for this app's own queries. NEVER run `prisma migrate dev`
+// or `prisma migrate deploy` from this repo — it has no migrations
+// directory of its own on purpose, so doing so would fail loudly rather
+// than silently create a second, conflicting migration history against the
+// same database. When the schema changes, change it in
+// `lifeandsoul-bookings` first, then copy the result here.
+//
+// Life & Soul bookings platform — core schema
+//
+// Key modelling decisions (see README for the full reasoning):
+// - PaymentAccount is separate from Venue and is many-venues-to-one-account,
+//   because DV8 has its own Dojo merchant account while Rumba (x2), Crazy
+//   Moose, and Black Bear Lodge all settle through one shared account.
+//   Revenue-per-venue reporting therefore has to come from Booking/Payment
+//   rows tagged with venueId, never from the payment gateway.
+// - BookingType carries minDurationMinutes/maxDurationMinutes so the
+//   availability engine can never offer a slot that violates them (this is
+//   what stops a bottomless brunch being booked 2pm-10pm).
+// - Booking <-> Table is many-to-many via BookingTable to support combining
+//   multiple tables onto one booking.
+// - Payment is its own ledger table, not just fields on Booking, so a
+//   booking can have a deposit payment now and a balance payment later,
+//   and so refunds/re-captures have somewhere to live.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Payment accounts (Dojo merchant accounts)
+// ---------------------------------------------------------------------------
+
+enum PaymentProviderKind {
+  DOJO
+}
+
+/// One row per real-world Dojo merchant account. `code` is used to look up
+/// the matching DOJO_API_KEY_<code> / DOJO_WEBHOOK_SECRET_<code> env vars —
+/// see lib/payments/get-provider.ts. Nothing secret is ever stored in the DB.
+model PaymentAccount {
+  id        String              @id @default(cuid())
+  name      String // e.g. "DV8", "Life & Soul Group"
+  code      String              @unique // e.g. "DV8", "LIFE_AND_SOUL" — matches env var suffix
+  provider  PaymentProviderKind @default(DOJO)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  venues   Venue[]
+  payments Payment[]
+}
+
+// ---------------------------------------------------------------------------
+// Venues
+// ---------------------------------------------------------------------------
+
+model Venue {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique // used in widget embeds and API routes, e.g. "dv8"
+  timezone  String   @default("Europe/London")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Real-world contact details — also what satisfies Dojo's "contact
+  // details" website checklist item per venue, and what booking
+  // confirmation emails will show as the "from" venue in Phase 2.
+  address String?
+  phone   String?
+  email   String?
+
+  // Nullable on purpose: a venue can exist (and take non-deposit bookings
+  // or enquiries) before its Dojo merchant account assignment is settled.
+  // Arriba is the current example — not part of either named Dojo account
+  // yet, see seed.ts.
+  paymentAccountId String?
+  paymentAccount   PaymentAccount? @relation(fields: [paymentAccountId], references: [id])
+
+  bookingTypes           BookingType[]
+  tables                 Table[]
+  openingHours           OpeningHours[]
+  openingHoursExceptions OpeningHoursException[]
+  bookings               Booking[]
+  enquiries              Enquiry[]
+  menus                  Menu[]
+  staff                  StaffUser[]
+}
+
+// ---------------------------------------------------------------------------
+// Opening hours
+// ---------------------------------------------------------------------------
+
+/// Recurring weekly opening hours. One row per (venue, dayOfWeek); absence of
+/// a row for a given day means closed that day by default.
+model OpeningHours {
+  id      String @id @default(cuid())
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  /// 0 = Sunday ... 6 = Saturday (matches JS Date#getDay())
+  dayOfWeek Int
+
+  /// Stored as "HH:mm" 24hr strings, interpreted in the venue's timezone.
+  opensAt  String
+  closesAt String
+
+  @@unique([venueId, dayOfWeek])
+}
+
+/// One-off overrides for a specific date: extra Christmas/NYE hours, a
+/// private hire closing the venue to the public, a bank holiday, etc.
+/// Where a row exists for a date it entirely replaces OpeningHours for that
+/// date.
+model OpeningHoursException {
+  id       String   @id @default(cuid())
+  venueId  String
+  venue    Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  date     DateTime @db.Date
+  isClosed Boolean  @default(false)
+
+  /// Only used when isClosed is false.
+  opensAt  String?
+  closesAt String?
+  note     String?
+
+  @@unique([venueId, date])
+}
+
+// ---------------------------------------------------------------------------
+// Booking types
+// ---------------------------------------------------------------------------
+
+enum DepositType {
+  NONE
+  FIXED
+  PER_HEAD
+}
+
+/// e.g. "Standard Dining", "Bottomless Brunch", "Private Hire". Drives the
+/// booking flow: customers pick a BookingType before date/guests/time, and
+/// the type's own duration bounds constrain what times/durations can be
+/// offered.
+model BookingType {
+  id          String  @id @default(cuid())
+  venueId     String
+  venue       Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  name        String
+  slug        String
+  description String?
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  minPartySize Int @default(1)
+  maxPartySize Int @default(20)
+
+  /// A booking of this type can never be shorter than minDurationMinutes or
+  /// longer than maxDurationMinutes. This is the rule that stops a
+  /// bottomless brunch being booked 2pm-10pm.
+  minDurationMinutes  Int
+  maxDurationMinutes  Int
+  /// Granularity offered to the customer between min and max, e.g. 30 min
+  /// steps. Must evenly divide (maxDurationMinutes - minDurationMinutes)
+  /// in the common case, but the availability engine doesn't require that.
+  durationStepMinutes Int @default(30)
+
+  /// Granularity of start times offered within opening hours, e.g. every 15
+  /// or 30 minutes.
+  startTimeStepMinutes Int @default(15)
+
+  depositType   DepositType @default(NONE)
+  /// Pence. Meaning depends on depositType: a flat amount for FIXED, an
+  /// amount per guest for PER_HEAD.
+  depositAmount Int?
+
+  requiresPreOrder Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings Booking[]
+  menus    Menu[]
+
+  @@unique([venueId, slug])
+}
+
+// ---------------------------------------------------------------------------
+// Tables
+// ---------------------------------------------------------------------------
+
+model Table {
+  id        String  @id @default(cuid())
+  venueId   String
+  venue     Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  label     String // e.g. "T12", "Booth 3"
+  minCovers Int     @default(1)
+  maxCovers Int
+  active    Boolean @default(true)
+
+  // Deliberately no x/y layout coordinates yet — Phase 1 assigns bookings to
+  // tables from a list, the visual drag-drop floor plan is Phase 3. Adding
+  // layout fields later is a non-breaking migration.
+
+  bookingTables BookingTable[]
+
+  @@unique([venueId, label])
+}
+
+// ---------------------------------------------------------------------------
+// Bookings
+// ---------------------------------------------------------------------------
+
+enum BookingStatus {
+  ENQUIRY
+  PENDING_PAYMENT
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum BookingSource {
+  WIDGET
+  ADMIN
+  PHONE
+}
+
+model Booking {
+  id            String      @id @default(cuid())
+  venueId       String
+  venue         Venue       @relation(fields: [venueId], references: [id])
+  bookingTypeId String
+  bookingType   BookingType @relation(fields: [bookingTypeId], references: [id])
+
+  date      DateTime @db.Date
+  startTime String // "HH:mm", venue-local
+  endTime   String // "HH:mm", venue-local — derived from chosen duration
+
+  partySize Int
+  status    BookingStatus @default(ENQUIRY)
+  source    BookingSource @default(WIDGET)
+
+  customerName  String
+  customerEmail String
+  customerPhone String?
+  notes         String?
+
+  bookingTables BookingTable[]
+  payments      Payment[]
+  preOrder      PreOrder?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([venueId, date])
+}
+
+/// Join table so a booking can span multiple combined tables.
+model BookingTable {
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  tableId   String
+  table     Table   @relation(fields: [tableId], references: [id])
+
+  @@id([bookingId, tableId])
+}
+
+// ---------------------------------------------------------------------------
+// Enquiries (non-bookable requests: large parties, private hire, etc.)
+// ---------------------------------------------------------------------------
+
+enum EnquiryStatus {
+  NEW
+  RESPONDED
+  CONVERTED
+  CLOSED
+}
+
+model Enquiry {
+  id        String        @id @default(cuid())
+  venueId   String
+  venue     Venue         @relation(fields: [venueId], references: [id])
+  name      String
+  email     String
+  phone     String?
+  message   String
+  eventDate DateTime?     @db.Date
+  partySize Int?
+  status    EnquiryStatus @default(NEW)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Menus / pre-orders
+// ---------------------------------------------------------------------------
+
+model Menu {
+  id            String       @id @default(cuid())
+  venueId       String
+  venue         Venue        @relation(fields: [venueId], references: [id])
+  bookingTypeId String?
+  bookingType   BookingType? @relation(fields: [bookingTypeId], references: [id])
+  name          String
+  description   String?
+  active        Boolean      @default(true)
+
+  items     MenuItem[]
+  preOrders PreOrder[]
+}
+
+model MenuItem {
+  id           String   @id @default(cuid())
+  menuId       String
+  menu         Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  priceInPence Int
+  dietaryTags  String[] @default([])
+  active       Boolean  @default(true)
+
+  preOrderItems PreOrderItem[]
+}
+
+model PreOrder {
+  id        String   @id @default(cuid())
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  menuId    String
+  menu      Menu     @relation(fields: [menuId], references: [id])
+  createdAt DateTime @default(now())
+
+  items PreOrderItem[]
+}
+
+model PreOrderItem {
+  id         String   @id @default(cuid())
+  preOrderId String
+  preOrder   PreOrder @relation(fields: [preOrderId], references: [id], onDelete: Cascade)
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity   Int      @default(1)
+  guestLabel String? // e.g. "Guest 2", optional per-guest attribution
+  notes      String?
+}
+
+// ---------------------------------------------------------------------------
+// Payments ledger
+// ---------------------------------------------------------------------------
+
+enum PaymentPurpose {
+  DEPOSIT
+  BALANCE
+  FULL
+}
+
+enum PaymentCaptureMode {
+  AUTO
+  MANUAL
+}
+
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  CAPTURED
+  REFUNDED
+  REVERSED
+  CANCELLED
+  FAILED
+}
+
+/// A record of one Dojo payment intent against one booking. Kept separate
+/// from Booking so a booking can have a deposit now and a balance payment
+/// later, and so refunds have a natural home.
+model Payment {
+  id               String         @id @default(cuid())
+  bookingId        String
+  booking          Booking        @relation(fields: [bookingId], references: [id])
+  paymentAccountId String
+  paymentAccount   PaymentAccount @relation(fields: [paymentAccountId], references: [id])
+
+  purpose     PaymentPurpose
+  captureMode PaymentCaptureMode @default(AUTO)
+  status      PaymentStatus      @default(CREATED)
+
+  amountInPence Int
+  currency      String @default("GBP")
+
+  /// Dojo's payment intent id, so webhooks can be reconciled back to this row.
+  providerPaymentIntentId String? @unique
+
+  createdAt  DateTime  @default(now())
+  capturedAt DateTime?
+  refundedAt DateTime?
+
+  @@index([bookingId])
+}
+
+// ---------------------------------------------------------------------------
+// Staff (per-venue admin users)
+//
+// This table is read/written by the separate `bookings-view` app (staff
+// dashboard + admin, kept off this app's domain on purpose so a customer
+// booking widget embedded on venue websites never shares an origin with a
+// staff login). This schema is THE canonical one for the shared database —
+// only this repo's pre-deploy command runs `prisma migrate deploy`.
+// bookings-view keeps its own copy of this file (for its own generated
+// Prisma client) but must never run its own migration against this DB.
+// Changing this model without mirroring the change there will drift the
+// two apps out of sync with each other.
+// ---------------------------------------------------------------------------
+
+enum StaffRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+model StaffUser {
+  id        String    @id @default(cuid())
+  venueId   String
+  venue     Venue     @relation(fields: [venueId], references: [id])
+  name      String
+  email     String    @unique
+  role      StaffRole @default(STAFF)
+
+  /// bcrypt hash, never the plaintext password. Login is email+password,
+  /// handled entirely in the bookings-view app — no OAuth/SSO in scope yet.
+  passwordHash String
+
+  /// Lets a login be disabled (someone leaves, a password needs rotating)
+  /// without deleting the row and losing whatever ends up referencing it.
+  active Boolean @default(true)
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+}
