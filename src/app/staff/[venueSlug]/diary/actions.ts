@@ -88,13 +88,14 @@ export interface WalkInResult {
  * why it's excluded from Customers/marketing). checkedInAt is set
  * immediately since a walk-in is by definition already at the table.
  *
- * endTime defaults to the venue's closing time for the day (or 2 hours out
- * if the day has no normal hours, e.g. a booking made on an otherwise-closed
- * day) — a walk-in's actual length of stay isn't known up front, so this
- * just needs to be "long enough to block the table until someone checks
- * them out", not an accurate estimate. Checking the booking out (booking
- * details page) frees the table immediately regardless of this endTime —
- * see Booking.checkedOutAt.
+ * endTime defaults to the chosen booking type's minDurationMinutes out from
+ * startTime — a walk-in's actual length of stay isn't known up front, so
+ * this just needs to be "long enough to block the table until someone
+ * checks them out", not an accurate estimate. The exception is a
+ * runsUntilClose type (e.g. Quiz Night), which still runs to the venue's
+ * closing time for the day, same as a normal booking of that type would.
+ * Checking the booking out (booking details page) frees the table
+ * immediately regardless of this endTime — see Booking.checkedOutAt.
  *
  * startTime comes from the *client's* clock rather than the server's — this
  * app stores every time as a plain "HH:mm" venue-local string with no
@@ -132,16 +133,24 @@ export async function createWalkIn(params: {
 
   const [venue, bookingType, tables] = await Promise.all([
     prisma.venue.findUnique({ where: { id: venueId }, select: { id: true, bookingCode: true } }),
-    prisma.bookingType.findFirst({ where: { id: bookingTypeId, venueId }, select: { id: true } }),
+    prisma.bookingType.findFirst({
+      where: { id: bookingTypeId, venueId },
+      select: { id: true, minDurationMinutes: true, runsUntilClose: true },
+    }),
     prisma.table.findMany({ where: { id: { in: tableIds }, venueId }, select: { id: true } }),
   ]);
   if (!venue) return { ok: false, error: "Unknown venue." };
   if (!bookingType) return { ok: false, error: "Pick a booking type." };
   if (tables.length !== tableIds.length) return { ok: false, error: "One or more tables don't belong to this venue." };
 
-  const window = await getDayWindow(venueId, date);
   const startMinutes = toMinutes(startTime);
-  const endMinutes = !window.closed && window.endMinutes > startMinutes ? window.endMinutes : startMinutes + 120;
+  let endMinutes: number;
+  if (bookingType.runsUntilClose) {
+    const window = await getDayWindow(venueId, date);
+    endMinutes = !window.closed && window.endMinutes > startMinutes ? window.endMinutes : startMinutes + 120;
+  } else {
+    endMinutes = startMinutes + bookingType.minDurationMinutes;
+  }
   const endTime = formatMinutes(endMinutes);
 
   const conflicts = await findTableConflicts({ venueId, date, startTime, endTime, tableIds });
