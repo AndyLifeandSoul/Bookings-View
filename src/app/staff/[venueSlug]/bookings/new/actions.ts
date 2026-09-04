@@ -127,23 +127,42 @@ export async function createManualBooking(formData: FormData): Promise<ActionRes
 export interface TableAvailabilityInfo {
   /** Tables already seating a different active booking that overlaps this date/time range - see findTableConflicts. */
   unavailableTableIds: string[];
-  /** Best-fit available table for this booking type/party size/time, if one exists. Staff still pick tables themselves; this only flags a suggestion. */
-  recommendedTableId: string | null;
+  /**
+   * Best-fit available table(s) for this booking type/party size/time, if
+   * any combination exists. A single id when one table fits on its own;
+   * more than one only when the party doesn't fit any single table and a
+   * *physically linked* combination (TableLink) does - see
+   * findTableCombo's doc comment for why "linked" matters, e.g. never
+   * Table 1 + Table 8 with nothing joining them. Staff still pick tables
+   * themselves; this only flags a suggestion.
+   */
+  recommendedTableIds: string[];
+}
+
+interface CandidateTable {
+  id: string;
+  minCovers: number;
+  maxCovers: number;
+  areaId: string | null;
+  sortOrder: number;
 }
 
 /**
  * Backs the "Add booking" form's live table picker: which tables are
  * already booked for this date/time (greyed out, not selectable), and
- * which available table is the best fit for this booking type and party
- * size (flagged "Recommended"). Deliberately a much simpler heuristic than
- * lifeandsoul-bookings' real assignTables engine - bookings-view doesn't
- * run that engine, this only has to pick one sensible table for a human to
- * confirm or override, not replicate the customer-facing allocation logic
- * exactly. Recommends the tightest-fitting table (smallest maxCovers that
- * still fits partySize) within the booking type's allowed areas (if
- * restricted via areaPriorities), in area-priority order; null if nothing
- * fits (e.g. the party's bigger than any single table - staff combine
- * tables manually for that, same as always).
+ * which available table(s) are the best fit for this booking type and
+ * party size (flagged "Recommended"). Deliberately a much simpler
+ * heuristic than lifeandsoul-bookings' real assignTables engine -
+ * bookings-view doesn't run that engine, this only has to pick one
+ * sensible option for a human to confirm or override, not replicate the
+ * customer-facing allocation logic exactly.
+ *
+ * Tries a single table first (tightest fit - smallest maxCovers that
+ * still fits partySize), within the booking type's allowed areas if
+ * restricted via areaPriorities, in area-priority order. Only when no
+ * single table fits does it fall back to a combination - see
+ * findTableCombo - since Andy's spec is "multiple tables if needed", not
+ * as a general alternative to a single table that would've done the job.
  */
 export async function getTableAvailability(params: {
   venueId: string;
@@ -153,7 +172,7 @@ export async function getTableAvailability(params: {
   bookingTypeId: string;
   partySize: number;
 }): Promise<TableAvailabilityInfo> {
-  const empty: TableAvailabilityInfo = { unavailableTableIds: [], recommendedTableId: null };
+  const empty: TableAvailabilityInfo = { unavailableTableIds: [], recommendedTableIds: [] };
   const { venueId, date: dateStr, startTime, endTime, bookingTypeId, partySize } = params;
 
   const access = await requireVenueAccess(venueId);
@@ -174,33 +193,124 @@ export async function getTableAvailability(params: {
     }),
   ]);
   if (tables.length === 0) return empty;
+  const tableIds = tables.map((t) => t.id);
 
-  const conflicts = await findTableConflicts({
-    venueId,
-    date,
-    startTime,
-    endTime,
-    tableIds: tables.map((t) => t.id),
-  });
+  const conflicts = await findTableConflicts({ venueId, date, startTime, endTime, tableIds });
   const unavailableTableIds = [...new Set(conflicts.map((c) => c.tableId))];
   const unavailableSet = new Set(unavailableTableIds);
 
   const areaPriority = new Map((bookingType?.areaPriorities ?? []).map((ap) => [ap.areaId, ap.priority]));
   const restrictToAreas = areaPriority.size > 0;
+  function priorityOf(t: CandidateTable): number {
+    return restrictToAreas ? (areaPriority.get(t.areaId!) ?? 0) : 0;
+  }
 
-  const candidates = tables.filter((t) => {
+  // Every available, area-eligible table - the pool both the single-table
+  // pick and the combo search draw from (a combo candidate doesn't need to
+  // fit partySize on its own, only alongside whatever it's linked to).
+  const available = tables.filter((t) => {
     if (unavailableSet.has(t.id)) return false;
     if (restrictToAreas && (!t.areaId || !areaPriority.has(t.areaId))) return false;
-    return partySize >= t.minCovers && partySize <= t.maxCovers;
+    return true;
   });
 
-  candidates.sort((a, b) => {
-    const aPriority = restrictToAreas ? (areaPriority.get(a.areaId!) ?? 0) : 0;
-    const bPriority = restrictToAreas ? (areaPriority.get(b.areaId!) ?? 0) : 0;
-    if (aPriority !== bPriority) return aPriority - bPriority;
-    if (a.maxCovers !== b.maxCovers) return a.maxCovers - b.maxCovers;
-    return a.sortOrder - b.sortOrder;
-  });
+  const singleFit = available
+    .filter((t) => partySize >= t.minCovers && partySize <= t.maxCovers)
+    .sort((a, b) => {
+      const p = priorityOf(a) - priorityOf(b);
+      if (p !== 0) return p;
+      if (a.maxCovers !== b.maxCovers) return a.maxCovers - b.maxCovers;
+      return a.sortOrder - b.sortOrder;
+    });
 
-  return { unavailableTableIds, recommendedTableId: candidates[0]?.id ?? null };
+  if (singleFit.length > 0) {
+    return { unavailableTableIds, recommendedTableIds: [singleFit[0].id] };
+  }
+
+  const links = await prisma.tableLink.findMany({
+    where: { tableAId: { in: tableIds }, tableBId: { in: tableIds } },
+    select: { tableAId: true, tableBId: true },
+  });
+  const adjacency = new Map<string, Set<string>>();
+  for (const link of links) {
+    if (!adjacency.has(link.tableAId)) adjacency.set(link.tableAId, new Set());
+    if (!adjacency.has(link.tableBId)) adjacency.set(link.tableBId, new Set());
+    adjacency.get(link.tableAId)!.add(link.tableBId);
+    adjacency.get(link.tableBId)!.add(link.tableAId);
+  }
+
+  const combo = findTableCombo(available, adjacency, partySize, priorityOf);
+  return { unavailableTableIds, recommendedTableIds: combo.map((t) => t.id) };
+}
+
+/**
+ * Finds the smallest set of *physically linked* tables (TableLink -
+ * "neighbouring tables that can be combined onto one booking together",
+ * see that model's doc comment) whose combined maxCovers covers
+ * partySize - i.e. only tables actually pushed together in real life, so
+ * this can never suggest Table 1 + Table 8 with nothing joining them.
+ * Requires the whole combination to be connected (every table reachable
+ * from every other through link edges within the combination), not just
+ * each pair independently linked to some third table, since that's what
+ * "push these tables together" means physically.
+ *
+ * Bounded depth-first search from every candidate table, extending a
+ * connected path one linked neighbour at a time; a path stops growing the
+ * moment it covers partySize (adding more tables to an already-sufficient
+ * combo is never a better answer) or hits maxComboSize. Table counts and
+ * per-table link counts are small in practice (a handful of physically
+ * adjacent tables per area), so the exponential worst case never
+ * materialises - visitedCombos bounds it defensively regardless. Prefers
+ * fewer tables, then the least spare capacity over partySize, then lower
+ * area priority.
+ */
+function findTableCombo(
+  candidates: CandidateTable[],
+  adjacency: Map<string, Set<string>>,
+  partySize: number,
+  priorityOf: (t: CandidateTable) => number,
+  maxComboSize = 5,
+): CandidateTable[] {
+  const byId = new Map(candidates.map((t) => [t.id, t]));
+  let best: CandidateTable[] | null = null;
+  let visitedCombos = 0;
+
+  function isBetter(path: CandidateTable[]): boolean {
+    if (!best) return true;
+    if (path.length !== best.length) return path.length < best.length;
+    const over = (p: CandidateTable[]) => p.reduce((s, t) => s + t.maxCovers, 0) - partySize;
+    const pathOver = over(path);
+    const bestOver = over(best);
+    if (pathOver !== bestOver) return pathOver < bestOver;
+    const prio = (p: CandidateTable[]) => p.reduce((s, t) => s + priorityOf(t), 0);
+    return prio(path) < prio(best);
+  }
+
+  function dfs(path: CandidateTable[], visited: Set<string>) {
+    if (++visitedCombos > 5000) return;
+    const totalMax = path.reduce((s, t) => s + t.maxCovers, 0);
+    if (totalMax >= partySize) {
+      if (isBetter(path)) best = [...path];
+      return;
+    }
+    if (path.length >= maxComboSize) return;
+
+    const frontier = new Set<string>();
+    for (const t of path) {
+      for (const n of adjacency.get(t.id) ?? []) {
+        if (!visited.has(n) && byId.has(n)) frontier.add(n);
+      }
+    }
+    for (const n of frontier) {
+      visited.add(n);
+      dfs([...path, byId.get(n)!], visited);
+      visited.delete(n);
+    }
+  }
+
+  for (const start of candidates) {
+    dfs([start], new Set([start.id]));
+  }
+
+  return best ?? [];
 }

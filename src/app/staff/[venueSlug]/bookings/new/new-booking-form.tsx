@@ -34,13 +34,19 @@ export interface TableOption {
  *
  * Table availability: debounced ~250ms after date/time/type/partySize
  * settle, calls getTableAvailability and greys out (disables) any table
- * already booked for that window, tagging the single best-fit available
- * table "Recommended". If a table the user had already picked becomes
- * unavailable because they changed the time/date afterwards, it's
- * dropped from the selection automatically and flagged in a small notice
- * rather than left silently checked-but-disabled (a disabled checkbox
- * doesn't get submitted with the form at all, which would otherwise lose
- * that table from the booking without telling anyone).
+ * already booked for that window, tagging the best-fit available table
+ * "Recommended". For a party too big for any single table, that can be
+ * more than one table - always a physically linked combination (see
+ * getTableAvailability/findTableCombo's doc comments for why - never a
+ * pair of tables with nothing joining them), shown with a summary line
+ * above the grid as well as the per-table tag, since "these two together"
+ * needs to read as one suggestion, not two independent ones. If a table
+ * the user had already picked becomes unavailable because they changed
+ * the time/date afterwards, it's dropped from the selection automatically
+ * and flagged in a small notice rather than left silently
+ * checked-but-disabled (a disabled checkbox doesn't get submitted with
+ * the form at all, which would otherwise lose that table from the
+ * booking without telling anyone).
  */
 export function NewBookingForm({
   venueId,
@@ -67,7 +73,7 @@ export function NewBookingForm({
   const [tableIds, setTableIds] = useState<Set<string>>(new Set());
 
   const [unavailableTableIds, setUnavailableTableIds] = useState<Set<string>>(new Set());
-  const [recommendedTableId, setRecommendedTableId] = useState<string | null>(null);
+  const [recommendedTableIds, setRecommendedTableIds] = useState<string[]>([]);
   const [removedNotice, setRemovedNotice] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +125,7 @@ export function NewBookingForm({
         (result) => {
           if (thisRequest !== requestId.current) return; // a newer request has already landed
           setUnavailableTableIds(new Set(result.unavailableTableIds));
-          setRecommendedTableId(result.recommendedTableId);
+          setRecommendedTableIds(result.recommendedTableIds);
 
           setTableIds((prev) => {
             const stillUnavailable = [...prev].filter((id) => result.unavailableTableIds.includes(id));
@@ -259,10 +265,15 @@ export function NewBookingForm({
         ) : (
           <>
             {removedNotice && <p className="text-xs text-[var(--danger-soft-text)]">{removedNotice}</p>}
+            {recommendedTableIds.length > 1 && (
+              <p className="text-xs font-medium text-[var(--success-soft-text)]">
+                Recommended combination: {recommendedLabel(recommendedTableIds, tables)}
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               {tables.map((table) => {
                 const unavailable = unavailableTableIds.has(table.id);
-                const recommended = recommendedTableId === table.id;
+                const recommended = recommendedTableIds.includes(table.id);
                 const selected = tableIds.has(table.id);
                 return (
                   <label
@@ -304,4 +315,10 @@ export function NewBookingForm({
       </div>
     </form>
   );
+}
+
+function recommendedLabel(ids: string[], tables: TableOption[]): string {
+  const picked = ids.map((id) => tables.find((t) => t.id === id)).filter((t): t is TableOption => Boolean(t));
+  const seats = picked.reduce((s, t) => s + t.maxCovers, 0);
+  return `${picked.map((t) => t.label).join(" + ")} (seats up to ${seats})`;
 }
