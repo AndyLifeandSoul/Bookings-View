@@ -14,7 +14,7 @@ const DAYS_OF_WEEK = [
 ];
 
 type BookingTypeDefaults = BookingType & {
-  dateOverrides?: { date: Date; startTime: string | null; endTime: string | null; allow: boolean }[];
+  dateOverrides?: { dateFrom: Date; dateTo: Date; startTime: string | null; endTime: string | null; allow: boolean; note: string | null }[];
   areaPriorities?: { areaId: string; priority: number }[];
 };
 
@@ -248,10 +248,12 @@ export function BookingTypeFields({
         <DateOverrideField
           defaultRows={(defaults?.dateOverrides ?? []).map(
             (o): DateOverrideRow => ({
-              date: o.date.toISOString().slice(0, 10),
+              dateFrom: o.dateFrom.toISOString().slice(0, 10),
+              dateTo: o.dateTo.toISOString().slice(0, 10),
               startTime: o.startTime ?? "",
               endTime: o.endTime ?? "",
               allow: o.allow,
+              note: o.note ?? "",
             }),
           )}
         />

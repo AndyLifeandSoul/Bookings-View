@@ -120,21 +120,20 @@ model Venue {
   /// exact window check.
   maxArrivalsPer30Min Int?
 
-  bookingTypes           BookingType[]
-  tables                 Table[]
-  areas                  Area[]
-  openingHours           OpeningHours[]
-  openingHoursExceptions OpeningHoursException[]
-  openingHoursBlocks     OpeningHoursBlock[]
-  bookings               Booking[]
-  enquiries              Enquiry[]
-  menus                  Menu[]
-  staff                  StaffUser[]
+  bookingTypes          BookingType[]
+  tables                Table[]
+  areas                 Area[]
+  openingHours          OpeningHours[]
+  openingHoursOverrides OpeningHoursOverride[]
+  bookings              Booking[]
+  enquiries             Enquiry[]
+  menus                 Menu[]
+  staff                 StaffUser[]
   /// See Payment.venueId's doc comment - a Payment keeps its own venue
   /// reference so it still means something once the Booking it paid for
   /// is gone (Booking is on a flat 13-month retention clock, Payment on
   /// its own ~6-year one).
-  payments               Payment[]
+  payments              Payment[]
 }
 
 // ---------------------------------------------------------------------------
@@ -162,40 +161,52 @@ model OpeningHours {
 /// private hire closing the venue to the public, a bank holiday, etc.
 /// Where a row exists for a date it entirely replaces OpeningHours for that
 /// date.
-model OpeningHoursException {
+/// Unified venue-level date override, replacing the old separate
+/// OpeningHoursException ("special dates") and OpeningHoursBlock ("blocked
+/// periods") models (merged 2026-09-04 at Andy's request, matching an
+/// admin system he referenced as a design reference). One row applies to
+/// every date in [dateFrom, dateTo] inclusive - a single day is just a row
+/// where dateFrom equals dateTo. Composition per date, in this order:
+///
+///   1. Any applicable row with canBook=false and startTime/endTime both
+///      null closes the entire day outright, regardless of anything else
+///      that applies to that date. This is the old isClosed=true
+///      exception.
+///   2. Otherwise, any applicable row(s) with canBook=true replace the
+///      day's normal weekly hours with the union of their startTime-
+///      endTime windows (both required on a canBook=true row) - this is
+///      how a special/altered-hours day works, whether that's shorter
+///      hours (Christmas Eve 12:00-16:00) or forcing open a normally-shut
+///      day (a private function on a normally-closed Monday). With no
+///      canBook=true row for the date, the normal weekly hours apply
+///      unchanged. This is the old isClosed=false exception.
+///   3. Any applicable row(s) with canBook=false and startTime/endTime
+///      both set then carve that window out of whatever's left from step
+///      2 (a private event 14:00-18:00 within an otherwise-open day,
+///      leaving the rest of the day's hours intact either side of it).
+///      This is the old OpeningHoursBlock, now expressed as a
+///      canBook=false row with times instead of its own model.
+///
+/// See resolveOpeningWindows in opening-window.ts for the implementation.
+model OpeningHoursOverride {
   id       String   @id @default(cuid())
   venueId  String
   venue    Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  date     DateTime @db.Date
-  isClosed Boolean  @default(false)
+  dateFrom DateTime @db.Date
+  dateTo   DateTime @db.Date
+  canBook  Boolean
 
-  /// Only used when isClosed is false.
-  opensAt  String?
-  closesAt String?
-  note     String?
-
-  @@unique([venueId, date])
-}
-
-/// A carve-out within an otherwise-open day, a private event from 14:00 to
-/// 18:00 on a day the venue is normally open 12:00-22:00, say. Unlike
-/// OpeningHoursException (which entirely replaces the day's hours),
-/// multiple blocks can apply to one date, and whatever the day's hours are
-/// (weekly or exception) still apply outside the blocked range(s). The
-/// availability engine subtracts these ranges from whatever window it
-/// resolved for the date, see subtractBlocks() in opening-window.ts.
-model OpeningHoursBlock {
-  id       String   @id @default(cuid())
-  venueId  String
-  venue    Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  date     DateTime @db.Date
-  startsAt String
-  endsAt   String
-  note     String?
+  /// Both set together or both null. Required when canBook is true (it's
+  /// the special/altered hours window). Optional when canBook is false:
+  /// null means "closed all day" for this range, set means "blocked just
+  /// this window within the day", see the model doc comment above.
+  startTime String?
+  endTime   String?
+  note      String?
 
   createdAt DateTime @default(now())
 
-  @@index([venueId, date])
+  @@index([venueId, dateFrom, dateTo])
 }
 
 // ---------------------------------------------------------------------------
@@ -418,17 +429,23 @@ model BookingTypeDateOverride {
   id            String      @id @default(cuid())
   bookingTypeId String
   bookingType   BookingType @relation(fields: [bookingTypeId], references: [id], onDelete: Cascade)
-  date          DateTime    @db.Date
+  /// A single day is dateFrom == dateTo (added 2026-09-04, replacing the
+  /// old single `date` column, to match the same Start Date/End Date range
+  /// pattern used by the venue-level OpeningHoursOverride above).
+  dateFrom      DateTime    @db.Date
+  dateTo        DateTime    @db.Date
 
-  /// Both set together or both null, a null pair means "the whole date".
+  /// Both set together or both null, a null pair means "the whole date
+  /// range".
   startTime String?
   endTime   String?
+  note      String?
 
   /// true = force bookable (even if availableDaysOfWeek says no). false =
   /// force closed (even if availableDaysOfWeek says yes).
   allow Boolean
 
-  @@index([bookingTypeId, date])
+  @@index([bookingTypeId, dateFrom, dateTo])
 }
 
 model Table {

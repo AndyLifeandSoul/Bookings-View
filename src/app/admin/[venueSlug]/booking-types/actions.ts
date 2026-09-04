@@ -215,30 +215,42 @@ async function parseAreaPriorities(
 
 /**
  * Parses and validates the "Date override" rows, see DateOverrideField.
- * The four field names are parallel arrays (one entry per row, in the same
- * order the rows were rendered), not nested per-row field names, since
- * every input in a row always submits exactly one value (a <select> for
- * the allow/close mode, never a checkbox), so a row can never silently
- * drop out of index alignment with the others.
+ * The field names are parallel arrays (one entry per row, in the same
+ * order the rows were rendered). Every field submits exactly one value per
+ * row, including "Can book" - that one is a checkbox in the UI but rides
+ * on an always-present hidden input under the hood (see DateOverrideField's
+ * doc comment), specifically so it can't silently drop out of index
+ * alignment with the others the way a bare unchecked checkbox would.
  */
-function parseDateOverrides(
-  formData: FormData,
-): { ok: true; rows: { date: Date; startTime: string | null; endTime: string | null; allow: boolean }[] } | { ok: false; error: string } {
-  const dates = formData.getAll("dateOverrideDate").map(String);
+function parseDateOverrides(formData: FormData):
+  | { ok: true; rows: { dateFrom: Date; dateTo: Date; startTime: string | null; endTime: string | null; allow: boolean; note: string | null }[] }
+  | { ok: false; error: string } {
+  const dateFroms = formData.getAll("dateOverrideDateFrom").map(String);
+  const dateTos = formData.getAll("dateOverrideDateTo").map(String);
   const startTimes = formData.getAll("dateOverrideStartTime").map(String);
   const endTimes = formData.getAll("dateOverrideEndTime").map(String);
-  const modes = formData.getAll("dateOverrideMode").map(String);
+  const canBooks = formData.getAll("dateOverrideCanBook").map(String);
+  const notes = formData.getAll("dateOverrideNote").map(String);
 
-  const rows: { date: Date; startTime: string | null; endTime: string | null; allow: boolean }[] = [];
-  for (let i = 0; i < dates.length; i++) {
-    const dateStr = dates[i];
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return { ok: false, error: `"${dateStr}" isn't a valid date.` };
+  const rows: { dateFrom: Date; dateTo: Date; startTime: string | null; endTime: string | null; allow: boolean; note: string | null }[] = [];
+  for (let i = 0; i < dateFroms.length; i++) {
+    const dateFromStr = dateFroms[i];
+    const dateToStr = dateTos[i];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFromStr) || !/^\d{4}-\d{2}-\d{2}$/.test(dateToStr)) {
+      return { ok: false, error: `"${dateFromStr}" - "${dateToStr}" isn't a valid date range.` };
+    }
+    const dateFrom = new Date(`${dateFromStr}T00:00:00.000Z`);
+    const dateTo = new Date(`${dateToStr}T00:00:00.000Z`);
+    if (dateTo < dateFrom) {
+      return { ok: false, error: `Date override ${dateFromStr} - ${dateToStr}: end date must be on or after start date.` };
+    }
     const startTime = startTimes[i]?.trim() || null;
     const endTime = endTimes[i]?.trim() || null;
     if ((startTime == null) !== (endTime == null)) {
-      return { ok: false, error: `Date override for ${dateStr}: set both a start and end time, or leave both blank.` };
+      return { ok: false, error: `Date override ${dateFromStr} - ${dateToStr}: set both a start and end time, or leave both blank.` };
     }
-    rows.push({ date: new Date(`${dateStr}T00:00:00.000Z`), startTime, endTime, allow: modes[i] === "allow" });
+    const note = notes[i]?.trim() || null;
+    rows.push({ dateFrom, dateTo, startTime, endTime, allow: canBooks[i] === "on", note });
   }
   return { ok: true, rows };
 }

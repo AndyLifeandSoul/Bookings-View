@@ -5,37 +5,41 @@ import { SubmitButton } from "@/components/submit-button";
 import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { addException, addOpeningHoursBlock, saveWeeklyHours } from "./actions";
-import { DeleteExceptionButton } from "./delete-exception-button";
-import { DeleteBlockButton } from "./delete-block-button";
+import { addOverride, saveWeeklyHours } from "./actions";
+import { DeleteOverrideButton } from "./delete-override-button";
 
 export const dynamic = "force-dynamic";
 
 const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+type OverrideRow = {
+  id: string;
+  dateFrom: Date;
+  dateTo: Date;
+  canBook: boolean;
+  startTime: string | null;
+  endTime: string | null;
+  note: string | null;
+};
+
 export default async function HoursPage({ params }: { params: Promise<{ venueSlug: string }> }) {
   const { venueSlug } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
 
-  const [weeklyHours, exceptions, blocks] = await Promise.all([
+  const [weeklyHours, overrides] = await Promise.all([
     prisma.openingHours.findMany({ where: { venueId: venue.id } }),
-    prisma.openingHoursException.findMany({
+    prisma.openingHoursOverride.findMany({
       where: { venueId: venue.id },
-      orderBy: { date: "asc" },
-    }),
-    prisma.openingHoursBlock.findMany({
-      where: { venueId: venue.id },
-      orderBy: [{ date: "asc" }, { startsAt: "asc" }],
+      orderBy: [{ dateFrom: "asc" }, { startTime: "asc" }],
     }),
   ]);
 
   const byDay = new Map(weeklyHours.map((row) => [row.dayOfWeek, row]));
   const today = new Date();
   const todayDateOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-  const upcomingExceptions = exceptions.filter((e) => e.date >= todayDateOnly);
-  const pastExceptions = exceptions.filter((e) => e.date < todayDateOnly);
-  const upcomingBlocks = blocks.filter((b) => b.date >= todayDateOnly);
-  const pastBlocks = blocks.filter((b) => b.date < todayDateOnly);
+  // A range still relevant if it hasn't fully finished yet.
+  const upcomingOverrides = overrides.filter((o) => o.dateTo >= todayDateOnly);
+  const pastOverrides = overrides.filter((o) => o.dateTo < todayDateOnly);
 
   return (
     <div className="flex flex-col gap-10">
@@ -96,34 +100,34 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
       </section>
 
       <section>
-        <h2 className="text-base font-semibold tracking-tight text-zinc-900">Special dates</h2>
+        <h2 className="text-base font-semibold tracking-tight text-zinc-900">Special dates &amp; blocked periods</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Override the weekly hours for a date range: special/altered hours, a full closure, or a private-event block
+          within an otherwise open day.
+        </p>
 
-        {upcomingExceptions.length > 0 && (
+        {upcomingOverrides.length > 0 && (
           <Card padded={false} className="mt-4 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
                   <tr>
-                    <th className="px-4 py-2.5">Date</th>
+                    <th className="px-4 py-2.5">Dates</th>
+                    <th className="px-4 py-2.5">Can book</th>
                     <th className="px-4 py-2.5">Hours</th>
                     <th className="px-4 py-2.5">Note</th>
                     <th className="px-4 py-2.5" />
                   </tr>
                 </thead>
                 <tbody>
-                  {upcomingExceptions.map((exception) => (
-                    <tr key={exception.id} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
-                      <td className="px-4 py-3 font-medium text-zinc-900">{formatDate(exception.date)}</td>
-                      <td className="px-4 py-3">
-                        {exception.isClosed ? (
-                          <Badge variant="danger">Closed</Badge>
-                        ) : (
-                          `${exception.opensAt}–${exception.closesAt}`
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-500">{exception.note ?? "-"}</td>
+                  {upcomingOverrides.map((override) => (
+                    <tr key={override.id} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
+                      <td className="px-4 py-3 font-medium text-zinc-900">{formatDateRange(override.dateFrom, override.dateTo)}</td>
+                      <td className="px-4 py-3">{overrideStatus(override)}</td>
+                      <td className="px-4 py-3">{override.startTime && override.endTime ? `${override.startTime}–${override.endTime}` : "-"}</td>
+                      <td className="px-4 py-3 text-zinc-500">{override.note ?? "-"}</td>
                       <td className="px-4 py-3 text-right">
-                        <DeleteExceptionButton id={exception.id} venueId={venue.id} />
+                        <DeleteOverrideButton id={override.id} venueId={venue.id} />
                       </td>
                     </tr>
                   ))}
@@ -134,23 +138,27 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
         )}
 
         <Card className="mt-4">
-          <ActionForm action={addException} className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+          <ActionForm action={addOverride} className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
             <input type="hidden" name="venueId" value={venue.id} />
             <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Date</span>
-              <input type="date" name="date" required className="rounded-md border border-zinc-300 px-3 py-2" />
+              <span className="text-sm font-medium text-zinc-700">Start date</span>
+              <input type="date" name="dateFrom" required className="rounded-md border border-zinc-300 px-3 py-2" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-zinc-700">End date</span>
+              <input type="date" name="dateTo" required className="rounded-md border border-zinc-300 px-3 py-2" />
             </label>
             <label className="flex items-center gap-2 pb-2">
-              <input type="checkbox" name="isClosed" className="h-4 w-4 rounded border-zinc-300" />
-              <span className="text-sm font-medium text-zinc-700">Closed all day</span>
+              <input type="checkbox" name="canBook" className="h-4 w-4 rounded border-zinc-300" />
+              <span className="text-sm font-medium text-zinc-700">Can book</span>
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Opens</span>
-              <input type="time" name="opensAt" className="rounded-md border border-zinc-300 px-2 py-2" />
+              <span className="text-sm font-medium text-zinc-700">Start time</span>
+              <input type="time" name="startTime" className="rounded-md border border-zinc-300 px-2 py-2" />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Closes</span>
-              <input type="time" name="closesAt" className="rounded-md border border-zinc-300 px-2 py-2" />
+              <span className="text-sm font-medium text-zinc-700">End time</span>
+              <input type="time" name="endTime" className="rounded-md border border-zinc-300 px-2 py-2" />
             </label>
             <label className="flex flex-1 flex-col gap-1">
               <span className="text-sm font-medium text-zinc-700">Note (optional)</span>
@@ -161,116 +169,34 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
                 className="rounded-md border border-zinc-300 px-3 py-2"
               />
             </label>
-            <SubmitButton label="Add date" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
+            <SubmitButton label="Add override" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
           </ActionForm>
+          <p className="mt-3 text-xs text-zinc-500">
+            Tick &quot;Can book&quot; for special or altered hours (start/end time required), this replaces the normal
+            weekly hours for these dates. Leave it unticked and both times blank to close the whole range. Leave it
+            unticked and fill in times to block out just that window (e.g. a private event) while the rest of the day
+            stays open as normal.
+          </p>
         </Card>
 
-        {pastExceptions.length > 0 && (
+        {pastOverrides.length > 0 && (
           <details className="mt-4">
             <summary className="cursor-pointer text-sm text-zinc-500 transition-colors hover:text-zinc-700">
-              {pastExceptions.length} past special date{pastExceptions.length === 1 ? "" : "s"}
+              {pastOverrides.length} past override{pastOverrides.length === 1 ? "" : "s"}
             </summary>
             <Card padded={false} className="mt-2 overflow-hidden">
               <table className="w-full text-left text-sm">
                 <tbody>
-                  {pastExceptions.map((exception) => (
-                    <tr key={exception.id} className="border-b border-zinc-50 last:border-0">
-                      <td className="px-4 py-3 font-medium text-zinc-900">{formatDate(exception.date)}</td>
+                  {pastOverrides.map((override) => (
+                    <tr key={override.id} className="border-b border-zinc-50 last:border-0">
+                      <td className="px-4 py-3 font-medium text-zinc-900">{formatDateRange(override.dateFrom, override.dateTo)}</td>
+                      <td className="px-4 py-3 text-zinc-500">{overrideStatus(override)}</td>
                       <td className="px-4 py-3 text-zinc-500">
-                        {exception.isClosed ? "Closed" : `${exception.opensAt}–${exception.closesAt}`}
+                        {override.startTime && override.endTime ? `${override.startTime}–${override.endTime}` : "-"}
                       </td>
-                      <td className="px-4 py-3 text-zinc-500">{exception.note ?? "-"}</td>
+                      <td className="px-4 py-3 text-zinc-500">{override.note ?? "-"}</td>
                       <td className="px-4 py-3 text-right">
-                        <DeleteExceptionButton id={exception.id} venueId={venue.id} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Card>
-          </details>
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-base font-semibold tracking-tight text-zinc-900">Blocked periods</h2>
-
-        {upcomingBlocks.length > 0 && (
-          <Card padded={false} className="mt-4 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
-                  <tr>
-                    <th className="px-4 py-2.5">Date</th>
-                    <th className="px-4 py-2.5">Blocked</th>
-                    <th className="px-4 py-2.5">Note</th>
-                    <th className="px-4 py-2.5" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {upcomingBlocks.map((block) => (
-                    <tr key={block.id} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
-                      <td className="px-4 py-3 font-medium text-zinc-900">{formatDate(block.date)}</td>
-                      <td className="px-4 py-3">
-                        {block.startsAt}–{block.endsAt}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-500">{block.note ?? "-"}</td>
-                      <td className="px-4 py-3 text-right">
-                        <DeleteBlockButton id={block.id} venueId={venue.id} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        )}
-
-        <Card className="mt-4">
-          <ActionForm action={addOpeningHoursBlock} className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-            <input type="hidden" name="venueId" value={venue.id} />
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Date</span>
-              <input type="date" name="date" required className="rounded-md border border-zinc-300 px-3 py-2" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Blocked from</span>
-              <input type="time" name="startsAt" required className="rounded-md border border-zinc-300 px-2 py-2" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Blocked until</span>
-              <input type="time" name="endsAt" required className="rounded-md border border-zinc-300 px-2 py-2" />
-            </label>
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Note (optional)</span>
-              <input
-                type="text"
-                name="note"
-                placeholder="e.g. Private event"
-                className="rounded-md border border-zinc-300 px-3 py-2"
-              />
-            </label>
-            <SubmitButton label="Add blocked period" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
-          </ActionForm>
-        </Card>
-
-        {pastBlocks.length > 0 && (
-          <details className="mt-4">
-            <summary className="cursor-pointer text-sm text-zinc-500 transition-colors hover:text-zinc-700">
-              {pastBlocks.length} past blocked period{pastBlocks.length === 1 ? "" : "s"}
-            </summary>
-            <Card padded={false} className="mt-2 overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <tbody>
-                  {pastBlocks.map((block) => (
-                    <tr key={block.id} className="border-b border-zinc-50 last:border-0">
-                      <td className="px-4 py-3 font-medium text-zinc-900">{formatDate(block.date)}</td>
-                      <td className="px-4 py-3 text-zinc-500">
-                        {block.startsAt}–{block.endsAt}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-500">{block.note ?? "-"}</td>
-                      <td className="px-4 py-3 text-right">
-                        <DeleteBlockButton id={block.id} venueId={venue.id} />
+                        <DeleteOverrideButton id={override.id} venueId={venue.id} />
                       </td>
                     </tr>
                   ))}
@@ -282,6 +208,17 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
       </section>
     </div>
   );
+}
+
+function overrideStatus(override: OverrideRow) {
+  if (override.canBook) return <Badge variant="success">Open</Badge>;
+  if (override.startTime && override.endTime) return <Badge variant="danger">Blocked</Badge>;
+  return <Badge variant="danger">Closed</Badge>;
+}
+
+function formatDateRange(from: Date, to: Date): string {
+  if (from.getTime() === to.getTime()) return formatDate(from);
+  return `${formatDate(from)} – ${formatDate(to)}`;
 }
 
 function formatDate(date: Date): string {

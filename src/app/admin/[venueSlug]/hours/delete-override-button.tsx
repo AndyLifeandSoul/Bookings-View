@@ -1,12 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
-import { deleteException } from "./actions";
+import { deleteOverride } from "./actions";
 import type { ActionResult } from "@/components/action-form";
 
-export function DeleteExceptionButton({ id, venueId }: { id: string; venueId: string }) {
+export function DeleteOverrideButton({ id, venueId }: { id: string; venueId: string }) {
   const [, formAction, pending] = useActionState<ActionResult, FormData>(
-    async (_prevState, formData) => deleteException(formData),
+    async (_prevState, formData) => deleteOverride(formData),
     undefined,
   );
 
