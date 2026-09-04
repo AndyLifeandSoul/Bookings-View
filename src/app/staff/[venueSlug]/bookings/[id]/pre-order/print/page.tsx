@@ -31,6 +31,7 @@ export default async function PreOrderPrintPage({
       partySize: true,
       preOrder: {
         select: {
+          notes: true,
           items: {
             select: {
               quantity: true,
@@ -60,6 +61,13 @@ export default async function PreOrderPrintPage({
         {booking.bookingRef ? `${booking.bookingRef} · ` : ""}
         {formatDate(booking.date)}, {booking.startTime} · party of {booking.partySize} · {venue.name}
       </p>
+
+      {booking.preOrder.notes && (
+        <div className="mt-4 border-4 border-black p-3">
+          <p className="text-sm font-bold tracking-wide text-black uppercase">Customer allergies / requests</p>
+          <p className="mt-1 text-lg font-semibold whitespace-pre-wrap text-black">{booking.preOrder.notes}</p>
+        </div>
+      )}
 
       <div className="mt-6 flex flex-col gap-6">
         {groups.map((group) => (

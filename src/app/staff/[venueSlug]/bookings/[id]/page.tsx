@@ -44,6 +44,7 @@ export default async function BookingDetailsPage({
         messages: { orderBy: { createdAt: "asc" }, include: { staffUser: { select: { name: true } } } },
         preOrder: {
           select: {
+            notes: true,
             items: {
               select: {
                 quantity: true,
@@ -288,6 +289,14 @@ export default async function BookingDetailsPage({
                     Print for kitchen
                   </Link>
                 </div>
+                {booking.preOrder.notes && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+                    <p className="text-xs font-semibold tracking-wide text-amber-900 uppercase">
+                      Allergies / special requests
+                    </p>
+                    <p className="mt-1 text-sm whitespace-pre-wrap text-amber-900">{booking.preOrder.notes}</p>
+                  </div>
+                )}
                 <div className="flex flex-col gap-4">
                   {groupPreOrderItems(booking.preOrder.items).map((group) => (
                     <div key={group.category?.id ?? "uncategorised"}>

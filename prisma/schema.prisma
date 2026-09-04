@@ -733,6 +733,16 @@ model PreOrder {
   menu      Menu     @relation(fields: [menuId], references: [id])
   createdAt DateTime @default(now())
 
+  /// Free-text, order-level (not per-item, see PreOrderItem.notes for
+  /// that) - the customer's own words, prompted on the pre-order form as
+  /// explicitly for allergies and special requests, so it needs to reach
+  /// the kitchen clearly. Shown on both the booking details page and the
+  /// kitchen print sheet, boxed/prominent on the latter rather than
+  /// blended into the itemized list - this is exactly the kind of one-off
+  /// request (Andy's DV8 Chips-adjacent "serve it differently" cases)
+  /// that doesn't need its own structured field, it needs to be seen.
+  notes String?
+
   items PreOrderItem[]
 }
 
