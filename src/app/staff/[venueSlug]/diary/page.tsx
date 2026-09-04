@@ -42,7 +42,11 @@ export default async function DiaryPage({
     }),
     prisma.booking.findMany({
       where: { venueId: venue.id, date, status: { not: "CANCELLED" } },
-      include: { bookingType: { select: { name: true, color: true } }, bookingTables: { select: { tableId: true } } },
+      include: {
+        bookingType: { select: { name: true, color: true } },
+        bookingTables: { select: { tableId: true } },
+        preOrder: { select: { id: true } },
+      },
       orderBy: { startTime: "asc" },
     }),
     prisma.bookingType.findMany({
@@ -71,6 +75,7 @@ export default async function DiaryPage({
     checkedInAt: b.checkedInAt ? b.checkedInAt.toISOString() : null,
     checkedOutAt: b.checkedOutAt ? b.checkedOutAt.toISOString() : null,
     notes: b.notes,
+    hasPreOrder: Boolean(b.preOrder),
   }));
 
   // A day with no weekly hours and no exception is "closed" per getDayWindow,

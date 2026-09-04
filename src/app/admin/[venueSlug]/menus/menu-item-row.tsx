@@ -6,7 +6,17 @@ import type { ActionResult } from "@/components/action-form";
 import type { MenuItem } from "@/generated/prisma";
 import { buttonStyles } from "@/components/ui/button";
 
-export function MenuItemRow({ item, menuId, venueId }: { item: MenuItem; menuId: string; venueId: string }) {
+export function MenuItemRow({
+  item,
+  menuId,
+  venueId,
+  categories,
+}: {
+  item: MenuItem;
+  menuId: string;
+  venueId: string;
+  categories: { id: string; name: string }[];
+}) {
   const [updateState, updateAction, updatePending] = useActionState<ActionResult, FormData>(
     async (_prevState, formData) => updateMenuItem(formData),
     undefined,
@@ -63,6 +73,21 @@ export function MenuItemRow({ item, menuId, venueId }: { item: MenuItem; menuId:
               placeholder="vegetarian, gf"
               className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
             />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-zinc-500">Category</span>
+            <select
+              name="categoryId"
+              defaultValue={item.categoryId ?? ""}
+              className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">Uncategorised</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="flex items-center gap-1.5 pb-1.5">
             <input type="checkbox" name="active" defaultChecked={item.active} className="h-4 w-4 rounded border-zinc-300" />

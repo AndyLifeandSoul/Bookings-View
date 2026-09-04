@@ -86,7 +86,7 @@ export function TopBar({
   const activeHref = (exactHit ?? prefixHit ?? fallbackHit)?.href;
 
   return (
-    <div className="sticky top-0 z-20 border-b border-zinc-800/80 bg-zinc-900/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-900/85">
+    <div className="sticky top-0 z-20 border-b border-zinc-800/80 bg-zinc-900/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-900/85 print:hidden">
       <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3 sm:px-8">
         <Link href="/" className="flex shrink-0 items-center">
           <Image src="/brand/life-and-soul-wordmark.png" alt="Life & Soul" width={945} height={174} className="h-6 w-auto" priority />

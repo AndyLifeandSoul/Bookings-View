@@ -34,6 +34,7 @@ export async function getUpcomingBookingsForVenue(venueId: string) {
       bookingRef: true,
       notes: true,
       bookingType: { select: { name: true } },
+      preOrder: { select: { id: true } },
     },
   });
 }

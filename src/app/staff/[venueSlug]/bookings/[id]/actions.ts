@@ -1,5 +1,6 @@
 "use server";
 
+import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/client";
 import { getCurrentStaffSession } from "@/lib/auth/session";
@@ -7,6 +8,7 @@ import { findTableConflicts } from "@/lib/staff/table-conflicts";
 import { sendMailAs } from "@/lib/email/graph-client";
 import type { ActionResult } from "@/components/action-form";
 import type { BookingStatus } from "@/generated/prisma";
+
 
 const STATUSES: BookingStatus[] = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
 
@@ -248,4 +250,74 @@ export async function undoCheckOut(formData: FormData): Promise<ActionResult> {
   revalidatePath(`/staff/${venueSlug}/diary`);
   revalidatePath(`/staff/${venueSlug}/list`);
   revalidatePath("/admin/bookings");
+}
+
+/**
+ * Staff picking a menu + which of the venue's categories the customer
+ * should see, per booking. Re-issuing (this booking already has an
+ * unsubmitted invite) replaces it outright rather than editing in place -
+ * a fresh token is simplest, and there's no link already sent out yet to
+ * worry about invalidating since delivery is manual (staff copy/paste, see
+ * Andy's decision - no automated email for now).
+ *
+ * categoryIds intentionally isn't required to be non-empty here: a venue
+ * with no MenuCategory rows at all (Rumba's flat pizza-choice menu, see
+ * MenuCategory's doc comment) has nothing to pick, and its items - having
+ * no categoryId - show up on the portal regardless of this list. It's only
+ * DV8-style categorised menus where an empty selection would actually hide
+ * everything, and the UI for those always renders at least one checkbox to
+ * pick from.
+ */
+export async function requestPreOrder(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const booking = await prisma.booking.findFirst({
+    where: { id, venueId },
+    select: { id: true, preOrder: { select: { id: true } } },
+  });
+  if (!booking) return { error: "Booking not found for this venue." };
+  if (booking.preOrder) return { error: "This booking already has a submitted pre-order." };
+
+  const menuId = String(formData.get("menuId") ?? "");
+  if (!menuId) return { error: "Choose a menu." };
+  const menu = await prisma.menu.findFirst({ where: { id: menuId, venueId }, select: { id: true } });
+  if (!menu) return { error: "That menu doesn't belong to this venue." };
+
+  const categoryIds = formData.getAll("categoryIds").map(String).filter(Boolean);
+  if (categoryIds.length > 0) {
+    const validCount = await prisma.menuCategory.count({ where: { id: { in: categoryIds }, venueId } });
+    if (validCount !== categoryIds.length) return { error: "One or more selected categories don't belong to this venue." };
+  }
+
+  const token = crypto.randomBytes(32).toString("base64url");
+
+  await prisma.$transaction([
+    // A booking can only ever have one invite (@unique bookingId) - clear
+    // out an existing unsubmitted one first rather than relying on upsert,
+    // since the token/categoryIds are being regenerated wholesale, not
+    // merged.
+    prisma.preOrderInvite.deleteMany({ where: { bookingId: id } }),
+    prisma.preOrderInvite.create({ data: { bookingId: id, menuId, categoryIds, token } }),
+  ]);
+
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+}
+
+/** Lets staff start over - pick a different menu/categories, or abandon the request entirely. Never touches a submitted invite (the transaction that marks it submitted and the one that would delete it can't race in a way that matters here, but the where-clause guards it regardless). */
+export async function cancelPreOrderInvite(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { id: true } });
+  if (!booking) return { error: "Booking not found for this venue." };
+
+  await prisma.preOrderInvite.deleteMany({ where: { bookingId: id, submittedAt: null } });
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
 }

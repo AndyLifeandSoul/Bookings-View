@@ -8,7 +8,7 @@
 // than silently create a second, conflicting migration history against the
 // same database. When the schema changes, change it in
 // `lifeandsoul-bookings` first, then copy the result here.
-//
+
 // Life & Soul bookings platform, core schema
 //
 // Key modelling decisions (see README for the full reasoning):
@@ -91,6 +91,8 @@ model Venue {
   /// its code is assigned, in which case its bookings just don't get a
   /// reference (never blocks booking creation) until this is set.
   bookingCode String? @unique
+
+  menuCategories MenuCategory[]
 
   /// Running count of bookings ever made at this venue, incremented once per
   /// booking (never reset) to generate the trailing digits of bookingRef,
@@ -266,10 +268,12 @@ model BookingType {
   /// on, independent of whether the venue itself is open that day, e.g. a
   /// venue open Tue-Sat might still only offer "Private Hire" on the days
   /// it's otherwise closed to the public. 0=Sunday..6=Saturday, matching
-  /// OpeningHours.dayOfWeek. Empty (the default) means "every day the venue
-  /// is open", no extra restriction. Ignored for any date that has rows in
-  /// availableDates below (a one-off/specials type overrides the weekly
-  /// pattern entirely, rather than the two composing).
+  /// OpeningHours.dayOfWeek. Empty (the default) means closed every day of
+  /// the week, for a specials-only type that's never bookable except on
+  /// dates explicitly allowed via dateOverrides below (e.g. Quiz Night: no
+  /// weekly pattern at all, only ever open on the specific evenings added
+  /// as "allow" overrides). See resolveBookingTypeDateWindows in
+  /// generate-slots.ts for exactly how this composes with dateOverrides.
   availableDaysOfWeek Int[] @default([])
 
   /// Earliest/latest a booking of this type can *start*, as "HH:mm",
@@ -574,10 +578,11 @@ model Booking {
   checkedInAt  DateTime?
   checkedOutAt DateTime?
 
-  bookingTables BookingTable[]
-  payments      Payment[]
-  preOrder      PreOrder?
-  messages      Message[]
+  bookingTables  BookingTable[]
+  payments       Payment[]
+  preOrder       PreOrder?
+  preOrderInvite PreOrderInvite?
+  messages       Message[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -637,19 +642,77 @@ model Menu {
 
   items     MenuItem[]
   preOrders PreOrder[]
+  invites   PreOrderInvite[]
+}
+
+/// Per-venue grouping for MenuItem ("Starters", "Mains", "Desserts"), e.g.
+/// DV8's pre-order menu. A managed list rather than a free-text field on
+/// MenuItem so staff can rename/reorder a category without touching every
+/// item in it, and so a category can exist (and be picked for a
+/// PreOrderInvite) before any items are added to it. sortOrder is the
+/// venue's own display order, lower first, matching Area.priority's
+/// convention elsewhere in this schema.
+model MenuCategory {
+  id        String @id @default(cuid())
+  venueId   String
+  venue     Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int    @default(0)
+
+  items MenuItem[]
+
+  @@unique([venueId, name])
 }
 
 model MenuItem {
-  id           String   @id @default(cuid())
+  id           String        @id @default(cuid())
   menuId       String
-  menu         Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  menu         Menu          @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  /// Nullable: Rumba's flat pizza-choice menu has no need for categories at
+  /// all, only DV8's does. An item with no category just doesn't get a
+  /// section heading wherever categories are displayed.
+  categoryId   String?
+  category     MenuCategory? @relation(fields: [categoryId], references: [id])
   name         String
   description  String?
   priceInPence Int
-  dietaryTags  String[] @default([])
-  active       Boolean  @default(true)
+  dietaryTags  String[]      @default([])
+  active       Boolean       @default(true)
 
   preOrderItems PreOrderItem[]
+}
+
+/// A staff-initiated request for a customer to submit a pre-order,
+/// created from the booking details page in bookings-view (see that
+/// repo's booking-details pre-order action). Deliberately separate from
+/// PreOrder itself: an invite exists as soon as staff pick a menu and
+/// decide which of its categories the customer should see, before the
+/// customer has chosen anything - PreOrder (and its items) only gets
+/// created once they actually submit via the /pre-order/[token] portal in
+/// lifeandsoul-bookings.
+///
+/// categoryIds is deliberately explicit, never "empty means show
+/// everything": staff pick exactly which sections apply to this booking
+/// (e.g. a lunch booking might only see Starters/Mains, not the full
+/// dinner menu), and an empty list would be an easy way to accidentally
+/// expose categories nobody meant to send.
+///
+/// token is opaque and unguessable (see bookings-view's action for how
+/// it's generated) - this is the only thing standing between the public
+/// portal route and the booking, there being no customer login system to
+/// otherwise gate it behind. No expiry for now: it's valid until
+/// submitted, then the portal shows a read-only confirmation instead of
+/// the form on any further visit.
+model PreOrderInvite {
+  id          String    @id @default(cuid())
+  bookingId   String    @unique
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  menuId      String
+  menu        Menu      @relation(fields: [menuId], references: [id])
+  categoryIds String[]
+  token       String    @unique
+  createdAt   DateTime  @default(now())
+  submittedAt DateTime?
 }
 
 model PreOrder {

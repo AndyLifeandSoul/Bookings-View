@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, CalendarX2 } from "lucide-react";
+import { Search, CalendarX2, UtensilsCrossed } from "lucide-react";
 import { StatusBadge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
@@ -19,6 +19,8 @@ export interface ListBooking {
   bookingRef: string | null;
   notes: string | null;
   bookingType: { name: string };
+  /** Present (non-null) once a customer has submitted a pre-order for this booking, see Booking.preOrder. Only its presence matters here, not its contents. */
+  preOrder: { id: string } | null;
 }
 
 /**
@@ -102,12 +104,21 @@ export function BookingListSearch({ bookings, venueSlug }: { bookings: ListBooki
                         <td className="px-4 py-3 tabular-nums text-zinc-600">{booking.partySize}</td>
                         <td className="px-4 py-3 text-zinc-600">{booking.bookingType.name}</td>
                         <td className="px-4 py-3">
-                          <Link
-                            href={`/staff/${venueSlug}/bookings/${booking.id}`}
-                            className="font-medium text-zinc-900 transition-colors hover:text-[var(--accent)] hover:underline"
-                          >
-                            {booking.customerName}
-                          </Link>
+                          <div className="flex items-center gap-1.5">
+                            <Link
+                              href={`/staff/${venueSlug}/bookings/${booking.id}`}
+                              className="font-medium text-zinc-900 transition-colors hover:text-[var(--accent)] hover:underline"
+                            >
+                              {booking.customerName}
+                            </Link>
+                            {booking.preOrder && (
+                              <UtensilsCrossed
+                                className="h-3.5 w-3.5 shrink-0 text-[var(--success-soft-text)]"
+                                strokeWidth={2.25}
+                                aria-label="Pre-order received"
+                              />
+                            )}
+                          </div>
                           <div className="text-xs text-zinc-500">
                             {booking.customerPhone ?? booking.customerEmail}
                             {booking.bookingRef ? ` · ${booking.bookingRef}` : ""}

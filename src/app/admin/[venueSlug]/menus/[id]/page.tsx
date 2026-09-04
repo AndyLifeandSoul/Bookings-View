@@ -19,7 +19,7 @@ export default async function MenuDetailPage({
   const { venueSlug, id } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
 
-  const [menu, bookingTypes] = await Promise.all([
+  const [menu, bookingTypes, categories] = await Promise.all([
     prisma.menu.findFirst({
       where: { id, venueId: venue.id },
       include: { items: { orderBy: { name: "asc" } } },
@@ -27,6 +27,11 @@ export default async function MenuDetailPage({
     prisma.bookingType.findMany({
       where: { venueId: venue.id },
       orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.menuCategory.findMany({
+      where: { venueId: venue.id },
+      orderBy: { sortOrder: "asc" },
       select: { id: true, name: true },
     }),
   ]);
@@ -98,7 +103,7 @@ export default async function MenuDetailPage({
               <table className="w-full min-w-[720px] text-left text-sm">
                 <tbody>
                   {menu.items.map((item) => (
-                    <MenuItemRow key={item.id} item={item} menuId={menu.id} venueId={venue.id} />
+                    <MenuItemRow key={item.id} item={item} menuId={menu.id} venueId={venue.id} categories={categories} />
                   ))}
                 </tbody>
               </table>
@@ -143,6 +148,17 @@ export default async function MenuDetailPage({
                 placeholder="vegetarian, gf"
                 className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
               />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-zinc-500">Category</span>
+              <select name="categoryId" defaultValue="" className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm">
+                <option value="">Uncategorised</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="flex items-center gap-1.5 pb-1.5">
               <input type="checkbox" name="active" defaultChecked className="h-4 w-4 rounded border-zinc-300" />

@@ -89,6 +89,64 @@ export async function deleteMenu(formData: FormData): Promise<ActionResult> {
   redirect(`/admin/${venue.slug}/menus`);
 }
 
+/**
+ * MenuCategory is per-venue, not per-menu (see schema.prisma) - DV8's
+ * "Starters"/"Mains"/"Desserts" apply the same way across every pre-order
+ * menu the venue has, rather than being redefined per menu. Managed here
+ * on the venue-level menus page, not inside an individual menu's detail
+ * page.
+ */
+export async function createMenuCategory(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Name is required." };
+  const sortOrder = Number(formData.get("sortOrder") ?? 0) || 0;
+
+  try {
+    await prisma.menuCategory.create({ data: { venueId: venue.id, name, sortOrder } });
+  } catch {
+    return { error: `"${name}" already exists for this venue.` };
+  }
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
+export async function updateMenuCategory(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Name is required." };
+  const sortOrder = Number(formData.get("sortOrder") ?? 0) || 0;
+
+  try {
+    const result = await prisma.menuCategory.updateMany({ where: { id, venueId: venue.id }, data: { name, sortOrder } });
+    if (result.count === 0) return { error: "Category not found for this venue." };
+  } catch {
+    return { error: `"${name}" already exists for this venue.` };
+  }
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
+/**
+ * No blocking check before delete, unlike deleteMenu/deleteMenuItem: a
+ * category going away just un-categorises whatever items pointed at it
+ * (MenuItem.categoryId is ON DELETE SET NULL, see schema.prisma) rather
+ * than losing anything, so there's no data-loss case to guard against here.
+ */
+export async function deleteMenuCategory(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const id = String(formData.get("id") ?? "");
+
+  const result = await prisma.menuCategory.deleteMany({ where: { id, venueId: venue.id } });
+  if (result.count === 0) return { error: "Category not found for this venue." };
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
 function parsePriceToPence(formData: FormData): number | { error: string } {
   const pounds = Number(formData.get("pricePounds"));
   if (!Number.isFinite(pounds) || pounds < 0) return { error: "Enter a valid price." };
@@ -125,9 +183,15 @@ export async function createMenuItem(formData: FormData): Promise<ActionResult> 
   const priceOrError = parsePriceToPence(formData);
   if (typeof priceOrError !== "number") return priceOrError;
 
+  const categoryId = String(formData.get("categoryId") ?? "").trim() || null;
+  if (categoryId && !(await prisma.menuCategory.findFirst({ where: { id: categoryId, venueId: venue.id } }))) {
+    return { error: "That category doesn't belong to this venue." };
+  }
+
   await prisma.menuItem.create({
     data: {
       menuId,
+      categoryId,
       name,
       description,
       active,
@@ -156,9 +220,14 @@ export async function updateMenuItem(formData: FormData): Promise<ActionResult> 
   const priceOrError = parsePriceToPence(formData);
   if (typeof priceOrError !== "number") return priceOrError;
 
+  const categoryId = String(formData.get("categoryId") ?? "").trim() || null;
+  if (categoryId && !(await prisma.menuCategory.findFirst({ where: { id: categoryId, venueId: venue.id } }))) {
+    return { error: "That category doesn't belong to this venue." };
+  }
+
   const result = await prisma.menuItem.updateMany({
     where: { id, menuId },
-    data: { name, description, active, priceInPence: priceOrError, dietaryTags: parseDietaryTags(formData) },
+    data: { name, description, active, categoryId, priceInPence: priceOrError, dietaryTags: parseDietaryTags(formData) },
   });
   if (result.count === 0) return { error: "Menu item not found." };
 

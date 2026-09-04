@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users2, LogIn, LogOut, ArrowRight, X, StickyNote } from "lucide-react";
+import { Users2, LogIn, LogOut, ArrowRight, X, StickyNote, UtensilsCrossed } from "lucide-react";
 import { moveBookingTable } from "./actions";
 import { checkInBooking, checkOutBooking, undoCheckOut } from "../bookings/[id]/actions";
 import { buttonStyles } from "@/components/ui/button";
@@ -33,6 +33,8 @@ export interface DiaryBooking {
   checkedOutAt: string | null;
   /** Free-text note from the customer or whoever took the booking (allergy, high chair, wheelchair access, birthday, ...). Surfaced as a small badge on the block itself, not just buried in the full booking page, since a note nobody notices until service is the whole reason this field exists. */
   notes: string | null;
+  /** True once a customer has submitted a pre-order for this booking (Booking.preOrder), see the booking details page's Pre-order section. Same "surface it on the block, don't make staff open the booking to find out" reasoning as notes. */
+  hasPreOrder: boolean;
 }
 
 /**
@@ -262,6 +264,7 @@ export function DiaryGrid({
         ? " · checked in"
         : "";
     const noteTitle = booking.notes ? ` · note: ${booking.notes}` : "";
+    const preOrderTitle = booking.hasPreOrder ? " · pre-order received" : "";
     return (
       <button
         type="button"
@@ -270,7 +273,7 @@ export function DiaryGrid({
           e.dataTransfer.setData("text/plain", JSON.stringify({ bookingId: booking.id, fromTableId } satisfies DragPayload));
         }}
         onClick={(e) => openPopover(booking, e)}
-        title={`${booking.bookingTypeName} · ${booking.customerName} · ${booking.partySize} guests · ${booking.startTime}-${booking.endTime}${checkInOutTitle}${noteTitle}`}
+        title={`${booking.bookingTypeName} · ${booking.customerName} · ${booking.partySize} guests · ${booking.startTime}-${booking.endTime}${checkInOutTitle}${noteTitle}${preOrderTitle}`}
         className={`absolute top-1 bottom-1 flex cursor-pointer flex-col overflow-hidden rounded-md border text-left text-xs leading-tight shadow-sm transition-all duration-150 hover:z-10 hover:-translate-y-0.5 hover:shadow-md ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"} ${booking.checkedOutAt ? "opacity-50" : ""} ${!isPrimary ? "opacity-60 saturate-50" : ""}`}
         style={{ left: `${pctLeft(toMinutes(booking.startTime))}%`, width: `${pctWidth(toMinutes(booking.startTime), toMinutes(booking.endTime))}%` }}
       >
@@ -280,6 +283,7 @@ export function DiaryGrid({
         >
           <span className="truncate">{!isPrimary ? `↳ ${booking.bookingTypeName}` : booking.bookingTypeName}</span>
           <span className="flex shrink-0 items-center gap-1">
+            {booking.hasPreOrder && <UtensilsCrossed className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden="true" />}
             {booking.notes && <StickyNote className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden="true" />}
             {booking.checkedOutAt ? (
               <span className="rounded-sm bg-black/30 px-1">OUT</span>
@@ -343,6 +347,7 @@ export function DiaryGrid({
                 />
                 <span className="font-medium">{booking.customerName}</span> · {booking.partySize} ·{" "}
                 {booking.startTime}-{booking.endTime}
+                {booking.hasPreOrder && <UtensilsCrossed className="h-3 w-3 shrink-0 opacity-60" strokeWidth={2.25} />}
                 {booking.notes && <StickyNote className="h-3 w-3 shrink-0 opacity-60" strokeWidth={2.25} />}
               </button>
             ))}
@@ -453,6 +458,12 @@ export function DiaryGrid({
                   {popover.booking.partySize} guests · {popover.booking.startTime}-{popover.booking.endTime} ·{" "}
                   {popover.booking.bookingTypeName}
                 </p>
+                {popover.booking.hasPreOrder && (
+                  <p className="mt-1 flex items-center gap-1 rounded-md bg-[var(--success-soft)] px-1.5 py-1 text-xs text-[var(--success-soft-text)]">
+                    <UtensilsCrossed className="h-3 w-3 shrink-0" strokeWidth={2.25} />
+                    Pre-order received
+                  </p>
+                )}
                 {popover.booking.notes && (
                   <p className="mt-1 flex items-start gap-1 rounded-md bg-[var(--warning-soft)] px-1.5 py-1 text-xs text-[var(--warning-soft-text)]">
                     <StickyNote className="mt-0.5 h-3 w-3 shrink-0" strokeWidth={2.25} />
