@@ -90,7 +90,7 @@ export async function createManualBooking(formData: FormData): Promise<ActionRes
     }
   }
 
-  const booking = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     let bookingRef: string | null = null;
     if (venue.bookingCode) {
       const updated = await tx.venue.update({
@@ -121,5 +121,86 @@ export async function createManualBooking(formData: FormData): Promise<ActionRes
     });
   });
 
-  redirect(`/staff/${venueSlug}/bookings/${booking.id}`);
+  redirect(`/staff/${venueSlug}/diary?date=${dateStr}`);
+}
+
+export interface TableAvailabilityInfo {
+  /** Tables already seating a different active booking that overlaps this date/time range - see findTableConflicts. */
+  unavailableTableIds: string[];
+  /** Best-fit available table for this booking type/party size/time, if one exists. Staff still pick tables themselves; this only flags a suggestion. */
+  recommendedTableId: string | null;
+}
+
+/**
+ * Backs the "Add booking" form's live table picker: which tables are
+ * already booked for this date/time (greyed out, not selectable), and
+ * which available table is the best fit for this booking type and party
+ * size (flagged "Recommended"). Deliberately a much simpler heuristic than
+ * lifeandsoul-bookings' real assignTables engine - bookings-view doesn't
+ * run that engine, this only has to pick one sensible table for a human to
+ * confirm or override, not replicate the customer-facing allocation logic
+ * exactly. Recommends the tightest-fitting table (smallest maxCovers that
+ * still fits partySize) within the booking type's allowed areas (if
+ * restricted via areaPriorities), in area-priority order; null if nothing
+ * fits (e.g. the party's bigger than any single table - staff combine
+ * tables manually for that, same as always).
+ */
+export async function getTableAvailability(params: {
+  venueId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  bookingTypeId: string;
+  partySize: number;
+}): Promise<TableAvailabilityInfo> {
+  const empty: TableAvailabilityInfo = { unavailableTableIds: [], recommendedTableId: null };
+  const { venueId, date: dateStr, startTime, endTime, bookingTypeId, partySize } = params;
+
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return empty;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return empty;
+  if (!/^\d{1,2}:\d{2}$/.test(startTime) || !/^\d{1,2}:\d{2}$/.test(endTime)) return empty;
+  if (!bookingTypeId || !Number.isInteger(partySize) || partySize < 1) return empty;
+  const date = new Date(`${dateStr}T00:00:00.000Z`);
+
+  const [tables, bookingType] = await Promise.all([
+    prisma.table.findMany({
+      where: { venueId, active: true },
+      select: { id: true, minCovers: true, maxCovers: true, areaId: true, sortOrder: true },
+    }),
+    prisma.bookingType.findFirst({
+      where: { id: bookingTypeId, venueId },
+      select: { areaPriorities: { select: { areaId: true, priority: true }, orderBy: { priority: "asc" } } },
+    }),
+  ]);
+  if (tables.length === 0) return empty;
+
+  const conflicts = await findTableConflicts({
+    venueId,
+    date,
+    startTime,
+    endTime,
+    tableIds: tables.map((t) => t.id),
+  });
+  const unavailableTableIds = [...new Set(conflicts.map((c) => c.tableId))];
+  const unavailableSet = new Set(unavailableTableIds);
+
+  const areaPriority = new Map((bookingType?.areaPriorities ?? []).map((ap) => [ap.areaId, ap.priority]));
+  const restrictToAreas = areaPriority.size > 0;
+
+  const candidates = tables.filter((t) => {
+    if (unavailableSet.has(t.id)) return false;
+    if (restrictToAreas && (!t.areaId || !areaPriority.has(t.areaId))) return false;
+    return partySize >= t.minCovers && partySize <= t.maxCovers;
+  });
+
+  candidates.sort((a, b) => {
+    const aPriority = restrictToAreas ? (areaPriority.get(a.areaId!) ?? 0) : 0;
+    const bPriority = restrictToAreas ? (areaPriority.get(b.areaId!) ?? 0) : 0;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    if (a.maxCovers !== b.maxCovers) return a.maxCovers - b.maxCovers;
+    return a.sortOrder - b.sortOrder;
+  });
+
+  return { unavailableTableIds, recommendedTableId: candidates[0]?.id ?? null };
 }

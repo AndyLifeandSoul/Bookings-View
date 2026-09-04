@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/client";
 
 /**
  * Upcoming bookings for one venue, for the staff dashboard. Deliberately
- * scoped to a single venueId (never accepts a list) — a STAFF session is
+ * scoped to a single venueId (never accepts a list) - a STAFF session is
  * always tied to exactly one venue and requireStaffVenue() enforces that at
  * the page level, so this staying narrow is what makes "staff only ever see
  * their own venue's diary" a property of the query, not just something the
@@ -31,6 +31,7 @@ export async function getUpcomingBookingsForVenue(venueId: string) {
       customerName: true,
       customerEmail: true,
       customerPhone: true,
+      bookingRef: true,
       notes: true,
       bookingType: { select: { name: true } },
     },

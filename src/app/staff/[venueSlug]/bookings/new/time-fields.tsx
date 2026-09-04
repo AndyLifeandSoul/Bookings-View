@@ -1,7 +1,3 @@
-"use client";
-
-import { useState } from "react";
-
 export interface BookingTypeOption {
   id: string;
   name: string;
@@ -9,41 +5,37 @@ export interface BookingTypeOption {
 }
 
 /**
- * Booking type / start time / end time, as one client component so end time
- * can auto-follow the selected booking type's minimum duration, Andy's
- * report: "if I select Standard Dining, it should automatically change the
- * end time to the minimum duration for that booking type compared to the
- * start time." Also what actually fixes the underlying bug he hit: the
- * previous plain `<input type="time">`s had no defaultValue at all, so what
- * looked like a pre-filled "12:30" in the browser's own empty-time-input
- * placeholder was never a real value, submitting empty strings the server
- * then rejected as "not filled in". Real state here means what's displayed
- * always matches what's actually in the form.
+ * Booking type / start time / end time fields for the "Add booking" form.
+ * Fully controlled from the parent (new-booking-form.tsx) rather than
+ * holding its own state, because the parent also needs the current
+ * bookingTypeId/startTime/endTime to drive the live table-availability
+ * lookup and to build the submission itself - a single source of truth
+ * for these three fields, not one copy here and another in the parent.
  *
- * End time still auto-follows start time/booking type after the user edits
- * it once, re-picking a booking type (the far more common "oops, wrong
- * type" correction) should still snap the duration back to that type's
- * minimum, and a same-day walk-in booking is normally left at the computed
- * minimum anyway. Nothing stops a manual edit sticking until the next
- * change event fires.
+ * The "end time auto-follows the selected booking type's minimum duration"
+ * behaviour (Andy: "if I select Standard Dining, it should automatically
+ * change the end time to the minimum duration for that booking type
+ * compared to the start time") lives in the parent's change handlers,
+ * using computeEndTime below. Nothing stops a manual edit to End time
+ * sticking until the next booking-type/start-time change recomputes it.
  */
-export function TimeFields({ bookingTypes }: { bookingTypes: BookingTypeOption[] }) {
-  const [bookingTypeId, setBookingTypeId] = useState(bookingTypes[0]?.id ?? "");
-  const [startTime, setStartTime] = useState("18:00");
-  const [endTime, setEndTime] = useState(() => computeEndTime("18:00", bookingTypes[0]?.minDurationMinutes));
-
-  function handleBookingTypeChange(id: string) {
-    setBookingTypeId(id);
-    const type = bookingTypes.find((t) => t.id === id);
-    setEndTime(computeEndTime(startTime, type?.minDurationMinutes));
-  }
-
-  function handleStartTimeChange(value: string) {
-    setStartTime(value);
-    const type = bookingTypes.find((t) => t.id === bookingTypeId);
-    setEndTime(computeEndTime(value, type?.minDurationMinutes));
-  }
-
+export function TimeFields({
+  bookingTypes,
+  bookingTypeId,
+  onBookingTypeChange,
+  startTime,
+  onStartTimeChange,
+  endTime,
+  onEndTimeChange,
+}: {
+  bookingTypes: BookingTypeOption[];
+  bookingTypeId: string;
+  onBookingTypeChange: (id: string) => void;
+  startTime: string;
+  onStartTimeChange: (value: string) => void;
+  endTime: string;
+  onEndTimeChange: (value: string) => void;
+}) {
   return (
     <>
       <label className="flex flex-col gap-1">
@@ -52,7 +44,7 @@ export function TimeFields({ bookingTypes }: { bookingTypes: BookingTypeOption[]
           name="bookingTypeId"
           required
           value={bookingTypeId}
-          onChange={(e) => handleBookingTypeChange(e.target.value)}
+          onChange={(e) => onBookingTypeChange(e.target.value)}
           className="rounded-md border border-zinc-300 px-3 py-2"
         >
           {bookingTypes.map((t) => (
@@ -69,7 +61,7 @@ export function TimeFields({ bookingTypes }: { bookingTypes: BookingTypeOption[]
           name="startTime"
           required
           value={startTime}
-          onChange={(e) => handleStartTimeChange(e.target.value)}
+          onChange={(e) => onStartTimeChange(e.target.value)}
           className="rounded-md border border-zinc-300 px-3 py-2"
         />
       </label>
@@ -80,7 +72,7 @@ export function TimeFields({ bookingTypes }: { bookingTypes: BookingTypeOption[]
           name="endTime"
           required
           value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
+          onChange={(e) => onEndTimeChange(e.target.value)}
           className="rounded-md border border-zinc-300 px-3 py-2"
         />
       </label>
@@ -88,7 +80,7 @@ export function TimeFields({ bookingTypes }: { bookingTypes: BookingTypeOption[]
   );
 }
 
-function computeEndTime(startTime: string, durationMinutes: number | undefined): string {
+export function computeEndTime(startTime: string, durationMinutes: number | undefined): string {
   const match = /^(\d{1,2}):(\d{2})$/.exec(startTime);
   if (!match || durationMinutes == null) return startTime;
   const startMinutes = Number(match[1]) * 60 + Number(match[2]);
