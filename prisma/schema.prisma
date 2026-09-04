@@ -879,3 +879,67 @@ model Message {
 
   @@index([bookingId])
 }
+
+// ---------------------------------------------------------------------------
+// Customer retention
+//
+// Booking rows carry customer contact info inline (customerName/Email/
+// Phone/DateOfBirth) but Booking itself is deleted 13 months after its
+// date (Andy's retention policy - see the data-retention cron job), well
+// short of the 12-24 month window he wants customer contact info kept for.
+// Customer exists purely to let that contact info outlive any single
+// Booking row it originated from, on its own separate clock.
+// ---------------------------------------------------------------------------
+
+/// A durable, cross-venue customer record, decoupled from any individual
+/// Booking row on purpose (see this section's header comment). Populated
+/// and kept in sync by the data-retention cron job reconciling current
+/// Booking rows into this table before evaluating either retention
+/// window - never written directly by the booking-creation flow itself,
+/// so this can be freshness-lagged by up to one sweep interval the same
+/// way bookings-view's inbox poll already is, without touching the
+/// booking-creation code path in either app.
+///
+/// Deduped by email (lowercased) when present, else by phone (whitespace
+/// stripped) - the exact same key bookings-view's admin Customers page
+/// already uses (see get-customers.ts), so this table and that page agree
+/// on what "one customer" means. A booking with neither email nor phone
+/// has no Customer row at all, same reasoning as that page's "unmergeable
+/// singleton" bucket - there's nothing to safely key it on.
+///
+/// name/phone/dateOfBirth/marketingOptIn reflect whichever booking was
+/// most recently *created* for this person (not necessarily their most
+/// recent booking *date*) - same "freshest info wins" rule as the
+/// Customers page. marketingOptIn is NOT sticky: like that page, it's
+/// this person's latest stated preference, which can go from true back to
+/// false if a later booking didn't opt in - Andy hasn't asked for opt-in
+/// to be treated as permanent, so this mirrors what he already sees today
+/// rather than inventing a stricter rule.
+model Customer {
+  id String @id @default(cuid())
+
+  /// Lowercased. The dedup key when present - unique, since it's looked
+  /// up directly (findUnique) by the reconciliation job.
+  email String? @unique
+  /// Whitespace stripped. The dedup key only when email is absent -
+  /// deliberately NOT @unique: two different customers (different
+  /// emails) can share a landline, and email already wins as the primary
+  /// key whenever both exist on the same booking, so this only needs a
+  /// plain index for lookup, not a DB-level uniqueness guarantee the
+  /// reconciliation job would otherwise have to work around.
+  phone String?
+
+  name           String
+  dateOfBirth    DateTime? @db.Date
+  marketingOptIn Boolean   @default(false)
+
+  /// Max booking.date across every Booking that reconciled into this row -
+  /// the anchor for this row's own retention window (12 months if
+  /// marketingOptIn is false, 24 if true, see the data-retention cron job).
+  lastBookingDate DateTime @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([phone])
+}
