@@ -315,6 +315,41 @@ export function DiaryGrid({
         </p>
       )}
 
+      {unassigned.length > 0 && (
+        <div>
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-700">
+            <Users2 className="h-3.5 w-3.5 text-zinc-400" strokeWidth={2.25} />
+            Unassigned
+          </h3>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {unassigned.map((booking) => (
+              <button
+                key={booking.id}
+                type="button"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(
+                    "text/plain",
+                    JSON.stringify({ bookingId: booking.id, fromTableId: null } satisfies DragPayload),
+                  );
+                }}
+                onClick={(e) => openPopover(booking, e)}
+                className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"}`}
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: colourForBookingType(booking.bookingTypeName, booking.bookingTypeColor) }}
+                  title={booking.bookingTypeName}
+                />
+                <span className="font-medium">{booking.customerName}</span> · {booking.partySize} ·{" "}
+                {booking.startTime}-{booking.endTime}
+                {booking.notes && <StickyNote className="h-3 w-3 shrink-0 opacity-60" strokeWidth={2.25} />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-2xl border border-zinc-200/80 bg-white [box-shadow:var(--shadow-sm)]">
         <div className="min-w-[720px]">
           {/* Time axis */}
@@ -388,41 +423,6 @@ export function DiaryGrid({
           })}
         </div>
       </div>
-
-      {unassigned.length > 0 && (
-        <div>
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-700">
-            <Users2 className="h-3.5 w-3.5 text-zinc-400" strokeWidth={2.25} />
-            Unassigned
-          </h3>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {unassigned.map((booking) => (
-              <button
-                key={booking.id}
-                type="button"
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(
-                    "text/plain",
-                    JSON.stringify({ bookingId: booking.id, fromTableId: null } satisfies DragPayload),
-                  );
-                }}
-                onClick={(e) => openPopover(booking, e)}
-                className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"}`}
-              >
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: colourForBookingType(booking.bookingTypeName, booking.bookingTypeColor) }}
-                  title={booking.bookingTypeName}
-                />
-                <span className="font-medium">{booking.customerName}</span> · {booking.partySize} ·{" "}
-                {booking.startTime}-{booking.endTime}
-                {booking.notes && <StickyNote className="h-3 w-3 shrink-0 opacity-60" strokeWidth={2.25} />}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {popover &&
         createPortal(
