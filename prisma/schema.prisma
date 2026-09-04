@@ -700,9 +700,14 @@ model MenuItem {
 /// token is opaque and unguessable (see bookings-view's action for how
 /// it's generated) - this is the only thing standing between the public
 /// portal route and the booking, there being no customer login system to
-/// otherwise gate it behind. No expiry for now: it's valid until
-/// submitted, then the portal shows a read-only confirmation instead of
-/// the form on any further visit.
+/// otherwise gate it behind. Submission closes 24 hours before the
+/// booking (see the /pre-order/[token] page's cutoff check) whether or
+/// not one was ever made, and the row itself is deleted 24 hours after
+/// the booking by a scheduled sweep (see api/cron/cleanup-pre-order-
+/// invites in lifeandsoul-bookings) - Andy: no reason to leave a link
+/// alive once the booking it belongs to is long over. A submitted invite
+/// shows a read-only confirmation instead of the form until that sweep
+/// removes it.
 model PreOrderInvite {
   id          String    @id @default(cuid())
   bookingId   String    @unique
