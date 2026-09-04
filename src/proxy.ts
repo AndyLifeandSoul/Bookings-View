@@ -22,7 +22,16 @@ export async function proxy(request: NextRequest) {
   // silently follows that redirect instead of getting the login response.
   // /api/auth/logout is equally fine to leave open — it only ever clears a
   // cookie, there's nothing to protect.
-  if (pathname.startsWith("/api/auth/")) {
+  //
+  // /api/cron/ is the same shape of bug: every route under it authenticates
+  // itself with a shared CRON_SECRET bearer token (see poll-inbox's own
+  // route.ts), because it's called by a scheduler, never a browser with a
+  // session. Gating it the same as a staff page meant that check could
+  // never be reached at all - any unauthenticated request (which is every
+  // request a scheduler will ever make) was redirected to /login first,
+  // so poll-inbox has never actually run outside a signed-in browser
+  // manually hitting the URL. Caught while wiring up the actual scheduler.
+  if (pathname.startsWith("/api/auth/") || pathname.startsWith("/api/cron/")) {
     return NextResponse.next();
   }
 
