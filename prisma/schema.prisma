@@ -130,6 +130,11 @@ model Venue {
   enquiries              Enquiry[]
   menus                  Menu[]
   staff                  StaffUser[]
+  /// See Payment.venueId's doc comment - a Payment keeps its own venue
+  /// reference so it still means something once the Booking it paid for
+  /// is gone (Booking is on a flat 13-month retention clock, Payment on
+  /// its own ~6-year one).
+  payments               Payment[]
 }
 
 // ---------------------------------------------------------------------------
@@ -770,10 +775,34 @@ enum PaymentStatus {
 /// A record of one Dojo payment intent against one booking. Kept separate
 /// from Booking so a booking can have a deposit now and a balance payment
 /// later, and so refunds have a natural home.
+/// Andy's retention policy: Booking rows are wiped flat 13 months after
+/// booking.date, but Payment (a financial record) is kept independently
+/// for ~6 years after that, well past its Booking - see the data-retention
+/// cron job. That only works because bookingId is nullable with
+/// onDelete: SetNull rather than the Restrict this used to be: deleting a
+/// Booking no longer fails just because it was paid for, it just detaches
+/// the Payment row from it. venueId/bookingDate below are snapshots taken
+/// at payment time specifically so a detached Payment row is still
+/// attributable to a venue and a date once bookingId goes null - without
+/// them a surviving Payment would be orphaned data nobody could make sense
+/// of.
 model Payment {
-  id               String         @id @default(cuid())
-  bookingId        String
-  booking          Booking        @relation(fields: [bookingId], references: [id])
+  id        String   @id @default(cuid())
+  bookingId String?
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  /// Snapshot of booking.venueId at payment time. Kept even after
+  /// bookingId is nulled out - Venue rows are never deleted by anything in
+  /// this codebase, so this relation is safe to leave as the default
+  /// (Restrict) with no retention implications of its own.
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id])
+
+  /// Snapshot of booking.date at payment time (not this row's own
+  /// createdAt) - what the booking this paid for was actually FOR, which
+  /// is the useful "date" on a Payment once its Booking is long gone.
+  bookingDate DateTime @db.Date
+
   paymentAccountId String
   paymentAccount   PaymentAccount @relation(fields: [paymentAccountId], references: [id])
 
@@ -792,6 +821,7 @@ model Payment {
   refundedAt DateTime?
 
   @@index([bookingId])
+  @@index([venueId])
 }
 
 // ---------------------------------------------------------------------------
