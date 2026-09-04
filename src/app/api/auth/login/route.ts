@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   // Defensive, shouldn't happen: staff-account creation always requires a
   // venue for a STAFF role. Only OWNER/MANAGER are meant to have none.
   if (staffUser.role === "STAFF" && !staffUser.venue) {
-    console.error(`StaffUser ${staffUser.id} has role STAFF but no venue assigned — refusing login.`);
+    console.error(`StaffUser ${staffUser.id} has role STAFF but no venue assigned, refusing login.`);
     return genericError();
   }
 

@@ -15,7 +15,9 @@ export function ToggleActiveButton({ id, active }: { id: string; active: boolean
       <button
         type="submit"
         disabled={pending}
-        className={`text-sm underline disabled:opacity-50 ${active ? "text-red-600 hover:text-red-800" : "text-green-700 hover:text-green-900"}`}
+        className={`text-sm font-medium underline decoration-dotted underline-offset-2 transition-colors disabled:opacity-50 ${
+          active ? "text-[var(--danger)] hover:text-red-800" : "text-[var(--success-soft-text)] hover:text-green-900"
+        }`}
       >
         {pending ? "…" : active ? "Deactivate" : "Reactivate"}
       </button>
@@ -31,7 +33,7 @@ export function ResetPasswordButton({ id }: { id: string }) {
 
   if (state?.generatedPassword) {
     return (
-      <span className="text-xs">
+      <span className="animate-in text-xs">
         New password: <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono">{state.generatedPassword}</code>
       </span>
     );
@@ -40,7 +42,11 @@ export function ResetPasswordButton({ id }: { id: string }) {
   return (
     <form action={formAction}>
       <input type="hidden" name="id" value={id} />
-      <button type="submit" disabled={pending} className="text-sm text-zinc-600 underline hover:text-zinc-900 disabled:opacity-50">
+      <button
+        type="submit"
+        disabled={pending}
+        className="text-sm font-medium text-zinc-500 underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--accent)] disabled:opacity-50"
+      >
         {pending ? "…" : "Reset password"}
       </button>
     </form>

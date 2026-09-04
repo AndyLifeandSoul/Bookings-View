@@ -1,6 +1,9 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
+import { buttonStyles } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { createStaffUser, type CreateStaffResult } from "./actions";
 import type { VenueOption } from "@/lib/venues/list-active-venues";
 
@@ -12,20 +15,25 @@ export function CreateStaffForm({ venues }: { venues: VenueOption[] }) {
   const [role, setRole] = useState<"OWNER" | "MANAGER" | "STAFF">("STAFF");
 
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-5">
+    <Card>
       {state?.generatedPassword ? (
-        <div className="rounded-md bg-green-50 px-4 py-3 text-sm text-green-900">
-          <p className="font-medium">Account created.</p>
-          <p className="mt-1">
-            Password: <code className="rounded bg-white px-1.5 py-0.5 font-mono">{state.generatedPassword}</code>
-          </p>
-          <p className="mt-1 text-xs text-green-800">
-            Shown once — it&apos;s stored only as a hash. Pass it to them securely now.
-          </p>
+        <div className="animate-in flex items-start gap-3 rounded-lg border border-[var(--success)]/20 bg-[var(--success-soft)] px-4 py-3 text-sm text-[var(--success-soft-text)]">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.25} />
+          <div>
+            <p className="font-medium">Account created.</p>
+            <p className="mt-1">
+              Password: <code className="rounded bg-white/70 px-1.5 py-0.5 font-mono">{state.generatedPassword}</code>
+            </p>
+            <p className="mt-1 text-xs opacity-90">Shown once, it&apos;s stored only as a hash. Pass it to them securely now.</p>
+          </div>
         </div>
       ) : (
         <form action={formAction} className="flex flex-col gap-4">
-          {state?.error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>}
+          {state?.error && (
+            <p className="animate-in rounded-lg border border-red-100 bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-soft-text)]">
+              {state.error}
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium text-zinc-700">Name</span>
@@ -65,16 +73,12 @@ export function CreateStaffForm({ venues }: { venues: VenueOption[] }) {
             )}
           </div>
           <div>
-            <button
-              type="submit"
-              disabled={pending}
-              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-            >
+            <button type="submit" disabled={pending} className={buttonStyles("primary", "md")}>
               {pending ? "Creating…" : "Create account"}
             </button>
           </div>
         </form>
       )}
-    </div>
+    </Card>
   );
 }

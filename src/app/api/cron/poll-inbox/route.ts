@@ -19,7 +19,7 @@ import { isEmailConfigured, listRecentInbox } from "@/lib/email/graph-client";
 export async function POST(request: NextRequest) {
   const expected = process.env.CRON_SECRET;
   if (!expected) {
-    return NextResponse.json({ error: "CRON_SECRET isn't set — refusing to run an unauthenticated poll." }, { status: 503 });
+    return NextResponse.json({ error: "CRON_SECRET isn't set, refusing to run an unauthenticated poll." }, { status: 503 });
   }
   const provided = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (provided !== expected) {

@@ -95,7 +95,7 @@ async function parseTableFields(
   const minCovers = Number(formData.get("minCovers"));
   const maxCovers = Number(formData.get("maxCovers"));
   if (!Number.isFinite(minCovers) || !Number.isFinite(maxCovers) || minCovers < 1 || maxCovers < minCovers) {
-    return { error: "Covers range is invalid — max must be at least min, and min at least 1." };
+    return { error: "Covers range is invalid: max must be at least min, and min at least 1." };
   }
 
   const areaIdRaw = String(formData.get("areaId") ?? "").trim();
@@ -165,7 +165,7 @@ export async function deleteTable(formData: FormData): Promise<ActionResult> {
     await prisma.table.updateMany({ where: { id, venueId: venue.id }, data: { active: false } });
     revalidatePath(`/admin/${venue.slug}/tables`);
     return {
-      error: `"${table.label}" has ${bookingCount} booking(s) against it, so it can't be deleted — deactivated instead.`,
+      error: `"${table.label}" has ${bookingCount} booking(s) against it, so it can't be deleted, deactivated instead.`,
     };
   }
 

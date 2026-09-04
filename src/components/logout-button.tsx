@@ -11,7 +11,7 @@ export function LogoutButton() {
         // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = "/login";
       }}
-      className="text-sm text-zinc-500 underline hover:text-zinc-900"
+      className="text-sm text-zinc-500 transition-colors hover:text-zinc-900"
     >
       Sign out
     </button>

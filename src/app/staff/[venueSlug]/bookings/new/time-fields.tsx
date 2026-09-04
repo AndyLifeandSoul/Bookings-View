@@ -10,18 +10,18 @@ export interface BookingTypeOption {
 
 /**
  * Booking type / start time / end time, as one client component so end time
- * can auto-follow the selected booking type's minimum duration — Andy's
+ * can auto-follow the selected booking type's minimum duration, Andy's
  * report: "if I select Standard Dining, it should automatically change the
  * end time to the minimum duration for that booking type compared to the
  * start time." Also what actually fixes the underlying bug he hit: the
  * previous plain `<input type="time">`s had no defaultValue at all, so what
  * looked like a pre-filled "12:30" in the browser's own empty-time-input
- * placeholder was never a real value — submitting empty strings the server
+ * placeholder was never a real value, submitting empty strings the server
  * then rejected as "not filled in". Real state here means what's displayed
  * always matches what's actually in the form.
  *
  * End time still auto-follows start time/booking type after the user edits
- * it once — re-picking a booking type (the far more common "oops, wrong
+ * it once, re-picking a booking type (the far more common "oops, wrong
  * type" correction) should still snap the duration back to that type's
  * minimum, and a same-day walk-in booking is normally left at the computed
  * minimum anyway. Nothing stops a manual edit sticking until the next
@@ -83,7 +83,7 @@ export function TimeFields({ bookingTypes }: { bookingTypes: BookingTypeOption[]
           onChange={(e) => setEndTime(e.target.value)}
           className="rounded-md border border-zinc-300 px-3 py-2"
         />
-        <span className="text-xs text-zinc-500">Auto-filled from the booking type&apos;s minimum duration — edit freely.</span>
+        <span className="text-xs text-zinc-500">Auto-filled from the booking type&apos;s minimum duration, edit freely.</span>
       </label>
     </>
   );

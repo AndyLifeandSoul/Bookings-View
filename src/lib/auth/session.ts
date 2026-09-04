@@ -18,10 +18,10 @@ function getSecretKey(): Uint8Array {
   const secret = process.env.AUTH_SECRET;
   if (!secret || secret.length < 32) {
     throw new Error(
-      "AUTH_SECRET is missing or too short. Set it to a random string of at least 32 characters — " +
+      "AUTH_SECRET is missing or too short. Set it to a random string of at least 32 characters, " +
         "`openssl rand -base64 32` is a good way to generate one. This signs staff/admin login sessions; " +
         "treat it like any other secret (never commit it, rotate it if it leaks). This is a separate secret " +
-        "from anything in lifeandsoul-bookings — the two apps don't need to agree on it.",
+        "from anything in lifeandsoul-bookings, the two apps don't need to agree on it.",
     );
   }
   return new TextEncoder().encode(secret);

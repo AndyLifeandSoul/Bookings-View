@@ -13,7 +13,7 @@ export default async function NewTablePage({ params }: { params: Promise<{ venue
 
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-base font-semibold text-zinc-900">New table</h2>
+      <h2 className="text-base font-semibold tracking-tight text-zinc-900">New table</h2>
       <ActionForm action={createTable}>
         <input type="hidden" name="venueId" value={venue.id} />
         <TableFields areas={areas} submitLabel="Create table" />

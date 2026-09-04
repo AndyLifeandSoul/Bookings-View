@@ -54,9 +54,9 @@ export async function createStaffUser(formData: FormData): Promise<CreateStaffRe
   if (!ROLES.includes(roleRaw as StaffRole)) return { error: `Invalid role: "${roleRaw}"` };
   const role = roleRaw as StaffRole;
 
-  if (role === "STAFF" && !venueId) return { error: "STAFF accounts need a venue — its login is tied to one." };
+  if (role === "STAFF" && !venueId) return { error: "STAFF accounts need a venue, its login is tied to one." };
   if (role !== "STAFF" && venueId) {
-    return { error: `${role} accounts are venue-independent — clear the venue, or pick STAFF instead.` };
+    return { error: `${role} accounts are venue-independent. Clear the venue, or pick STAFF instead.` };
   }
   if (venueId) {
     const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { id: true } });

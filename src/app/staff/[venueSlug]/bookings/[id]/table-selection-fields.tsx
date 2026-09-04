@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { buttonStyles } from "@/components/ui/button";
 
 export interface TableOption {
   id: string;
@@ -73,12 +74,7 @@ export function TableSelectionFields({
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            onClick={fillArea}
-            disabled={!areaChoice}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50"
-          >
+          <button type="button" onClick={fillArea} disabled={!areaChoice} className={buttonStyles("secondary", "sm")}>
             Fill this area&apos;s tables
           </button>
         </div>
@@ -86,19 +82,22 @@ export function TableSelectionFields({
 
       {tableFillMode === "WHOLE_VENUE" && (
         <div className="flex items-center gap-2 rounded-md bg-zinc-50 p-3">
-          <button
-            type="button"
-            onClick={selectAll}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
-          >
+          <button type="button" onClick={selectAll} className={buttonStyles("secondary", "sm")}>
             Select every table
           </button>
         </div>
       )}
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2">
         {tables.map((table) => (
-          <label key={table.id} className="flex items-center gap-2 rounded-md border border-zinc-300 px-3 py-1.5 text-sm">
+          <label
+            key={table.id}
+            className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors ${
+              selected.has(table.id)
+                ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                : "border-zinc-300 hover:border-zinc-400 hover:bg-zinc-50"
+            }`}
+          >
             <input
               type="checkbox"
               name="tableIds"

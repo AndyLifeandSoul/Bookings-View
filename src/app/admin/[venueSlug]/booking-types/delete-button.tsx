@@ -26,11 +26,11 @@ export function DeleteBookingTypeButton({ id, name, venueId }: { id: string; nam
       >
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="venueId" value={venueId} />
-        <button type="submit" disabled={pending} className="text-sm text-red-600 underline hover:text-red-800 disabled:opacity-50">
+        <button type="submit" disabled={pending} className="text-sm font-medium text-[var(--danger)] underline decoration-dotted underline-offset-2 transition-colors hover:text-red-800 disabled:opacity-50">
           {pending ? "Deleting…" : "Delete"}
         </button>
       </form>
-      {state?.error && <p className="max-w-[16rem] text-right text-xs text-amber-700">{state.error}</p>}
+      {state?.error && <p className="max-w-[16rem] text-right text-xs text-[var(--warning-soft-text)]">{state.error}</p>}
     </div>
   );
 }

@@ -26,7 +26,7 @@ export default async function EditBookingTypePage({
 
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-base font-semibold text-zinc-900">Edit {bookingType.name}</h2>
+      <h2 className="text-base font-semibold tracking-tight text-zinc-900">Edit {bookingType.name}</h2>
       <ActionForm action={updateBookingType}>
         <input type="hidden" name="venueId" value={venue.id} />
         <BookingTypeFields defaults={bookingType} areas={areas} submitLabel="Save changes" />

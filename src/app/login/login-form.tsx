@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { buttonStyles } from "@/components/ui/button";
 
 export function LoginForm({ next }: { next: string }) {
   const [email, setEmail] = useState("");
@@ -20,7 +21,7 @@ export function LoginForm({ next }: { next: string }) {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Could not sign in");
-      // Full navigation, not client-side routing — middleware needs to see
+      // Full navigation, not client-side routing, middleware needs to see
       // the cookie the browser just received on the next request, and a
       // client-side transition can race ahead of that.
       window.location.href = next;
@@ -53,12 +54,18 @@ export function LoginForm({ next }: { next: string }) {
           className="rounded-md border border-zinc-300 px-3 py-2"
         />
       </label>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button
-        type="submit"
-        disabled={submitting}
-        className="rounded-md bg-zinc-900 px-4 py-2 text-white hover:bg-zinc-800 disabled:opacity-50"
-      >
+      {error && (
+        <p className="animate-in rounded-lg border border-red-100 bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-soft-text)]">
+          {error}
+        </p>
+      )}
+      <button type="submit" disabled={submitting} className={buttonStyles("primary", "md", "mt-1 w-full")}>
+        {submitting && (
+          <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.4 0 0 5.4 0 12h4Z" />
+          </svg>
+        )}
         {submitting ? "Signing in…" : "Sign in"}
       </button>
     </form>

@@ -6,14 +6,22 @@ export interface CoversByType {
   covers: number;
 }
 
+export interface CoversByVenue {
+  venueName: string;
+  bookings: number;
+  covers: number;
+}
+
 export interface DashboardStats {
   bookingsToday: number;
   coversToday: number;
   bookingsThisWeek: number;
   coversThisWeek: number;
   weekLabel: string;
-  /** Grouped by booking type NAME across every venue (e.g. two venues' "Standard Dining" merge into one row) — a cross-estate "how much of X are we doing" view, not broken out per venue. */
+  /** Grouped by booking type NAME across every venue (e.g. two venues' "Standard Dining" merge into one row), a cross-estate "how much of X are we doing" view, not broken out per venue. */
   coversByType: CoversByType[];
+  /** The same week's bookings, grouped by venue instead of booking type, so multi-venue load is visible at a glance from Home. */
+  coversByVenue: CoversByVenue[];
 }
 
 function utcDateOnly(d: Date): Date {
@@ -51,19 +59,29 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     }),
     prisma.booking.findMany({
       where: { date: { gte: weekStart, lt: weekEnd }, status: { not: "CANCELLED" } },
-      select: { partySize: true, bookingType: { select: { name: true } } },
+      select: { partySize: true, bookingType: { select: { name: true } }, venue: { select: { name: true } } },
     }),
   ]);
 
   const byType = new Map<string, CoversByType>();
+  const byVenue = new Map<string, CoversByVenue>();
   for (const row of weekRows) {
-    const key = row.bookingType.name;
-    const existing = byType.get(key);
-    if (existing) {
-      existing.bookings += 1;
-      existing.covers += row.partySize;
+    const typeKey = row.bookingType.name;
+    const existingType = byType.get(typeKey);
+    if (existingType) {
+      existingType.bookings += 1;
+      existingType.covers += row.partySize;
     } else {
-      byType.set(key, { bookingTypeName: key, bookings: 1, covers: row.partySize });
+      byType.set(typeKey, { bookingTypeName: typeKey, bookings: 1, covers: row.partySize });
+    }
+
+    const venueKey = row.venue.name;
+    const existingVenue = byVenue.get(venueKey);
+    if (existingVenue) {
+      existingVenue.bookings += 1;
+      existingVenue.covers += row.partySize;
+    } else {
+      byVenue.set(venueKey, { venueName: venueKey, bookings: 1, covers: row.partySize });
     }
   }
 
@@ -77,6 +95,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     coversThisWeek: weekRows.reduce((sum, r) => sum + r.partySize, 0),
     weekLabel: `${formatShort(weekStart)}–${formatShort(weekEndInclusive)}`,
     coversByType: [...byType.values()].sort((a, b) => b.covers - a.covers),
+    coversByVenue: [...byVenue.values()].sort((a, b) => b.covers - a.covers),
   };
 }
 

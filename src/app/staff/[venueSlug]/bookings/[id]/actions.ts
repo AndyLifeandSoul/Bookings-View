@@ -12,7 +12,7 @@ const STATUSES: BookingStatus[] = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "C
 
 /**
  * Same "trust nothing but the session" shape as requireAdminSession, but for
- * staff — every action here is its own reachable POST endpoint, and a STAFF
+ * staff - every action here is its own reachable POST endpoint, and a STAFF
  * session must never be able to touch a booking outside its own venue
  * (checked again per-action below, not just by whatever page rendered the
  * form) while OWNER/MANAGER can touch any venue's booking.
@@ -94,7 +94,7 @@ export async function reassignTables(formData: FormData): Promise<ActionResult> 
     });
     if (conflicts.length > 0) {
       const names = [...new Set(conflicts.map((c) => `${c.tableLabel} (${c.customerName}, ${c.startTime}-${c.endTime})`))];
-      return { error: `Can't assign — already booked at this time: ${names.join(", ")}.` };
+      return { error: `Can't assign, already booked at this time: ${names.join(", ")}.` };
     }
   }
 
@@ -110,7 +110,7 @@ export async function reassignTables(formData: FormData): Promise<ActionResult> 
 
 /**
  * Sends a reply as the venue's mailbox (Venue.email) via Graph and logs it
- * as an OUTBOUND Message either way — even when Graph isn't configured or
+ * as an OUTBOUND Message either way - even when Graph isn't configured or
  * the send fails, so staff always have a record of what they meant to say,
  * with the send failure surfaced as the action's error rather than losing
  * the message text. read defaults to true for OUTBOUND (see Message.read's
@@ -137,9 +137,9 @@ export async function sendReply(formData: FormData): Promise<ActionResult> {
 
   let sendError: string | null = null;
   if (!booking.venue.email) {
-    sendError = "This venue has no email address set (Settings → Venue Details) — logged only, not sent.";
+    sendError = "This venue has no email address set (Settings → Venue Details), logged only, not sent.";
   } else if (!booking.customerEmail) {
-    sendError = "This booking has no customer email on file — logged only, not sent.";
+    sendError = "This booking has no customer email on file, logged only, not sent.";
   } else {
     const result = await sendMailAs(booking.venue.email, booking.customerEmail, subject, body);
     if (!result.ok) sendError = `Logged, but sending failed: ${result.error}`;
@@ -159,7 +159,7 @@ export async function sendReply(formData: FormData): Promise<ActionResult> {
   if (sendError) return { error: sendError };
 }
 
-/** Marks every unread inbound message on this booking read — called when staff open/action a booking from the Messages tab. */
+/** Marks every unread inbound message on this booking read - called when staff open/action a booking from the Messages tab. */
 export async function markMessagesRead(formData: FormData): Promise<ActionResult> {
   const id = String(formData.get("id") ?? "");
   const venueId = String(formData.get("venueId") ?? "");
@@ -178,7 +178,7 @@ export async function markMessagesRead(formData: FormData): Promise<ActionResult
 
 /**
  * Marks a booking as arrived. Doesn't affect table-conflict/availability
- * checks at all (see Booking.checkedInAt's doc comment) — purely a record
+ * checks at all (see Booking.checkedInAt's doc comment) - purely a record
  * of "they're here", so staff can see who's actually in at a glance.
  */
 export async function checkInBooking(formData: FormData): Promise<ActionResult> {
@@ -197,7 +197,7 @@ export async function checkInBooking(formData: FormData): Promise<ActionResult> 
 }
 
 /**
- * Marks a booking's table as cleared — from this point on it's excluded
+ * Marks a booking's table as cleared - from this point on it's excluded
  * from every table-conflict/availability check regardless of how much of
  * its formally booked window remains, so it's immediately bookable again.
  * See Booking.checkedOutAt's doc comment.
@@ -212,15 +212,27 @@ export async function checkOutBooking(formData: FormData): Promise<ActionResult>
   const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { id: true } });
   if (!booking) return { error: "Booking not found for this venue." };
 
-  // checkedInAt is deliberately left untouched (not cleared) — checking out
+  // checkedInAt is deliberately left untouched (not cleared) - checking out
   // still implies they were checked in at some point, and "when did they
-  // arrive" stays a useful fact after the table's freed up.
-  await prisma.booking.update({ where: { id }, data: { checkedOutAt: new Date() } });
+  // arrive" stays a useful fact after the table's freed up. Status moves to
+  // COMPLETED at the same time (Andy's spec) so a checked-out booking reads
+  // as finished everywhere status is shown (list view, All Bookings), not
+  // just on the diary via checkedOutAt.
+  await prisma.booking.update({ where: { id }, data: { checkedOutAt: new Date(), status: "COMPLETED" } });
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   revalidatePath(`/staff/${venueSlug}/diary`);
+  revalidatePath(`/staff/${venueSlug}/list`);
+  revalidatePath("/admin/bookings");
 }
 
-/** Undoes an accidental check-out — the table goes back to being occupied by this booking for conflict-checking purposes. */
+/**
+ * Undoes an accidental check-out, the table goes back to being occupied by
+ * this booking for conflict-checking purposes. Also reverts the automatic
+ * COMPLETED status checkOutBooking sets, back to CONFIRMED, symmetric with
+ * that action: checking out only ever happens from an active booking, so
+ * undoing it restores that active state rather than leaving it stuck on
+ * COMPLETED.
+ */
 export async function undoCheckOut(formData: FormData): Promise<ActionResult> {
   const id = String(formData.get("id") ?? "");
   const venueId = String(formData.get("venueId") ?? "");
@@ -231,7 +243,9 @@ export async function undoCheckOut(formData: FormData): Promise<ActionResult> {
   const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { id: true } });
   if (!booking) return { error: "Booking not found for this venue." };
 
-  await prisma.booking.update({ where: { id }, data: { checkedOutAt: null } });
+  await prisma.booking.update({ where: { id }, data: { checkedOutAt: null, status: "CONFIRMED" } });
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   revalidatePath(`/staff/${venueSlug}/diary`);
+  revalidatePath(`/staff/${venueSlug}/list`);
+  revalidatePath("/admin/bookings");
 }

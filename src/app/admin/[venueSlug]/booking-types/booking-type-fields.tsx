@@ -1,5 +1,6 @@
 import type { BookingType } from "@/generated/prisma";
 import { SubmitButton } from "@/components/submit-button";
+import { buttonStyles } from "@/components/ui/button";
 import { DateOverrideField, type DateOverrideRow } from "./date-override-field";
 
 const DAYS_OF_WEEK = [
@@ -31,7 +32,7 @@ export function BookingTypeFields({
   const selectedAreaPriority = new Map((defaults?.areaPriorities ?? []).map((p) => [p.areaId, p.priority]));
   const selectedDays = new Set(defaults?.availableDaysOfWeek ?? []);
   return (
-    <div className="flex flex-col gap-5 rounded-lg border border-zinc-200 bg-white p-5">
+    <div className="flex flex-col gap-5 rounded-2xl border border-zinc-200/80 bg-white p-5 [box-shadow:var(--shadow-sm)]">
       {defaults && <input type="hidden" name="id" value={defaults.id} />}
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -395,11 +396,7 @@ export function BookingTypeFields({
       </label>
 
       <div>
-        <SubmitButton
-          label={submitLabel}
-          pendingLabel="Saving…"
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-        />
+        <SubmitButton label={submitLabel} pendingLabel="Saving…" className={buttonStyles("primary", "md")} />
       </div>
     </div>
   );

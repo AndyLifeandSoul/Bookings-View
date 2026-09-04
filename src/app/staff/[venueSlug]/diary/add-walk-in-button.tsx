@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { UserPlus, X } from "lucide-react";
 import { createWalkIn } from "./actions";
+import { buttonStyles } from "@/components/ui/button";
 
 /**
  * Diary toolbar button + popup for adding a walk-in. Per Andy's spec, this
- * asks for a party size, one or more tables, and a booking type —
- * everything else (customer name "Walk in", start time, status, check-in)
+ * asks for a party size, one or more tables, and a booking type, everything
+ * else (customer name "Walk in", start time, status, check-in)
  * is filled in server-side by createWalkIn. Tables are grouped by area
  * (DV8 alone has 46) and multi-select, since a walk-in party can be bigger
  * than any single table — e.g. a walk-in of 10 needs several tables pushed
@@ -99,25 +101,37 @@ export function AddWalkInButton({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
-      >
+      <button type="button" onClick={() => setOpen(true)} className={buttonStyles("secondary", "sm")}>
+        <UserPlus className="h-3.5 w-3.5" strokeWidth={2.25} />
         Add walk-in
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={close}>
-          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-semibold text-zinc-900">Add walk-in</h2>
+        <div
+          className="animate-in fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/50 px-4 backdrop-blur-sm"
+          onClick={close}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-zinc-200/80 bg-white p-5 [box-shadow:var(--shadow-lg)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between">
+              <h2 className="text-base font-semibold tracking-tight text-zinc-900">Add walk-in</h2>
+              <button type="button" onClick={close} aria-label="Close" className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700">
+                <X className="h-4 w-4" strokeWidth={2.25} />
+              </button>
+            </div>
             <p className="mt-1 text-xs text-zinc-500">
-              Blocks a table for someone who&apos;s just arrived — not added as a customer or to any marketing list.
+              Blocks a table for someone who&apos;s just arrived, not added as a customer or to any marketing list.
               Check them out from the booking once they leave to free the table up again.
             </p>
 
             <form onSubmit={submit} className="mt-4 flex flex-col gap-3">
-              {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+              {error && (
+                <p className="animate-in rounded-lg border border-red-100 bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-soft-text)]">
+                  {error}
+                </p>
+              )}
 
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium text-zinc-700">Party size</span>
@@ -135,7 +149,7 @@ export function AddWalkInButton({
                 <span className="text-sm font-medium text-zinc-700">
                   Table{tableIds.size > 1 ? "s" : ""}{" "}
                   <span className="font-normal text-zinc-500">
-                    {tableIds.size > 0 ? `(${tableIds.size} selected)` : "— tick more than one for a bigger party"}
+                    {tableIds.size > 0 ? `(${tableIds.size} selected)` : "tick more than one for a bigger party"}
                   </span>
                 </span>
                 <div className="max-h-56 overflow-y-auto rounded-md border border-zinc-300 p-2">
@@ -149,8 +163,10 @@ export function AddWalkInButton({
                           {g.tables.map((t) => (
                             <label
                               key={t.id}
-                              className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm ${
-                                tableIds.has(t.id) ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-zinc-300"
+                              className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-sm transition-colors ${
+                                tableIds.has(t.id)
+                                  ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                                  : "border-zinc-300 hover:border-zinc-400 hover:bg-zinc-50"
                               }`}
                             >
                               <input
@@ -187,18 +203,10 @@ export function AddWalkInButton({
               </label>
 
               <div className="mt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={close}
-                  className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
-                >
+                <button type="button" onClick={close} className={buttonStyles("ghost", "md")}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-hover)] disabled:opacity-50"
-                >
+                <button type="submit" disabled={isPending} className={buttonStyles("primary", "md")}>
                   {isPending ? "Adding…" : "Add walk-in"}
                 </button>
               </div>

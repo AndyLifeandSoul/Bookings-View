@@ -31,7 +31,7 @@ export default async function NewEnquiryPage({
     <div className="mx-auto max-w-2xl px-4 py-8 sm:px-8 sm:py-10">
       <h1 className="text-xl font-semibold text-zinc-900">Add enquiry</h1>
       <p className="mt-1 text-sm text-zinc-500">
-        For a phoned-in or in-person enquiry — every field here is required, since it&apos;s the whole record of what
+        For a phoned-in or in-person enquiry, every field here is required, since it&apos;s the whole record of what
         was discussed until someone follows up.
       </p>
 

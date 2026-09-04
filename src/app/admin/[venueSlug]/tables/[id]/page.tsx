@@ -19,7 +19,7 @@ export default async function EditTablePage({ params }: { params: Promise<{ venu
 
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-base font-semibold text-zinc-900">Edit {table.label}</h2>
+      <h2 className="text-base font-semibold tracking-tight text-zinc-900">Edit {table.label}</h2>
       <ActionForm action={updateTable}>
         <input type="hidden" name="venueId" value={venue.id} />
         <TableFields defaults={table} areas={areas} submitLabel="Save changes" />

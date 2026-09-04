@@ -86,7 +86,7 @@ export async function createManualBooking(formData: FormData): Promise<ActionRes
     const conflicts = await findTableConflicts({ venueId, date, startTime, endTime, tableIds });
     if (conflicts.length > 0) {
       const names = [...new Set(conflicts.map((c) => `${c.tableLabel} (${c.customerName}, ${c.startTime}-${c.endTime})`))];
-      return { error: `Can't book — already booked at this time: ${names.join(", ")}.` };
+      return { error: `Can't book, already booked at this time: ${names.join(", ")}.` };
     }
   }
 

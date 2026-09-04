@@ -13,7 +13,7 @@ export default async function NewBookingTypePage({ params }: { params: Promise<{
 
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-base font-semibold text-zinc-900">New booking type</h2>
+      <h2 className="text-base font-semibold tracking-tight text-zinc-900">New booking type</h2>
       <ActionForm action={createBookingType}>
         <input type="hidden" name="venueId" value={venue.id} />
         <BookingTypeFields areas={areas} submitLabel="Create booking type" />

@@ -9,14 +9,14 @@ import { VenueSwitcher } from "@/components/venue-switcher";
 export const dynamic = "force-dynamic";
 
 /**
- * Top-level chrome for the whole /staff/[venueSlug] app — Diary / Enquiries
+ * Top-level chrome for the whole /staff/[venueSlug] app, Diary / Enquiries
  * / Messages / Sign out, per Andy's nav spec. Deliberately no "List view"
- * tab here — that stays a secondary link off the Diary page (see its
+ * tab here, that stays a secondary link off the Diary page (see its
  * page.tsx), not a top-level tab, per "List view should only be used as an
  * option for staff".
  *
  * Unlike /admin's top-level layout, this one IS venue-scoped (every route
- * under here has a venueSlug), so the venue switcher lives in this bar —
+ * under here has a venueSlug), so the venue switcher lives in this bar,
  * for OWNER/MANAGER sessions only, same reasoning as everywhere else it's
  * used (a STAFF session only has the one venue it's tied to).
  */
@@ -40,14 +40,16 @@ export default async function StaffVenueLayout({
     <>
       <TopBar
         navItems={[
-          { href: `/staff/${venue.slug}/diary`, label: "Diary", fallback: true },
+          { href: `/staff/${venue.slug}/diary`, label: "Diary", fallback: true, icon: "calendar" },
           {
             href: `/staff/${venue.slug}/enquiries`,
             label: enquiryCount > 0 ? `Enquiries (${enquiryCount})` : "Enquiries",
+            icon: "inbox",
           },
           {
             href: `/staff/${venue.slug}/messages`,
             label: unreadCount > 0 ? `Messages (${unreadCount})` : "Messages",
+            icon: "messages",
           },
         ]}
         userName={session.name}
@@ -57,14 +59,17 @@ export default async function StaffVenueLayout({
             <span className="hidden text-sm font-medium text-zinc-200 sm:inline">{venue.name}</span>
             <VenueSwitcher venues={venues} currentSlug={venue.slug} variant="dark" />
             {session.role !== "STAFF" && (
-              <Link href={`/admin/${venue.slug}/details`} className="text-sm text-zinc-300 underline hover:text-white">
+              <Link
+                href={`/admin/${venue.slug}/details`}
+                className="text-sm text-zinc-300 underline decoration-zinc-600 underline-offset-2 transition-colors hover:text-white hover:decoration-zinc-400"
+              >
                 Admin
               </Link>
             )}
           </div>
         }
       />
-      <div className="flex-1 bg-zinc-50">{children}</div>
+      <div className="flex-1">{children}</div>
     </>
   );
 }

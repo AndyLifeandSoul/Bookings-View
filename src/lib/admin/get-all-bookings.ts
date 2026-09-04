@@ -1,13 +1,17 @@
 import { prisma } from "@/lib/db/client";
 
+export type AllBookingsSort = "receivedDesc" | "receivedAsc" | "bookingDesc" | "bookingAsc";
+
 export interface AllBookingsFilters {
   venueId?: string;
-  /** Booking type NAME (not slug/id) — see this function's doc comment for why. */
+  /** Booking type NAME (not slug/id) - see this function's doc comment for why. */
   bookingTypeName?: string;
   /** Bookings on or after this date (inclusive). */
   dateFrom?: Date;
   /** Bookings on or before this date (inclusive). */
   dateTo?: Date;
+  /** Defaults to receivedDesc (most recently made first) when omitted. */
+  sort?: AllBookingsSort;
 }
 
 export interface AllBookingsRow {
@@ -20,16 +24,17 @@ export interface AllBookingsRow {
   startTime: string;
   endTime: string;
   bookingTypeName: string;
+  createdAt: Date;
 }
 
 /**
- * Every CONFIRMED booking across every venue — the cross-venue All Bookings
+ * Every CONFIRMED booking across every venue - the cross-venue All Bookings
  * admin tab's data source. CONFIRMED only, per Andy's spec ("all confirmed
  * bookings"): ENQUIRY has its own dedicated tab (get-open-enquiries.ts),
  * and CANCELLED/NO_SHOW/COMPLETED/PENDING_PAYMENT aren't "a booking that's
  * happening" in the sense this page is for.
  *
- * bookingTypeName filters by name, not a specific venue's booking type id —
+ * bookingTypeName filters by name, not a specific venue's booking type id -
  * different venues have their own BookingType rows (even same-named ones,
  * e.g. every venue's own "Food Reservations"), and a cross-venue filter
  * needs to match all of them at once. Same convention getDashboardStats'
@@ -43,7 +48,7 @@ export async function getAllBookings(filters: AllBookingsFilters): Promise<AllBo
       bookingType: filters.bookingTypeName ? { name: filters.bookingTypeName } : undefined,
       ...(filters.dateFrom || filters.dateTo ? { date: { gte: filters.dateFrom, lte: filters.dateTo } } : {}),
     },
-    orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    orderBy: sortToOrderBy(filters.sort),
     select: {
       id: true,
       customerName: true,
@@ -51,6 +56,7 @@ export async function getAllBookings(filters: AllBookingsFilters): Promise<AllBo
       date: true,
       startTime: true,
       endTime: true,
+      createdAt: true,
       venue: { select: { slug: true, name: true } },
       bookingType: { select: { name: true } },
     },
@@ -66,10 +72,25 @@ export async function getAllBookings(filters: AllBookingsFilters): Promise<AllBo
     startTime: r.startTime,
     endTime: r.endTime,
     bookingTypeName: r.bookingType.name,
+    createdAt: r.createdAt,
   }));
 }
 
-/** Every distinct active booking-type name across every venue, alphabetical — for the filter dropdown. */
+function sortToOrderBy(sort: AllBookingsSort | undefined) {
+  switch (sort) {
+    case "receivedAsc":
+      return [{ createdAt: "asc" as const }];
+    case "bookingDesc":
+      return [{ date: "desc" as const }, { startTime: "desc" as const }];
+    case "bookingAsc":
+      return [{ date: "asc" as const }, { startTime: "asc" as const }];
+    case "receivedDesc":
+    default:
+      return [{ createdAt: "desc" as const }];
+  }
+}
+
+/** Every distinct active booking-type name across every venue, alphabetical - for the filter dropdown. */
 export async function listBookingTypeNames(): Promise<string[]> {
   const rows = await prisma.bookingType.findMany({
     where: { active: true },

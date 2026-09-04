@@ -1,60 +1,139 @@
 @import "tailwindcss";
 
 /*
- * Fixed to light — every component in this app hardcodes light-mode
+ * Fixed to light, every component in this app hardcodes light-mode
  * Tailwind classes (bg-white, text-zinc-900, border-zinc-300, etc.) with no
  * dark: variants anywhere, so there's no actual dark UI for a system dark
  * mode to switch to. Left as the Next.js scaffold default's
  * `prefers-color-scheme: dark` block, this only flipped :root's unused CSS
- * variables — but browsers also use `color-scheme` (auto-detected from
+ * variables, but browsers also use `color-scheme` (auto-detected from
  * prefers-color-scheme when not set explicitly) to decide how to paint
  * *native form controls*: text inputs, selects, the number spinner, the
  * date input. With no explicit color-scheme, Safari/Chrome in dark mode
  * rendered those controls' text in a light/washed-out color while their
- * background stayed the page's white — every input, textarea, and select
+ * background stayed the page's white, every input, textarea, and select
  * across admin and staff pages read as barely-legible pale grey text.
  * Forcing color-scheme: light makes native controls render with dark text
  * on white, matching the rest of the (light-only) UI.
  */
 :root {
   color-scheme: light;
-  --background: #f6f6f8;
-  --foreground: #18181b;
+  --background: #f8f6f3;
+  --foreground: #1c211f;
 
-  /* Brand accent — used sparingly and consistently across the new nav
-   * chrome, primary buttons, active tab states, and status badges, so the
-   * app reads as one designed tool rather than a stack of unstyled admin
-   * forms. Indigo rather than the previous all-zinc monochrome palette. */
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-soft: #eef2ff;
-  --accent-soft-text: #4338ca;
+  /* Brand accent: deep ink-teal, not a purple (too close to what every
+   * other hospitality booking tool on the market already uses as its
+   * brand colour, purple reads as borrowed rather than owned) and not the
+   * indigo-600 every generic admin template reaches for either. Sits
+   * clearly apart from all four semantic hues below (never mistakable
+   * for success-green, danger-red, warning-amber, or info-blue) while
+   * reading as dark, grounded, and hospitality-appropriate - the kind of
+   * ink you'd find on a good cocktail menu, not a SaaS gradient. Shows up
+   * everywhere: nav chrome, primary buttons, active tab states, links,
+   * focus rings. */
+  --accent: #1f3d3a;
+  --accent-hover: #17302d;
+  --accent-active: #122523;
+  --accent-soft: #eaf2f0;
+  --accent-soft-text: #17302d;
+  /* Secondary accent: the actual gold from the real Life & Soul logo
+   * (sampled from the brand mark, not invented), for variety (stat tiles,
+   * the background wash, decorative dots, the wordmark itself) - never
+   * for text-on-white body copy, its contrast against white is too low
+   * for that. Paired with the ink-teal primary the way brass fittings
+   * pair with a dark bar top. */
+  --accent-2: #f1b300;
+
+  /* Semantic surface tints for status colour-coding (badges, banners,
+   * empty states). Each pairs a soft background with a readable-on-it
+   * text colour, kept in one place so a tone only ever needs tuning here. */
+  --success: #059669;
+  --success-soft: #ecfdf5;
+  --success-soft-text: #047857;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+  --warning-soft-text: #b45309;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --danger-soft-text: #b91c1c;
+  --info: #0284c7;
+  --info-soft: #f0f9ff;
+  --info-soft-text: #0369a1;
+  /* A dedicated rose, distinct from --danger, for the diary's live "now"
+   * line only - the one place this app deliberately follows the near-
+   * universal calendar-app convention (Google/Outlook/Apple Calendar all
+   * mark the current time in red) rather than the brand palette, because
+   * "this is live time, not a status" needs to be recognised instantly. */
+  --now-line: #e11d48;
+
+  /* Shadow tokens, slightly tinted toward the accent instead of pure black,
+   * so elevated surfaces feel like part of the same coloured system rather
+   * than a generic Bootstrap-style grey drop shadow. */
+  --shadow-color: 172 35% 16%;
+  --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.06), 0 1px 1px hsl(var(--shadow-color) / 0.04);
+  --shadow-md: 0 4px 10px hsl(var(--shadow-color) / 0.08), 0 2px 4px hsl(var(--shadow-color) / 0.05);
+  --shadow-lg: 0 12px 28px hsl(var(--shadow-color) / 0.12), 0 4px 10px hsl(var(--shadow-color) / 0.06);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Bundled, not OS-native - renders identically on Andy's Mac and every
+   * staff Windows laptop alike, see layout.tsx's doc comment for why. */
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-jetbrains-mono);
+  /* Same family as --font-sans, kept as its own token (rather than just
+   * using font-sans everywhere) so a heading's className still says what
+   * it means - "this is a display moment" - and any future change to just
+   * the display cut doesn't mean touching every h1/h2 call site. */
+  --font-display: var(--font-sans);
+}
+
+html {
+  /* A faint fixed wash behind every page, rather than one flat
+   * background-color - this is what stops big empty admin backgrounds
+   * (Home, empty states) reading as a plain grey database screen. Fixed
+   * attachment so it doesn't visibly repeat/shift as tall pages scroll.
+   * Paired with a very fine grain (data-URI SVG turbulence, no external
+   * asset) at barely-there opacity - the kind of texture a printed menu
+   * or a linen tablecloth has, not a photo background, so it reads as
+   * tactile rather than decorated. */
+  background-color: var(--background);
+  background-image:
+    radial-gradient(60rem 30rem at 12% -10%, color-mix(in srgb, var(--accent) 7%, transparent), transparent),
+    radial-gradient(50rem 25rem at 108% 6%, color-mix(in srgb, var(--accent-2) 7%, transparent), transparent),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.028'/%3E%3C/svg%3E");
+  background-attachment: fixed;
+  background-repeat: no-repeat, no-repeat, repeat;
 }
 
 body {
-  background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
 
-/* Consistent, visible keyboard focus everywhere — the previous browser
+/* Every page title and section heading goes bold and tight rather than
+ * switching typeface - hierarchy from weight and tracking, not from a
+ * second "designed" font competing with the body text. */
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+/* Consistent, visible keyboard focus everywhere, the previous browser
  * default outline was inconsistent across form controls, links, and
  * buttons. Doesn't touch mouse-click focus (:focus-visible only). */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* Every native text/number/date/time input, select, and textarea in this
  * app shares this look already via repeated Tailwind classes
- * (border-zinc-300, rounded-md, px-3 py-2) — this just gives them a
+ * (border-zinc-300, rounded-md, px-3 py-2), this just gives them a
  * slightly smoother focus transition and a consistent accent focus ring
  * (overriding Tailwind's default blue) without having to touch every form. */
 input,
@@ -62,7 +141,8 @@ select,
 textarea {
   transition:
     border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
 }
 input:focus,
 select:focus,
@@ -71,10 +151,89 @@ textarea:focus {
   box-shadow: 0 0 0 3px var(--accent-soft);
   outline: none;
 }
+input:hover:not(:disabled, :focus),
+select:hover:not(:disabled, :focus),
+textarea:hover:not(:disabled, :focus) {
+  border-color: #a1a1aa;
+}
 
 /* Thin, unobtrusive scrollbar for the horizontally-scrolling tables/diary
- * grid rather than the chunky OS default — most visible on the diary. */
+ * grid rather than the chunky OS default, most visible on the diary. */
 * {
   scrollbar-width: thin;
   scrollbar-color: #d4d4d8 transparent;
+}
+
+/* ---------------------------------------------------------------------
+ * Motion. Small, purposeful, and consistent rather than decorative, a
+ * page's main content fades/lifts in once on load (feels alive without
+ * being distracting on every re-render), and interactive surfaces get a
+ * shared "lift" transition class instead of every page hand-rolling its
+ * own hover shadow/translate combination.
+ * ------------------------------------------------------------------- */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* fill-mode is "backwards", deliberately not "both"/"forwards" - a finished
+ * CSS animation with a forwards-filling transform keeps applying that
+ * transform (even an identity translateY(0)) forever after, which silently
+ * turns the element into a new containing block for any position:fixed
+ * descendant (a popover, a modal) added later, positioning it relative to
+ * this wrapper instead of the viewport. "backwards" still holds the
+ * pre-start (opacity:0) state for staggered children during their delay,
+ * it just stops pinning the transform once the animation's actually done,
+ * so the element reverts to its normal (transform: none) styling and stays
+ * a well-behaved ancestor. */
+.animate-in {
+  animation: fade-in-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Staggered children, e.g. a grid of stat cards or a list of table rows,
+ * each direct child gets an incrementally later start so they cascade in
+ * rather than popping together. Capped at 8 items, past that the delay is
+ * imperceptible and not worth the extra selectors. */
+.animate-in-stagger > * {
+  animation: fade-in-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.animate-in-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.animate-in-stagger > *:nth-child(2) { animation-delay: 40ms; }
+.animate-in-stagger > *:nth-child(3) { animation-delay: 80ms; }
+.animate-in-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.animate-in-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.animate-in-stagger > *:nth-child(6) { animation-delay: 200ms; }
+.animate-in-stagger > *:nth-child(7) { animation-delay: 240ms; }
+.animate-in-stagger > *:nth-child(8) { animation-delay: 280ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-in-stagger > * {
+    animation: none;
+  }
+}
+
+/* Shared "elevatable surface" interaction, a card/row/link that should
+ * feel clickable: a slightly deeper shadow and a small lift on hover, a
+ * quick settle on active (press). Applied via className, not a variant
+ * system, so it composes freely with each component's own layout classes. */
+.lift {
+  transition:
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.lift:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
 }

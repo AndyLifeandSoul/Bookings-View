@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { updateArea, deleteArea } from "./actions";
 import type { ActionResult } from "@/components/action-form";
+import { buttonStyles } from "@/components/ui/button";
 
 /**
  * Areas are simple enough (name + priority) that inline edit-in-place beats
@@ -35,7 +36,7 @@ export function AreaRow({
   );
 
   return (
-    <div className="flex flex-col gap-2 border-b border-zinc-100 px-4 py-3 last:border-0 sm:flex-row sm:items-center sm:gap-4">
+    <div className="flex flex-col gap-2 border-b border-zinc-50 px-4 py-3 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40 sm:flex-row sm:items-center sm:gap-4">
       <form action={editAction} className="flex flex-1 flex-wrap items-center gap-3">
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="venueId" value={venueId} />
@@ -61,22 +62,18 @@ export function AreaRow({
         <span className="pt-4 text-xs text-zinc-400">
           {tableCount} table{tableCount === 1 ? "" : "s"}
         </span>
-        <button
-          type="submit"
-          disabled={editPending}
-          className="mt-4 rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-        >
+        <button type="submit" disabled={editPending} className={buttonStyles("secondary", "sm", "mt-4")}>
           {editPending ? "Saving…" : "Save"}
         </button>
       </form>
-      {editState?.error && <p className="text-sm text-red-700">{editState.error}</p>}
+      {editState?.error && <p className="text-sm text-[var(--danger-soft-text)]">{editState.error}</p>}
       <form action={deleteAction}>
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="venueId" value={venueId} />
         <button
           type="submit"
           disabled={deletePending}
-          className="text-sm text-red-600 underline hover:text-red-800 disabled:opacity-50"
+          className="text-sm font-medium text-[var(--danger)] underline decoration-dotted underline-offset-2 transition-colors hover:text-red-800 disabled:opacity-50"
         >
           {deletePending ? "Removing…" : "Remove"}
         </button>

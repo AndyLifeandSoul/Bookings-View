@@ -47,8 +47,8 @@ export function VenueSwitcher({
       aria-label="Switch venue"
       className={
         variant === "dark"
-          ? "rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm font-medium text-zinc-100"
-          : "rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm font-medium text-zinc-700"
+          ? "rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm font-medium text-zinc-100 transition-colors hover:border-zinc-600 hover:bg-zinc-700"
+          : "rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:border-zinc-400"
       }
     >
       {venues.map((v) => (

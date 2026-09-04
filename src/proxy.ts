@@ -55,6 +55,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except static assets and the Next.js internals.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Everything except static assets and the Next.js internals. /brand/ is
+  // this app's public logo/wordmark assets (src/app/../public/brand/) -
+  // has to stay reachable pre-auth same as favicon.ico, the login page
+  // itself renders one of these images and is the one page that's always
+  // reachable with no session.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|brand/).*)"],
 };

@@ -15,7 +15,7 @@ export function DateJump({ venueSlug, dateStr, label }: { venueSlug: string; dat
 
   return (
     <span className="relative inline-flex">
-      <span className="text-sm font-medium text-zinc-900 underline decoration-dotted decoration-zinc-400 underline-offset-4">
+      <span className="cursor-pointer text-sm font-medium text-zinc-900 underline decoration-dotted decoration-zinc-400 underline-offset-4 transition-colors hover:text-[var(--accent)] hover:decoration-[var(--accent)]">
         {label}
       </span>
       <input

@@ -15,10 +15,10 @@ export interface OpenEnquiry {
 }
 
 /**
- * Every open enquiry (Booking.status "ENQUIRY") across every venue — the
+ * Every open enquiry (Booking.status "ENQUIRY") across every venue - the
  * dedicated cross-venue Enquiries admin tab's data source. Was previously
  * just the top 50 shown on the Home dashboard; that box is gone now this
- * page exists (see admin/page.tsx), so this has no cap — a pilot-sized
+ * page exists (see admin/page.tsx), so this has no cap - a pilot-sized
  * operation isn't going to produce thousands of simultaneously open
  * enquiries, and if it ever does, that's exactly the kind of thing this
  * page exists to surface, not hide behind a limit.

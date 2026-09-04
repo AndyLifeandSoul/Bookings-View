@@ -79,7 +79,7 @@ export async function deleteMenu(formData: FormData): Promise<ActionResult> {
     await prisma.menu.updateMany({ where: { id, venueId: venue.id }, data: { active: false } });
     revalidatePath(`/admin/${venue.slug}/menus`);
     return {
-      error: `"${menu.name}" has ${preOrderCount} pre-order(s) against it, so it can't be deleted — deactivated instead.`,
+      error: `"${menu.name}" has ${preOrderCount} pre-order(s) against it, so it can't be deleted, deactivated instead.`,
     };
   }
 
@@ -183,7 +183,7 @@ export async function deleteMenuItem(formData: FormData): Promise<ActionResult> 
     await prisma.menuItem.updateMany({ where: { id, menuId }, data: { active: false } });
     revalidatePath(`/admin/${venue.slug}/menus/${menuId}`);
     return {
-      error: `"${item.name}" is on ${preOrderItemCount} existing pre-order(s), so it can't be deleted — deactivated instead.`,
+      error: `"${item.name}" is on ${preOrderItemCount} existing pre-order(s), so it can't be deleted, deactivated instead.`,
     };
   }
 
