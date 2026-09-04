@@ -8,6 +8,7 @@ import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AreaRow } from "./area-row";
+import { AreaBulkToggle } from "./area-bulk-toggle";
 import { DeleteTableButton } from "./delete-table-button";
 import { DeleteLinkButton } from "./delete-link-button";
 import { createArea, createTableLink } from "./actions";
@@ -100,13 +101,22 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
           </Card>
         ) : (
           <div className="mt-4 flex flex-col gap-5">
-            {groupByArea(tables, areas).map(([areaName, groupTables]) => (
+            {groupByArea(tables, areas).map(({ areaId, areaName, tables: groupTables }) => (
               <Card key={areaName} padded={false} className="overflow-hidden">
-                <div className="flex items-center gap-2 border-b border-zinc-100 bg-zinc-50/60 px-4 py-2.5">
+                <div className="flex flex-wrap items-center gap-2 border-b border-zinc-100 bg-zinc-50/60 px-4 py-2.5">
                   <h3 className="text-sm font-semibold tracking-tight text-zinc-800">{areaName}</h3>
                   <span className="text-xs text-zinc-400">
                     {groupTables.length} {groupTables.length === 1 ? "table" : "tables"}
                   </span>
+                  {areaId && (
+                    <AreaBulkToggle
+                      venueId={venue.id}
+                      areaId={areaId}
+                      areaName={areaName}
+                      hasActive={groupTables.some((t) => t.active)}
+                      hasInactive={groupTables.some((t) => !t.active)}
+                    />
+                  )}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[560px] text-left text-sm">
@@ -208,32 +218,34 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
 }
 
 /**
- * Groups the already-natural-sorted table list by area name, in the same
+ * Groups the already-natural-sorted table list by area, in the same
  * priority order as the Areas section above (lower priority number first,
  * matching auto-assignment's own fill order) - the Area column each row
  * already showed becomes a section header instead, so a venue with 40+
  * tables reads as its physical layout rather than one long alphabetic
- * list. Tables with no area go in a trailing "No area" group, only shown
- * when at least one table actually has no area.
+ * list. Tables with no area go in a trailing "No area" group (areaId
+ * null, only shown when at least one table actually has no area) - that
+ * group gets no AreaBulkToggle on the page, there's no Area row for it to
+ * act on.
  */
-function groupByArea<T extends { area: { name: string } | null }>(
+function groupByArea<T extends { areaId: string | null }>(
   tables: T[],
-  areas: { name: string; priority: number }[],
-): [string, T[]][] {
-  const orderedNames = [...areas].sort((a, b) => a.priority - b.priority).map((a) => a.name);
-  const groups = new Map<string, T[]>();
+  areas: { id: string; name: string; priority: number }[],
+): { areaId: string | null; areaName: string; tables: T[] }[] {
+  const orderedAreas = [...areas].sort((a, b) => a.priority - b.priority);
+  const groups = new Map<string | null, T[]>();
   for (const table of tables) {
-    const key = table.area?.name ?? "No area";
+    const key = table.areaId;
     const existing = groups.get(key);
     if (existing) existing.push(table);
     else groups.set(key, [table]);
   }
-  const result: [string, T[]][] = [];
-  for (const name of orderedNames) {
-    const group = groups.get(name);
-    if (group) result.push([name, group]);
+  const result: { areaId: string | null; areaName: string; tables: T[] }[] = [];
+  for (const area of orderedAreas) {
+    const group = groups.get(area.id);
+    if (group) result.push({ areaId: area.id, areaName: area.name, tables: group });
   }
-  const noArea = groups.get("No area");
-  if (noArea) result.push(["No area", noArea]);
+  const noArea = groups.get(null);
+  if (noArea) result.push({ areaId: null, areaName: "No area", tables: noArea });
   return result;
 }

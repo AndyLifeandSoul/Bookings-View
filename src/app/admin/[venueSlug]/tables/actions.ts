@@ -59,6 +59,33 @@ export async function updateArea(formData: FormData): Promise<ActionResult> {
   revalidatePath(`/admin/${venue.slug}/tables`);
 }
 
+/**
+ * Bulk activate/deactivate every table in one area - Andy: DV8's outside
+ * tables don't need to be bookable over winter, but come back every
+ * spring, so this needs to be a one-click toggle rather than editing each
+ * table individually. Deliberately just a bulk version of Table.active
+ * (see deleteTable's doc comment for what that field already does): the
+ * tables themselves, any area/booking-type configuration, and any
+ * bookings already made against them are all untouched, they just stop
+ * being offered for new bookings and drop off the staff diary grid
+ * (which already only lists active tables) until switched back on.
+ */
+export async function setAreaTablesActive(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const areaId = String(formData.get("areaId") ?? "").trim();
+  if (!areaId) return { error: "Missing area." };
+  const active = formData.get("active") === "true";
+
+  const area = await prisma.area.findFirst({ where: { id: areaId, venueId: venue.id }, select: { id: true, name: true } });
+  if (!area) return { error: "Area not found for this venue." };
+
+  const result = await prisma.table.updateMany({ where: { areaId, venueId: venue.id }, data: { active } });
+  revalidatePath(`/admin/${venue.slug}/tables`);
+  if (result.count === 0) return { error: `No tables in "${area.name}" needed updating.` };
+}
+
 export async function deleteArea(formData: FormData): Promise<ActionResult> {
   await requireAdminSession();
   const venue = await resolveVenue(formData);
