@@ -41,10 +41,6 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
     <div className="flex flex-col gap-10">
       <section>
         <h2 className="text-base font-semibold tracking-tight text-zinc-900">Weekly opening hours</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          A day left checked as closed ignores its times. Closing time earlier than opening time is treated as past
-          midnight, e.g. 12:00–02:00 is a valid Friday.
-        </p>
         <Card padded={false} className="mt-4 overflow-hidden">
           <ActionForm action={saveWeeklyHours}>
             <input type="hidden" name="venueId" value={venue.id} />
@@ -101,10 +97,6 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
 
       <section>
         <h2 className="text-base font-semibold tracking-tight text-zinc-900">Special dates</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          One-off overrides for a specific date, a closure, a bank holiday, extended NYE hours. Where a date has an
-          entry here, it completely replaces the weekly hours above for that date.
-        </p>
 
         {upcomingExceptions.length > 0 && (
           <Card padded={false} className="mt-4 overflow-hidden">
@@ -202,11 +194,6 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
 
       <section>
         <h2 className="text-base font-semibold tracking-tight text-zinc-900">Blocked periods</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Carve a private event or closure out of an otherwise-open day, leaving the hours either side still
-          bookable, e.g. open 12:00–22:00 but blocked 14:00–18:00 for a private hire. Unlike a special date above,
-          this doesn&apos;t replace the whole day&apos;s hours, and more than one can apply to the same date.
-        </p>
 
         {upcomingBlocks.length > 0 && (
           <Card padded={false} className="mt-4 overflow-hidden">

@@ -42,11 +42,6 @@ export default async function NewBookingPage({
         </span>
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Add booking</h1>
       </div>
-      <p className="mt-2 text-sm text-zinc-500">
-        For a phoned-in or walk-in booking. A booking for <strong>today</strong> only needs a time, name, table and
-        booking type, no contact details required. A booking for a <strong>future date</strong> needs an email or
-        phone number, and who took it.
-      </p>
 
       <Card className="mt-6">
         <ActionForm action={createManualBooking} className="flex flex-col gap-4">
@@ -73,7 +68,6 @@ export default async function NewBookingPage({
                 placeholder="Your name"
                 className="rounded-md border border-zinc-300 px-3 py-2"
               />
-              <span className="text-xs text-zinc-500">Required for a future date, since every venue shares one login.</span>
             </label>
           </div>
 
@@ -113,7 +107,6 @@ export default async function NewBookingPage({
                 ))}
               </div>
             )}
-            <span className="text-xs text-zinc-500">Required for a same-day booking; optional for a future date.</span>
           </fieldset>
 
           <div>

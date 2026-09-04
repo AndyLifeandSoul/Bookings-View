@@ -85,7 +85,6 @@ export default async function DiaryPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">{venue.name} Table diary</h1>
-            <p className="text-sm text-zinc-500">Drag a booking onto a different table to reseat it.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <RefreshButton />

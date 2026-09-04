@@ -30,10 +30,6 @@ export default async function NewEnquiryPage({
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 sm:px-8 sm:py-10">
       <h1 className="text-xl font-semibold text-zinc-900">Add enquiry</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        For a phoned-in or in-person enquiry, every field here is required, since it&apos;s the whole record of what
-        was discussed until someone follows up.
-      </p>
 
       <ActionForm action={createManualEnquiry} className="mt-6 flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5">
         <input type="hidden" name="venueId" value={venue.id} />

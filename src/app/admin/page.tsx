@@ -19,7 +19,6 @@ export default async function AdminHomePage() {
       <div className="flex flex-col gap-10">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Home</h1>
-          <p className="mt-1 text-sm text-zinc-500">Across every venue.</p>
         </div>
 
         <Section title="Today &amp; this week">
@@ -94,7 +93,6 @@ function StatsTable<T>({
   getKey: (row: T) => string;
   getLabel: (row: T) => string;
 }) {
-  const maxCovers = Math.max(...rows.map((r) => r.covers), 1);
   return (
     <Card padded={false} className="overflow-hidden">
       <div className="overflow-x-auto">
@@ -111,17 +109,7 @@ function StatsTable<T>({
               <tr key={getKey(row)} className="group border-b border-zinc-50 transition-colors last:border-0 hover:bg-zinc-50/80">
                 <td className="px-4 py-3 font-medium text-zinc-900">{getLabel(row)}</td>
                 <td className="px-4 py-3 tabular-nums text-zinc-700">{row.bookings}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-8 tabular-nums text-zinc-700">{row.covers}</span>
-                    <span className="h-1.5 flex-1 max-w-24 overflow-hidden rounded-full bg-zinc-100">
-                      <span
-                        className="block h-full rounded-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent-2)] transition-all duration-500 ease-out"
-                        style={{ width: `${Math.max(6, (row.covers / maxCovers) * 100)}%` }}
-                      />
-                    </span>
-                  </div>
-                </td>
+                <td className="px-4 py-3 tabular-nums text-zinc-700">{row.covers}</td>
               </tr>
             ))}
           </tbody>

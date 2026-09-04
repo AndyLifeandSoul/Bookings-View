@@ -38,10 +38,6 @@ export default async function StaffAccountsPage() {
         </span>
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Staff accounts</h1>
       </div>
-      <p className="mt-2 text-sm text-zinc-500">
-        Owner and Manager logins see every venue from one account. Staff logins are tied to exactly one venue&apos;s
-        diary.
-      </p>
 
       <Card padded={false} className="mt-6 overflow-hidden">
         <div className="overflow-x-auto">

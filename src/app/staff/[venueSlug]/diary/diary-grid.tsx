@@ -395,7 +395,6 @@ export function DiaryGrid({
             <Users2 className="h-3.5 w-3.5 text-zinc-400" strokeWidth={2.25} />
             Unassigned
           </h3>
-          <p className="mt-1 text-xs text-zinc-500">Drag onto a table row above to seat.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {unassigned.map((booking) => (
               <button

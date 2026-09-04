@@ -34,10 +34,6 @@ export default async function MarketingPage({ params }: { params: Promise<{ venu
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold tracking-tight text-zinc-900">Marketing opt-ins</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Customers who ticked the marketing consent box at booking time, never inferred, only what they actually
-            checked.
-          </p>
         </div>
         <a href={`/api/admin/${venue.slug}/marketing-export`} className={buttonStyles("primary", "sm")}>
           <Download className="h-3.5 w-3.5" strokeWidth={2.25} />

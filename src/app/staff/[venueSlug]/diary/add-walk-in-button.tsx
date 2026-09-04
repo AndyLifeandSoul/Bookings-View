@@ -121,10 +121,6 @@ export function AddWalkInButton({
                 <X className="h-4 w-4" strokeWidth={2.25} />
               </button>
             </div>
-            <p className="mt-1 text-xs text-zinc-500">
-              Blocks a table for someone who&apos;s just arrived, not added as a customer or to any marketing list.
-              Check them out from the booking once they leave to free the table up again.
-            </p>
 
             <form onSubmit={submit} className="mt-4 flex flex-col gap-3">
               {error && (
@@ -148,9 +144,9 @@ export function AddWalkInButton({
               <div className="flex flex-col gap-1">
                 <span className="text-sm font-medium text-zinc-700">
                   Table{tableIds.size > 1 ? "s" : ""}{" "}
-                  <span className="font-normal text-zinc-500">
-                    {tableIds.size > 0 ? `(${tableIds.size} selected)` : "tick more than one for a bigger party"}
-                  </span>
+                  {tableIds.size > 0 && (
+                    <span className="font-normal text-zinc-500">({tableIds.size} selected)</span>
+                  )}
                 </span>
                 <div className="max-h-56 overflow-y-auto rounded-md border border-zinc-300 p-2">
                   {tables.length === 0 ? (

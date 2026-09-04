@@ -27,7 +27,6 @@ export default async function StaffListPage({ params }: { params: Promise<{ venu
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">{venue.name}, list view</h1>
-            <p className="text-sm text-zinc-500">Every upcoming booking, in one list.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link href={`/staff/${venue.slug}/bookings/new`} className={buttonStyles("primary", "sm")}>

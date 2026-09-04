@@ -59,9 +59,7 @@ export default async function AdminAllBookingsPage({ searchParams }: { searchPar
     <div className="animate-in mx-auto max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">All bookings</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Upcoming confirmed bookings across every venue, {bookings.length} shown. Set &quot;Date from&quot; to look back at ones that have already happened.
-        </p>
+        <p className="mt-1 text-sm text-zinc-500">Upcoming confirmed bookings across every venue, {bookings.length} shown.</p>
       </div>
 
       <Card className="mt-6">

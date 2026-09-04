@@ -73,22 +73,17 @@ export function BookingTypeFields({
 
       <label className="flex items-center gap-2">
         <input type="checkbox" name="active" defaultChecked={defaults?.active ?? true} className="h-4 w-4 rounded border-zinc-300" />
-        <span className="text-sm font-medium text-zinc-700">
-          Active <span className="font-normal text-zinc-500">(visible for new bookings)</span>
-        </span>
+        <span className="text-sm font-medium text-zinc-700">Active</span>
       </label>
 
       <label className="flex flex-col gap-1">
         <span className="text-sm font-medium text-zinc-700">Diary colour</span>
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            name="color"
-            defaultValue={defaults?.color ?? "#7c3aed"}
-            className="h-9 w-14 cursor-pointer rounded-md border border-zinc-300 p-1"
-          />
-          <span className="text-xs text-zinc-500">Shown as the banner on this type&apos;s blocks in the staff table diary.</span>
-        </div>
+        <input
+          type="color"
+          name="color"
+          defaultValue={defaults?.color ?? "#7c3aed"}
+          className="h-9 w-14 cursor-pointer rounded-md border border-zinc-300 p-1"
+        />
       </label>
 
       {/*
@@ -203,9 +198,7 @@ export function BookingTypeFields({
           defaultChecked={defaults?.runsUntilClose ?? false}
           className="h-4 w-4 rounded border-zinc-300"
         />
-        <span className="text-sm font-medium text-zinc-700">
-          Runs until close <span className="font-normal text-zinc-500">(e.g. Quiz Night, ignores the duration fields above; every booking runs to that day&apos;s closing time)</span>
-        </span>
+        <span className="text-sm font-medium text-zinc-700">Runs until close</span>
       </label>
 
       <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
@@ -230,11 +223,6 @@ export function BookingTypeFields({
             />
           </label>
         </div>
-        <span className="text-xs text-zinc-500">
-          Narrows the venue&apos;s own opening hours for this type only: a booking can&apos;t start earlier or later
-          than these times (it can still run past &quot;latest&quot;, it just can&apos;t start after it). Leave both
-          blank to use the full opening hours.
-        </span>
       </fieldset>
 
       <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
@@ -253,11 +241,6 @@ export function BookingTypeFields({
             </label>
           ))}
         </div>
-        <span className="text-xs text-zinc-500">
-          Leave every day unchecked to close this type every day of the week, for a specials-only type that&apos;s
-          only ever bookable on dates added below (e.g. Quiz Night). A date override below can still force a
-          specific date open or closed regardless of this.
-        </span>
       </fieldset>
 
       <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
@@ -304,11 +287,6 @@ export function BookingTypeFields({
             ))}
           </div>
         )}
-        <span className="text-xs text-zinc-500">
-          Tick an area to restrict this type to only its tables (e.g. a wreath-making event assigned to the Shop
-          tables only), lower priority number fills first. Leave every area unticked to allow every table,
-          venue-wide priority order unchanged.
-        </span>
       </fieldset>
 
       <label className="flex flex-col gap-1">
@@ -322,12 +300,6 @@ export function BookingTypeFields({
           <option value="WHOLE_AREA">Whole area: staff pick one area, every table in it is reserved</option>
           <option value="WHOLE_VENUE">Whole venue: every table is reserved</option>
         </select>
-        <span className="text-xs text-zinc-500">
-          For Area Hire / Full Venue Hire-style types where a booking blocks a whole area or the whole venue
-          regardless of party size, not just enough tables to fit. Adds a one-click &quot;fill this area&quot;/&quot;select
-          every table&quot; helper to the Tables section on this type&apos;s bookings, instead of ticking tables one by
-          one. Leave as &quot;Per booking&quot; for everything else.
-        </span>
       </label>
 
       <label className="flex flex-col gap-1">
@@ -340,10 +312,6 @@ export function BookingTypeFields({
           placeholder="e.g. 12"
           className="w-32 rounded-md border border-zinc-300 px-3 py-2"
         />
-        <span className="text-xs text-zinc-500">
-          A party at or under this size books instantly. Above it, the booking is created as an enquiry for staff to
-          confirm manually instead of auto-confirming. Leave blank to always auto-confirm.
-        </span>
       </label>
 
       <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">

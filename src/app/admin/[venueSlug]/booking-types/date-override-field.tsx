@@ -83,10 +83,6 @@ export function DateOverrideField({ defaultRows }: { defaultRows: DateOverrideRo
       >
         + Add a date override
       </button>
-      <p className="text-xs text-zinc-500">
-        Leave start/end blank to cover the whole day, e.g. leave them blank with "Close" for a bank holiday, or "Allow" for a
-        one-off special. Set both to open or close just part of a day instead.
-      </p>
     </div>
   );
 }

@@ -26,10 +26,6 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold tracking-tight text-zinc-900">Pre-order menus</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Menus customers choose items from at booking time, required for any booking type marked
-            &quot;requires pre-order&quot;.
-          </p>
         </div>
         <Link href={`/admin/${venue.slug}/menus/new`} className={buttonStyles("primary", "sm")}>
           <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />

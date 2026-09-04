@@ -30,7 +30,6 @@ export default async function MessagesPage({ params }: { params: Promise<{ venue
   return (
     <div className="animate-in mx-auto max-w-4xl px-4 py-8 sm:px-8 sm:py-10">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Messages</h1>
-      <p className="mt-1 text-sm text-zinc-500">Bookings with unread replies from a customer.</p>
 
       {bookings.length === 0 ? (
         <Card className="mt-6 flex flex-col items-center gap-2 py-10 text-center">

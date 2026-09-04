@@ -42,11 +42,6 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
     <div className="flex flex-col gap-10">
       <section>
         <h2 className="text-base font-semibold tracking-tight text-zinc-900">Areas</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Named groupings of tables, &quot;Downstairs&quot;, &quot;Terrace&quot;. Priority controls auto-assignment
-          fill order: a lower number fills first, so bookings exhaust one area&apos;s capacity before spilling into
-          the next.
-        </p>
 
         {areas.length > 0 && (
           <Card padded={false} className="mt-4 overflow-hidden">
@@ -89,9 +84,6 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold tracking-tight text-zinc-900">Tables</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              What auto-assignment and the staff diary actually seat parties at.
-            </p>
           </div>
           <Link href={`/admin/${venue.slug}/tables/new`} className={buttonStyles("primary", "sm")}>
             <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
@@ -160,10 +152,6 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
 
       <section>
         <h2 className="text-base font-semibold tracking-tight text-zinc-900">Linked tables</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Physically adjacent tables that can be combined onto one booking, and that auto-assignment tries not to
-          double-book side by side for two different parties when it has another option.
-        </p>
 
         {links.length > 0 && (
           <Card padded={false} className="mt-4 overflow-hidden">

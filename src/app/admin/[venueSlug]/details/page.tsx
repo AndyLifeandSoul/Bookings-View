@@ -27,10 +27,7 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
   });
 
   return (
-    <Section
-      title="Venue details"
-      description="Real-world contact details for this venue, also what's shown as the sending address on booking confirmation emails once that's connected (see Messages)."
-    >
+    <Section title="Venue details">
       <Card>
         <ActionForm action={updateVenueDetails} className="flex flex-col gap-4">
           <input type="hidden" name="venueId" value={venue.id} />
@@ -75,10 +72,6 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
                 placeholder="bookings@venuename.co.uk"
                 className="rounded-md border border-zinc-300 px-3 py-2"
               />
-              <span className="text-xs text-zinc-500">
-                This is the mailbox confirmation emails will send from and replies will land in, once email is
-                connected (Microsoft 365), see the Messages tab.
-              </span>
             </label>
           </div>
 
@@ -91,10 +84,6 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
               placeholder="DV8"
               className="w-40 rounded-md border border-zinc-300 px-3 py-2 uppercase"
             />
-            <span className="text-xs text-zinc-500">
-              2-8 letters/numbers, e.g. &quot;DV8&quot;. Shown at the start of every confirmation number this venue
-              issues. Changing it only affects new bookings, existing references don&apos;t change.
-            </span>
           </label>
 
           <label className="flex flex-col gap-1">
@@ -107,11 +96,6 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
               placeholder="e.g. 20"
               className="w-32 rounded-md border border-zinc-300 px-3 py-2"
             />
-            <span className="text-xs text-zinc-500">
-              Once confirmed arrivals within any 30-minute window would exceed this many guests, a further booking
-              still comes through, just as an enquiry for staff to confirm manually, regardless of its own party
-              size. Leave blank for no cap.
-            </span>
           </label>
 
           <div>

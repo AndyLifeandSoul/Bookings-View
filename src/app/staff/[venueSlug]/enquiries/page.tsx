@@ -35,10 +35,6 @@ export default async function EnquiriesPage({ params }: { params: Promise<{ venu
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Enquiries</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Bookings waiting for staff to confirm, respond to, or close, large parties over a booking type&apos;s
-            threshold, and anything added manually as an enquiry.
-          </p>
         </div>
         <Link href={`/staff/${venue.slug}/enquiries/new`} className={buttonStyles("primary", "sm")}>
           <MessageCirclePlus className="h-3.5 w-3.5" strokeWidth={2.25} />

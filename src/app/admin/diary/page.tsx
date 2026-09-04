@@ -21,7 +21,6 @@ export default async function AdminDiaryPickerPage() {
     // supplies its own padding, this one was missing it.
     <div className="animate-in mx-auto max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Diary</h1>
-      <p className="mt-1 text-sm text-zinc-500">Pick a venue to view its diary.</p>
 
       {venues.length === 0 ? (
         <Card className="mt-6 flex flex-col items-center gap-2 py-10 text-center">

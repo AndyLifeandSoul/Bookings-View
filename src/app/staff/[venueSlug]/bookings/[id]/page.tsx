@@ -211,10 +211,6 @@ export default async function BookingDetailsPage({
               <Armchair className="h-4 w-4 text-zinc-400" strokeWidth={2.25} />
               Tables
             </h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              Which table(s) this booking is seated at. Reassigning here is checked against every other active
-              booking at this venue for the same date and time.
-            </p>
             {tables.length === 0 ? (
               <Card className="mt-3">
                 <p className="text-sm text-zinc-500">No tables set up for this venue yet, see Tables &amp; Areas in Admin.</p>
@@ -248,10 +244,6 @@ export default async function BookingDetailsPage({
               <MessageSquare className="h-4 w-4 text-zinc-400" strokeWidth={2.25} />
               Messages
             </h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              Emailed to/from the customer via this venue&apos;s mailbox. If no venue email is set (Settings → Venue
-              Details) or Microsoft 365 isn&apos;t connected yet, replies are still logged here, just not actually sent.
-            </p>
             {booking.messages.length === 0 ? (
               <Card className="mt-3">
                 <p className="text-sm text-zinc-500">No messages for this booking yet.</p>

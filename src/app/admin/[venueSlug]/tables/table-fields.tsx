@@ -74,9 +74,7 @@ export function TableFields({
       </fieldset>
 
       <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-zinc-700">
-          Sort order <span className="font-normal text-zinc-500">(display order in the staff diary)</span>
-        </span>
+        <span className="text-sm font-medium text-zinc-700">Sort order</span>
         <input
           type="number"
           name="sortOrder"
@@ -92,9 +90,7 @@ export function TableFields({
           defaultChecked={defaults?.active ?? true}
           className="h-4 w-4 rounded border-zinc-300"
         />
-        <span className="text-sm font-medium text-zinc-700">
-          Active <span className="font-normal text-zinc-500">(available for auto-assignment and manual seating)</span>
-        </span>
+        <span className="text-sm font-medium text-zinc-700">Active</span>
       </label>
 
       <div>

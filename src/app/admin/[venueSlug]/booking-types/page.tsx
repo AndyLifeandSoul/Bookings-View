@@ -23,9 +23,6 @@ export default async function BookingTypesPage({ params }: { params: Promise<{ v
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold tracking-tight text-zinc-900">Booking types</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            What customers pick before choosing a date and time, dining, brunch, private hire, etc.
-          </p>
         </div>
         <Link href={`/admin/${venue.slug}/booking-types/new`} className={buttonStyles("primary", "sm")}>
           <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />

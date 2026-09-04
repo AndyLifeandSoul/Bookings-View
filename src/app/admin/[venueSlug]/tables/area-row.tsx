@@ -51,7 +51,7 @@ export function AreaRow({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-zinc-500">Priority (fills first, ascending)</span>
+          <span className="text-xs font-medium text-zinc-500">Priority</span>
           <input
             type="number"
             name="priority"

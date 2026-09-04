@@ -83,7 +83,6 @@ export function TimeFields({ bookingTypes }: { bookingTypes: BookingTypeOption[]
           onChange={(e) => setEndTime(e.target.value)}
           className="rounded-md border border-zinc-300 px-3 py-2"
         />
-        <span className="text-xs text-zinc-500">Auto-filled from the booking type&apos;s minimum duration, edit freely.</span>
       </label>
     </>
   );
