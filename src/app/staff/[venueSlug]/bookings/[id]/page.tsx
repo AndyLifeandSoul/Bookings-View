@@ -331,7 +331,6 @@ export default async function BookingDetailsPage({
                     type="text"
                     readOnly
                     value={buildPreOrderLink(booking.preOrderInvite.token)}
-                    onFocus={(e) => e.currentTarget.select()}
                     className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700"
                   />
                   <CopyLinkButton link={buildPreOrderLink(booking.preOrderInvite.token)} />
