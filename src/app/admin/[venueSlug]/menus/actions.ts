@@ -24,6 +24,23 @@ function parseMenuFields(formData: FormData): { name: string; description: strin
   return { name, description, active, bookingTypeId };
 }
 
+/**
+ * MenuAvailableCategory rows a create/update menu submission should end up
+ * with - every checked box in the form's category selector, validated
+ * against this venue so a stray/forged id can't attach a category from
+ * somewhere else. An empty selection is valid (staff can deliberately
+ * uncheck everything), it just means the menu offers no categorised
+ * sections yet - MenuItem.categoryId stays nullable regardless, so
+ * uncategorised items are unaffected either way.
+ */
+async function resolveSelectedCategories(formData: FormData, venueId: string): Promise<string[] | { error: string }> {
+  const requestedIds = [...new Set(formData.getAll("categoryIds").map((value) => String(value)))];
+  if (requestedIds.length === 0) return [];
+  const owned = await prisma.menuCategory.findMany({ where: { id: { in: requestedIds }, venueId }, select: { id: true } });
+  if (owned.length !== requestedIds.length) return { error: "One or more categories don't belong to this venue." };
+  return requestedIds;
+}
+
 export async function createMenu(formData: FormData): Promise<ActionResult> {
   await requireAdminSession();
   const venue = await resolveVenue(formData);
@@ -38,7 +55,16 @@ export async function createMenu(formData: FormData): Promise<ActionResult> {
     if (!bookingType) return { error: "That booking type doesn't belong to this venue." };
   }
 
-  const menu = await prisma.menu.create({ data: { venueId: venue.id, ...parsed } });
+  const categoryIds = await resolveSelectedCategories(formData, venue.id);
+  if ("error" in categoryIds) return categoryIds;
+
+  const menu = await prisma.menu.create({
+    data: {
+      venueId: venue.id,
+      ...parsed,
+      availableCategories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
+    },
+  });
   revalidatePath(`/admin/${venue.slug}/menus`);
   redirect(`/admin/${venue.slug}/menus/${menu.id}`);
 }
@@ -58,8 +84,17 @@ export async function updateMenu(formData: FormData): Promise<ActionResult> {
     if (!bookingType) return { error: "That booking type doesn't belong to this venue." };
   }
 
-  const result = await prisma.menu.updateMany({ where: { id, venueId: venue.id }, data: parsed });
-  if (result.count === 0) return { error: "Menu not found for this venue." };
+  const categoryIds = await resolveSelectedCategories(formData, venue.id);
+  if ("error" in categoryIds) return categoryIds;
+
+  const existing = await prisma.menu.findFirst({ where: { id, venueId: venue.id }, select: { id: true } });
+  if (!existing) return { error: "Menu not found for this venue." };
+
+  await prisma.$transaction([
+    prisma.menu.update({ where: { id }, data: parsed }),
+    prisma.menuAvailableCategory.deleteMany({ where: { menuId: id } }),
+    prisma.menuAvailableCategory.createMany({ data: categoryIds.map((categoryId) => ({ menuId: id, categoryId })) }),
+  ]);
 
   revalidatePath(`/admin/${venue.slug}/menus`);
   revalidatePath(`/admin/${venue.slug}/menus/${id}`);

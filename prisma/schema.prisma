@@ -663,9 +663,10 @@ model Menu {
   description   String?
   active        Boolean      @default(true)
 
-  items     MenuItem[]
-  preOrders PreOrder[]
-  invites   PreOrderInvite[]
+  items               MenuItem[]
+  preOrders           PreOrder[]
+  invites             PreOrderInvite[]
+  availableCategories MenuAvailableCategory[]
 }
 
 /// Per-venue grouping for MenuItem ("Starters", "Mains", "Desserts"), e.g.
@@ -682,9 +683,32 @@ model MenuCategory {
   name      String
   sortOrder Int    @default(0)
 
-  items MenuItem[]
+  items            MenuItem[]
+  menuAvailability MenuAvailableCategory[]
 
   @@unique([venueId, name])
+}
+
+/// Which of the venue's MenuCategory rows a given Menu makes available for
+/// its own items and, downstream, for staff to offer on a PreOrderInvite -
+/// a category has to be available here before it can ever reach a
+/// customer through this menu. A new menu is created with every current
+/// category selected (see the New Menu admin screen, which pre-checks
+/// them all), and unchecking one there - or later, from the menu's own
+/// page - is what narrows a menu down to only specific sections (e.g. a
+/// set lunch menu that shouldn't offer desserts). Deliberately explicit
+/// rather than "no rows means everything", same reasoning as
+/// PreOrderInvite.categoryIds: a category added to the venue after a menu
+/// already exists is not retroactively available on it, staff opt it in
+/// per menu. No extra fields needed (unlike MenuItemModifierGroup's
+/// sequence), so this is a plain join row, same shape as BookingTable.
+model MenuAvailableCategory {
+  menuId     String
+  menu       Menu         @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([menuId, categoryId])
 }
 
 model MenuItem {

@@ -27,6 +27,7 @@ export default async function MenuDetailPage({
           orderBy: { name: "asc" },
           include: { _count: { select: { modifierGroups: true } } },
         },
+        availableCategories: { select: { categoryId: true } },
       },
     }),
     prisma.bookingType.findMany({
@@ -41,6 +42,23 @@ export default async function MenuDetailPage({
     }),
   ]);
   if (!menu) notFound();
+
+  // Which categories this menu currently offers (see MenuAvailableCategory's
+  // doc comment in schema.prisma) - this is what the Add item / per-item
+  // category dropdowns are scoped to below, not the venue's full list, so
+  // an item can't be miscategorised into a section this menu doesn't use.
+  const availableCategoryIds = new Set(menu.availableCategories.map((a) => a.categoryId));
+  const availableCategories = categories.filter((category) => availableCategoryIds.has(category.id));
+
+  // An item already assigned to a category that's since been unticked for
+  // this menu keeps showing that category as an option on its own row
+  // (just not offered for anything else) - narrowing a menu's categories
+  // should never silently blank out or revert an existing item's data.
+  function categoriesForItem(itemCategoryId: string | null) {
+    if (!itemCategoryId || availableCategoryIds.has(itemCategoryId)) return availableCategories;
+    const orphan = categories.find((category) => category.id === itemCategoryId);
+    return orphan ? [...availableCategories, orphan] : availableCategories;
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -86,6 +104,30 @@ export default async function MenuDetailPage({
                 className="rounded-md border border-zinc-300 px-3 py-2"
               />
             </label>
+
+            {categories.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-zinc-700">Available categories</span>
+                <p className="text-xs text-zinc-500">
+                  Which sections this menu offers - untick any this menu shouldn&apos;t use.
+                </p>
+                <div className="flex flex-col gap-1.5 pt-1">
+                  {categories.map((category) => (
+                    <label key={category.id} className="flex items-center gap-2 text-sm text-zinc-700">
+                      <input
+                        type="checkbox"
+                        name="categoryIds"
+                        value={category.id}
+                        defaultChecked={availableCategoryIds.has(category.id)}
+                        className="h-4 w-4 rounded border-zinc-300"
+                      />
+                      {category.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <label className="flex items-center gap-2">
               <input type="checkbox" name="active" defaultChecked={menu.active} className="h-4 w-4 rounded border-zinc-300" />
               <span className="text-sm font-medium text-zinc-700">Active</span>
@@ -114,7 +156,7 @@ export default async function MenuDetailPage({
                       menuId={menu.id}
                       venueId={venue.id}
                       venueSlug={venue.slug}
-                      categories={categories}
+                      categories={categoriesForItem(item.categoryId)}
                       customisationStepCount={item._count.modifierGroups}
                     />
                   ))}
@@ -166,7 +208,7 @@ export default async function MenuDetailPage({
               <span className="text-xs font-medium text-zinc-500">Category</span>
               <select name="categoryId" defaultValue="" className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm">
                 <option value="">Uncategorised</option>
-                {categories.map((category) => (
+                {availableCategories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
