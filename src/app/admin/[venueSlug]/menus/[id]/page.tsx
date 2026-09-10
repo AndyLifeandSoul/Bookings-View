@@ -22,7 +22,12 @@ export default async function MenuDetailPage({
   const [menu, bookingTypes, categories] = await Promise.all([
     prisma.menu.findFirst({
       where: { id, venueId: venue.id },
-      include: { items: { orderBy: { name: "asc" } } },
+      include: {
+        items: {
+          orderBy: { name: "asc" },
+          include: { _count: { select: { modifierGroups: true } } },
+        },
+      },
     }),
     prisma.bookingType.findMany({
       where: { venueId: venue.id },
@@ -103,7 +108,15 @@ export default async function MenuDetailPage({
               <table className="w-full min-w-[720px] text-left text-sm">
                 <tbody>
                   {menu.items.map((item) => (
-                    <MenuItemRow key={item.id} item={item} menuId={menu.id} venueId={venue.id} categories={categories} />
+                    <MenuItemRow
+                      key={item.id}
+                      item={item}
+                      menuId={menu.id}
+                      venueId={venue.id}
+                      venueSlug={venue.slug}
+                      categories={categories}
+                      customisationStepCount={item._count.modifierGroups}
+                    />
                   ))}
                 </tbody>
               </table>

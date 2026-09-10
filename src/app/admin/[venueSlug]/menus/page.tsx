@@ -8,7 +8,8 @@ import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MenuCategoryRow } from "./menu-category-row";
-import { createMenuCategory } from "./actions";
+import { ModifierGroupCard } from "./modifier-group-card";
+import { createMenuCategory, createModifierGroup } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
   const { venueSlug } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
 
-  const [menus, categories] = await Promise.all([
+  const [menus, categories, modifierGroups] = await Promise.all([
     prisma.menu.findMany({
       where: { venueId: venue.id },
       orderBy: { name: "asc" },
@@ -29,6 +30,14 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
       where: { venueId: venue.id },
       orderBy: { sortOrder: "asc" },
       include: { _count: { select: { items: true } } },
+    }),
+    prisma.modifierGroup.findMany({
+      where: { venueId: venue.id },
+      orderBy: { name: "asc" },
+      include: {
+        options: { select: { id: true, name: true, priceDeltaPence: true, sortOrder: true, active: true } },
+        _count: { select: { itemGroups: true } },
+      },
     }),
   ]);
 
@@ -74,6 +83,48 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
               <input type="number" name="sortOrder" defaultValue={0} className="w-28 rounded-md border border-zinc-300 px-3 py-2" />
             </label>
             <SubmitButton label="Add category" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
+          </ActionForm>
+        </Card>
+      </section>
+
+      <section>
+        <h2 className="text-base font-semibold tracking-tight text-zinc-900">Item customisation</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Reusable customisation steps (e.g. Toppings, Chip Variety, Cheese) - build them here, then attach the
+          ones each item needs, in order, from that item&apos;s page. A customer sees these as the step-by-step
+          picker when they tap an item that has any attached.
+        </p>
+
+        {modifierGroups.length > 0 && (
+          <div className="mt-4 flex flex-col gap-4">
+            {modifierGroups.map((group) => (
+              <ModifierGroupCard
+                key={group.id}
+                id={group.id}
+                venueId={venue.id}
+                name={group.name}
+                active={group.active}
+                options={group.options}
+                itemCount={group._count.itemGroups}
+              />
+            ))}
+          </div>
+        )}
+
+        <Card className="mt-4">
+          <ActionForm action={createModifierGroup} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="venueId" value={venue.id} />
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-zinc-700">New step name</span>
+              <input
+                type="text"
+                name="name"
+                required
+                placeholder="Cheese"
+                className="rounded-md border border-zinc-300 px-3 py-2"
+              />
+            </label>
+            <SubmitButton label="Add step" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
           </ActionForm>
         </Card>
       </section>

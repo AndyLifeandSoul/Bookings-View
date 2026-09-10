@@ -259,3 +259,218 @@ export async function deleteMenuItem(formData: FormData): Promise<ActionResult> 
   await prisma.menuItem.deleteMany({ where: { id, menuId } });
   revalidatePath(`/admin/${venue.slug}/menus/${menuId}`);
 }
+
+// ---------------------------------------------------------------------------
+// Item customisation (modifier groups/options)
+// ---------------------------------------------------------------------------
+
+function parsePriceDeltaToPence(formData: FormData): number | { error: string } {
+  const raw = formData.get("priceDeltaPounds");
+  const pounds = raw === null || raw === "" ? 0 : Number(raw);
+  if (!Number.isFinite(pounds)) return { error: "Enter a valid price." };
+  return Math.round(pounds * 100);
+}
+
+/**
+ * ModifierGroup is venue-scoped, not per-item (see schema.prisma) -
+ * "Cheese" only needs defining once even though several dishes might offer
+ * it, the same relationship MenuCategory has to Menu. Managed here on the
+ * venue-level menus page, alongside categories.
+ */
+export async function createModifierGroup(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Name is required." };
+
+  try {
+    await prisma.modifierGroup.create({ data: { venueId: venue.id, name } });
+  } catch {
+    return { error: `"${name}" already exists for this venue.` };
+  }
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
+export async function updateModifierGroup(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Name is required." };
+  const active = formData.get("active") === "on";
+
+  try {
+    const result = await prisma.modifierGroup.updateMany({ where: { id, venueId: venue.id }, data: { name, active } });
+    if (result.count === 0) return { error: "Group not found for this venue." };
+  } catch {
+    return { error: `"${name}" already exists for this venue.` };
+  }
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
+/**
+ * Blocked while any menu item still has this group attached as a step -
+ * unlike MenuCategory (where un-setting a deleted category is harmless),
+ * silently dropping a step from an item's customisation wizard would
+ * change what that item asks customers for without anyone deciding that on
+ * purpose. Detach it from every item first (its step count is shown next
+ * to it in the admin UI), then delete.
+ */
+export async function deleteModifierGroup(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const id = String(formData.get("id") ?? "");
+
+  const group = await prisma.modifierGroup.findFirst({
+    where: { id, venueId: venue.id },
+    select: { name: true, _count: { select: { itemGroups: true } } },
+  });
+  if (!group) return { error: "Group not found for this venue." };
+  if (group._count.itemGroups > 0) {
+    return {
+      error: `"${group.name}" is used as a step on ${group._count.itemGroups} menu item(s) - remove it from those first.`,
+    };
+  }
+
+  await prisma.modifierGroup.deleteMany({ where: { id, venueId: venue.id } });
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
+async function assertGroupBelongsToVenue(groupId: string, venueId: string): Promise<boolean> {
+  const group = await prisma.modifierGroup.findFirst({ where: { id: groupId, venueId }, select: { id: true } });
+  return Boolean(group);
+}
+
+export async function createModifierOption(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const groupId = String(formData.get("groupId") ?? "");
+  if (!(await assertGroupBelongsToVenue(groupId, venue.id))) return { error: "Group not found for this venue." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Name is required." };
+  const priceDeltaOrError = parsePriceDeltaToPence(formData);
+  if (typeof priceDeltaOrError !== "number") return priceDeltaOrError;
+  const sortOrder = Number(formData.get("sortOrder") ?? 0) || 0;
+
+  try {
+    await prisma.modifierOption.create({
+      data: { groupId, name, priceDeltaPence: priceDeltaOrError, sortOrder },
+    });
+  } catch {
+    return { error: `"${name}" already exists in this group.` };
+  }
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
+export async function updateModifierOption(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const groupId = String(formData.get("groupId") ?? "");
+  if (!(await assertGroupBelongsToVenue(groupId, venue.id))) return { error: "Group not found for this venue." };
+
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Name is required." };
+  const priceDeltaOrError = parsePriceDeltaToPence(formData);
+  if (typeof priceDeltaOrError !== "number") return priceDeltaOrError;
+  const sortOrder = Number(formData.get("sortOrder") ?? 0) || 0;
+  const active = formData.get("active") === "on";
+
+  try {
+    const result = await prisma.modifierOption.updateMany({
+      where: { id, groupId },
+      data: { name, priceDeltaPence: priceDeltaOrError, sortOrder, active },
+    });
+    if (result.count === 0) return { error: "Option not found." };
+  } catch {
+    return { error: `"${name}" already exists in this group.` };
+  }
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
+/**
+ * Always safe to delete outright, unlike menus/menu items: a historical
+ * order's PreOrderItemModifier row snapshots the option's name and price
+ * at order time (optionId itself is ON DELETE SET NULL, see schema.prisma)
+ * so removing the live option here can never change what a past customer
+ * is shown to have ordered.
+ */
+export async function deleteModifierOption(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const groupId = String(formData.get("groupId") ?? "");
+  if (!(await assertGroupBelongsToVenue(groupId, venue.id))) return { error: "Group not found for this venue." };
+
+  const id = String(formData.get("id") ?? "");
+  const result = await prisma.modifierOption.deleteMany({ where: { id, groupId } });
+  if (result.count === 0) return { error: "Option not found." };
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
+async function assertMenuItemBelongsToVenue(menuItemId: string, venueId: string): Promise<{ menuId: string } | null> {
+  return prisma.menuItem.findFirst({ where: { id: menuItemId, menu: { venueId } }, select: { menuId: true } });
+}
+
+export async function attachModifierGroupToItem(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const menuItemId = String(formData.get("menuItemId") ?? "");
+  const item = await assertMenuItemBelongsToVenue(menuItemId, venue.id);
+  if (!item) return { error: "Menu item not found for this venue." };
+
+  const groupId = String(formData.get("groupId") ?? "");
+  if (!(await assertGroupBelongsToVenue(groupId, venue.id))) return { error: "Group not found for this venue." };
+
+  const sequence = Number(formData.get("sequence") ?? 0);
+  if (!Number.isFinite(sequence) || sequence < 1) return { error: "Step order must be 1 or higher." };
+
+  try {
+    await prisma.menuItemModifierGroup.create({ data: { menuItemId, groupId, sequence } });
+  } catch {
+    return { error: "That group is already a step on this item, or that step order is already taken - pick another." };
+  }
+  revalidatePath(`/admin/${venue.slug}/menus/${item.menuId}/items/${menuItemId}`);
+}
+
+export async function updateModifierGroupSequence(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const menuItemId = String(formData.get("menuItemId") ?? "");
+  const item = await assertMenuItemBelongsToVenue(menuItemId, venue.id);
+  if (!item) return { error: "Menu item not found for this venue." };
+
+  const id = String(formData.get("id") ?? "");
+  const sequence = Number(formData.get("sequence") ?? 0);
+  if (!Number.isFinite(sequence) || sequence < 1) return { error: "Step order must be 1 or higher." };
+
+  try {
+    const result = await prisma.menuItemModifierGroup.updateMany({ where: { id, menuItemId }, data: { sequence } });
+    if (result.count === 0) return { error: "Step not found." };
+  } catch {
+    return { error: "That step order is already taken by another step on this item." };
+  }
+  revalidatePath(`/admin/${venue.slug}/menus/${item.menuId}/items/${menuItemId}`);
+}
+
+export async function detachModifierGroupFromItem(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const menuItemId = String(formData.get("menuItemId") ?? "");
+  const item = await assertMenuItemBelongsToVenue(menuItemId, venue.id);
+  if (!item) return { error: "Menu item not found for this venue." };
+
+  const id = String(formData.get("id") ?? "");
+  const result = await prisma.menuItemModifierGroup.deleteMany({ where: { id, menuItemId } });
+  if (result.count === 0) return { error: "Step not found." };
+  revalidatePath(`/admin/${venue.slug}/menus/${item.menuId}/items/${menuItemId}`);
+}

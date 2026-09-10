@@ -40,6 +40,10 @@ export default async function PreOrderPrintPage({
               menuItem: {
                 select: { name: true, priceInPence: true, dietaryTags: true, category: { select: { id: true, name: true, sortOrder: true } } },
               },
+              modifiers: {
+                orderBy: { sequence: "asc" },
+                select: { sequence: true, groupNameSnapshot: true, optionNameSnapshot: true, priceDeltaPenceSnapshot: true },
+              },
             },
           },
         },
@@ -81,6 +85,11 @@ export default async function PreOrderPrintPage({
                       {item.quantity} x {item.menuItem.name}
                     </span>
                     {item.guestLabel && <span className="text-zinc-600"> ({item.guestLabel})</span>}
+                    {item.modifiers.length > 0 && (
+                      <span className="block text-base font-medium text-black">
+                        {item.modifiers.map((m) => m.optionNameSnapshot).join(" · ")}
+                      </span>
+                    )}
                     {item.menuItem.dietaryTags.length > 0 && (
                       <span className="block text-sm text-zinc-600">{item.menuItem.dietaryTags.join(", ")}</span>
                     )}

@@ -19,7 +19,7 @@ import {
   cancelPreOrderInvite,
 } from "./actions";
 import { buildPreOrderLink } from "@/lib/pre-order/links";
-import { groupPreOrderItems } from "@/lib/pre-order/group-items";
+import { groupPreOrderItems, preOrderLineUnitPricePence } from "@/lib/pre-order/group-items";
 import { TableSelectionFields } from "./table-selection-fields";
 import { naturalSortTables } from "@/lib/tables/natural-sort";
 
@@ -51,6 +51,10 @@ export default async function BookingDetailsPage({
                 guestLabel: true,
                 notes: true,
                 menuItem: { select: { name: true, priceInPence: true, dietaryTags: true, category: { select: { id: true, name: true, sortOrder: true } } } },
+                modifiers: {
+                  orderBy: { sequence: "asc" },
+                  select: { sequence: true, groupNameSnapshot: true, optionNameSnapshot: true, priceDeltaPenceSnapshot: true },
+                },
               },
             },
           },
@@ -311,10 +315,15 @@ export default async function BookingDetailsPage({
                                 {item.quantity} x {item.menuItem.name}
                               </span>
                               {item.guestLabel && <span className="text-zinc-500"> ({item.guestLabel})</span>}
+                              {item.modifiers.length > 0 && (
+                                <span className="block text-xs text-zinc-500">
+                                  {item.modifiers.map((m) => m.optionNameSnapshot).join(" · ")}
+                                </span>
+                              )}
                               {item.notes && <span className="block text-xs text-zinc-500">{item.notes}</span>}
                             </span>
                             <span className="shrink-0 text-zinc-500">
-                              £{((item.menuItem.priceInPence * item.quantity) / 100).toFixed(2)}
+                              £{((preOrderLineUnitPricePence(item) * item.quantity) / 100).toFixed(2)}
                             </span>
                           </li>
                         ))}

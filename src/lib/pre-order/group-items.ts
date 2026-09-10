@@ -1,3 +1,10 @@
+export interface PreOrderModifierForDisplay {
+  sequence: number;
+  groupNameSnapshot: string;
+  optionNameSnapshot: string;
+  priceDeltaPenceSnapshot: number;
+}
+
 export interface PreOrderLineForDisplay {
   quantity: number;
   guestLabel: string | null;
@@ -8,6 +15,18 @@ export interface PreOrderLineForDisplay {
     dietaryTags: string[];
     category: { id: string; name: string; sortOrder: number } | null;
   };
+  modifiers: PreOrderModifierForDisplay[];
+}
+
+/**
+ * A line's real per-unit price - the item's base price plus whatever its
+ * chosen modifiers added (see PreOrderItemModifier.priceDeltaPenceSnapshot
+ * in schema.prisma), e.g. DV8 Chips £6.50 base + Vegan Cheese +£0.50 =
+ * £7.00. Modifiers with no price impact contribute 0, so this is exactly
+ * menuItem.priceInPence for a line with none.
+ */
+export function preOrderLineUnitPricePence(item: Pick<PreOrderLineForDisplay, "menuItem" | "modifiers">): number {
+  return item.menuItem.priceInPence + item.modifiers.reduce((sum, m) => sum + m.priceDeltaPenceSnapshot, 0);
 }
 
 /**

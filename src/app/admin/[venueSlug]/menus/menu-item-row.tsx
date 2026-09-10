@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { deleteMenuItem, updateMenuItem } from "./actions";
 import type { ActionResult } from "@/components/action-form";
@@ -10,12 +11,17 @@ export function MenuItemRow({
   item,
   menuId,
   venueId,
+  venueSlug,
   categories,
+  customisationStepCount,
 }: {
   item: MenuItem;
   menuId: string;
   venueId: string;
+  venueSlug: string;
   categories: { id: string; name: string }[];
+  /** How many ModifierGroup steps (Toppings, Cheese, ...) are attached to this item - 0 means tapping it in the kiosk adds it straight to the basket. */
+  customisationStepCount: number;
 }) {
   const [updateState, updateAction, updatePending] = useActionState<ActionResult, FormData>(
     async (_prevState, formData) => updateMenuItem(formData),
@@ -96,6 +102,12 @@ export function MenuItemRow({
           <button type="submit" disabled={updatePending} className={buttonStyles("secondary", "sm")}>
             {updatePending ? "Saving…" : "Save"}
           </button>
+          <Link
+            href={`/admin/${venueSlug}/menus/${menuId}/items/${item.id}`}
+            className={buttonStyles("secondary", "sm")}
+          >
+            Customise{customisationStepCount > 0 ? ` (${customisationStepCount} step${customisationStepCount === 1 ? "" : "s"})` : ""}
+          </Link>
           <button
             type="submit"
             formAction={deleteAction}

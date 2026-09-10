@@ -128,6 +128,7 @@ model Venue {
   bookings              Booking[]
   enquiries             Enquiry[]
   menus                 Menu[]
+  modifierGroups        ModifierGroup[]
   staff                 StaffUser[]
   /// See Payment.venueId's doc comment - a Payment keeps its own venue
   /// reference so it still means something once the Booking it paid for
@@ -701,7 +702,8 @@ model MenuItem {
   dietaryTags  String[]      @default([])
   active       Boolean       @default(true)
 
-  preOrderItems PreOrderItem[]
+  preOrderItems  PreOrderItem[]
+  modifierGroups MenuItemModifierGroup[]
 }
 
 /// A staff-initiated request for a customer to submit a pre-order,
@@ -772,6 +774,91 @@ model PreOrderItem {
   quantity   Int      @default(1)
   guestLabel String? // e.g. "Guest 2", optional per-guest attribution
   notes      String?
+
+  modifiers PreOrderItemModifier[]
+}
+
+/// A reusable set of choices for one step of a MenuItem's customisation
+/// wizard (e.g. "Toppings", "Chip Variety", "Cheese" for DV8 Chips) -
+/// venue-scoped and shared across every item that attaches it, the same
+/// way MenuCategory is shared across every menu at a venue, so "Cheese"
+/// only needs defining once even though several dishes might offer it.
+///
+/// Every step in the customer-facing kiosk wizard is single-choice (Andy's
+/// spec: tapping an option advances straight to the next step, there's no
+/// "pick 2" case) - that's enforced by the pre-order API always writing
+/// exactly one PreOrderItemModifier per attached group, not by a flag on
+/// this model.
+model ModifierGroup {
+  id      String  @id @default(cuid())
+  venueId String
+  venue   Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  name    String
+  active  Boolean @default(true)
+
+  options    ModifierOption[]
+  itemGroups MenuItemModifierGroup[]
+
+  @@unique([venueId, name])
+}
+
+/// One choice within a ModifierGroup (e.g. "Cheddar" under "Cheese").
+/// priceDeltaPence is added to the item's base price when this option is
+/// picked - 0 for the common case of no price impact, set above 0 for
+/// Andy's "some options cost extra" cases (e.g. Vegan Cheese, Sweet Potato
+/// Fries). sortOrder is display order within the group, same convention as
+/// MenuCategory.sortOrder.
+model ModifierOption {
+  id              String        @id @default(cuid())
+  groupId         String
+  group           ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name            String
+  priceDeltaPence Int           @default(0)
+  sortOrder       Int           @default(0)
+  active          Boolean       @default(true)
+
+  selections PreOrderItemModifier[]
+
+  @@unique([groupId, name])
+}
+
+/// Attaches a ModifierGroup to a MenuItem as one step of its customisation
+/// wizard, with sequence fixing the step order (1 = Toppings, 2 = Chip
+/// Variety, 3 = Cheese for DV8 Chips) - the same group can be sequenced
+/// differently, or left out entirely, on a different item. A MenuItem with
+/// no rows here has no wizard at all: the kiosk UI adds it straight to the
+/// basket on tap instead of launching the step flow.
+model MenuItemModifierGroup {
+  id         String        @id @default(cuid())
+  menuItemId String
+  menuItem   MenuItem      @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  groupId    String
+  group      ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sequence   Int
+
+  @@unique([menuItemId, groupId])
+  @@unique([menuItemId, sequence])
+}
+
+/// Records which ModifierOption a customer picked for one step of one
+/// PreOrderItem's wizard. The name/price fields are snapshotted at order
+/// time - same reasoning as Payment.bookingDate elsewhere in this schema -
+/// so renaming or re-pricing "Vegan Cheese" next month doesn't silently
+/// rewrite what a customer actually ordered last week; optionId itself is
+/// kept nullable (SetNull) purely so staff can still trace back to the
+/// live ModifierOption row while it still exists, nothing display-facing
+/// should depend on it still being set.
+model PreOrderItemModifier {
+  id             String          @id @default(cuid())
+  preOrderItemId String
+  preOrderItem   PreOrderItem    @relation(fields: [preOrderItemId], references: [id], onDelete: Cascade)
+  optionId       String?
+  option         ModifierOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  sequence                Int
+  groupNameSnapshot       String
+  optionNameSnapshot      String
+  priceDeltaPenceSnapshot Int
 }
 
 // ---------------------------------------------------------------------------
