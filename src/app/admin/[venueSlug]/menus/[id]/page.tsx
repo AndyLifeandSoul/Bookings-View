@@ -5,9 +5,10 @@ import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { createMenuItem, updateMenu } from "../actions";
+import { createMenuItem } from "../actions";
 import { MenuItemRow } from "../menu-item-row";
 import { DeleteMenuButton } from "../delete-menu-button";
+import { EditMenuForm } from "./edit-menu-form";
 
 export const dynamic = "force-dynamic";
 
@@ -60,83 +61,36 @@ export default async function MenuDetailPage({
     return orphan ? [...availableCategories, orphan] : availableCategories;
   }
 
+  const previewItems = menu.items
+    .filter((item) => item.active)
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      priceInPence: item.priceInPence,
+      dietaryTags: item.dietaryTags,
+      categoryId: item.categoryId,
+      customisable: item._count.modifierGroups > 0,
+    }));
+
   return (
     <div className="flex flex-col gap-8">
       <section>
         <h2 className="text-base font-semibold tracking-tight text-zinc-900">{menu.name}</h2>
-        <Card className="mt-3">
-          <ActionForm action={updateMenu} className="flex flex-col gap-4">
-            <input type="hidden" name="id" value={menu.id} />
-            <input type="hidden" name="venueId" value={venue.id} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-zinc-700">Name</span>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  defaultValue={menu.name}
-                  className="rounded-md border border-zinc-300 px-3 py-2"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-zinc-700">Linked booking type</span>
-                <select
-                  name="bookingTypeId"
-                  defaultValue={menu.bookingTypeId ?? ""}
-                  className="rounded-md border border-zinc-300 px-3 py-2"
-                >
-                  <option value="">Any</option>
-                  {bookingTypes.map((bt) => (
-                    <option key={bt.id} value={bt.id}>
-                      {bt.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Description (optional)</span>
-              <textarea
-                name="description"
-                defaultValue={menu.description ?? ""}
-                rows={2}
-                className="rounded-md border border-zinc-300 px-3 py-2"
-              />
-            </label>
-
-            {categories.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-zinc-700">Available categories</span>
-                <p className="text-xs text-zinc-500">
-                  Which sections this menu offers - untick any this menu shouldn&apos;t use.
-                </p>
-                <div className="flex flex-col gap-1.5 pt-1">
-                  {categories.map((category) => (
-                    <label key={category.id} className="flex items-center gap-2 text-sm text-zinc-700">
-                      <input
-                        type="checkbox"
-                        name="categoryIds"
-                        value={category.id}
-                        defaultChecked={availableCategoryIds.has(category.id)}
-                        className="h-4 w-4 rounded border-zinc-300"
-                      />
-                      {category.name}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <label className="flex items-center gap-2">
-              <input type="checkbox" name="active" defaultChecked={menu.active} className="h-4 w-4 rounded border-zinc-300" />
-              <span className="text-sm font-medium text-zinc-700">Active</span>
-            </label>
-            <div className="flex items-center gap-4">
-              <SubmitButton label="Save menu" pendingLabel="Saving…" className={buttonStyles("primary", "md")} />
-            </div>
-          </ActionForm>
-        </Card>
+        <div className="mt-3">
+          <EditMenuForm
+            menuId={menu.id}
+            venueId={venue.id}
+            name={menu.name}
+            description={menu.description}
+            active={menu.active}
+            bookingTypeId={menu.bookingTypeId}
+            bookingTypes={bookingTypes}
+            categories={categories}
+            availableCategoryIds={[...availableCategoryIds]}
+            items={previewItems}
+          />
+        </div>
         <DeleteMenuButton id={menu.id} name={menu.name} venueId={venue.id} />
       </section>
 

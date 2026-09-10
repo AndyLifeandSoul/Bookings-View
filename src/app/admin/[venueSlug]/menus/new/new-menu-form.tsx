@@ -5,6 +5,7 @@ import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { buttonStyles } from "@/components/ui/button";
 import { createMenu } from "../actions";
+import { MenuKioskPreview } from "../menu-kiosk-preview";
 
 /**
  * Andy asked for a live preview next to the new-menu form so the kiosk
@@ -124,43 +125,10 @@ export function NewMenuForm({
 
       <div className="lg:sticky lg:top-6">
         <p className="mb-2 text-xs font-medium tracking-wide text-zinc-500 uppercase">Customer preview</p>
-        <div className="rounded-[28px] border border-zinc-300 bg-zinc-900 p-2 [box-shadow:var(--shadow-md)]">
-          <div className="flex flex-col gap-6 rounded-[20px] bg-white p-5">
-            <div>
-              <p className="text-[11px] font-semibold tracking-wide text-zinc-500 uppercase">
-                {name.trim() || "Menu name"}
-              </p>
-              <h2 className="mt-1 text-lg font-bold text-zinc-900">What would you like to order?</h2>
-              <p className="mt-1 text-xs text-zinc-500">Tap a category to get started</p>
-            </div>
-
-            {previewCategories.length > 0 ? (
-              <div className="grid grid-cols-2 gap-2.5">
-                {previewCategories.slice(0, 4).map((category) => (
-                  <div
-                    key={category.id}
-                    className="rounded-xl border border-zinc-200 bg-white px-3 py-4 text-sm font-semibold text-zinc-900"
-                  >
-                    {category.name}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-zinc-400">
-                {categories.length === 0
-                  ? "Categories you add will show here as tiles."
-                  : "No categories selected - customers won't see any sections until you tick some above."}
-              </p>
-            )}
-
-            <div className="rounded-xl bg-zinc-100 px-4 py-2.5 text-center text-xs text-zinc-400">
-              Your basket is empty
-            </div>
-          </div>
-        </div>
+        <MenuKioskPreview menuName={name.trim() || "Menu name"} categories={previewCategories} items={[]} />
         <p className={`mt-2 text-xs ${active ? "text-zinc-500" : "text-amber-600"}`}>
           {active
-            ? "This is what customers will see first when they open their pre-order link."
+            ? "This is what customers will see first when they open their pre-order link. No items yet, so tap a category to see how it will look once you add some."
             : "Inactive - hidden from customers until you switch this on."}
         </p>
       </div>
