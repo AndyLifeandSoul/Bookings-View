@@ -1,17 +1,26 @@
 import Link from "next/link";
-import { Plus, UtensilsCrossed } from "lucide-react";
+import { Plus, Tag, SlidersHorizontal, UtensilsCrossed } from "lucide-react";
 import { prisma } from "@/lib/db/client";
 import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { buttonStyles } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, Section } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MenuCategoryRow } from "./menu-category-row";
 import { ModifierGroupCard } from "./modifier-group-card";
 import { createMenuCategory, createModifierGroup } from "./actions";
 
 export const dynamic = "force-dynamic";
+
+function EmptyState({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <Card className="flex flex-col items-center gap-2 py-8 text-center">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">{icon}</span>
+      <p className="text-sm text-zinc-500">{label}</p>
+    </Card>
+  );
+}
 
 export default async function MenusPage({ params }: { params: Promise<{ venueSlug: string }> }) {
   const { venueSlug } = await params;
@@ -43,110 +52,104 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
 
   return (
     <div className="flex flex-col gap-10">
-      <section>
-        <h2 className="text-base font-semibold tracking-tight text-zinc-900">Categories</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Shared across every menu at this venue - e.g. a Starters category applies the same way whether it is on
-          the standard pre-order menu or a Christmas one.
-        </p>
+      <Section
+        title="Categories"
+        description="Shared across every menu at this venue - e.g. a Starters category applies the same way whether it is on the standard pre-order menu or a Christmas one."
+      >
+        <div className="flex flex-col gap-4">
+          {categories.length > 0 ? (
+            <Card padded={false} className="overflow-hidden">
+              {categories.map((category) => (
+                <MenuCategoryRow
+                  key={category.id}
+                  id={category.id}
+                  venueId={venue.id}
+                  name={category.name}
+                  sortOrder={category.sortOrder}
+                  itemCount={category._count.items}
+                />
+              ))}
+            </Card>
+          ) : (
+            <EmptyState icon={<Tag className="h-5 w-5" strokeWidth={1.75} />} label="No categories yet." />
+          )}
 
-        {categories.length > 0 && (
-          <Card padded={false} className="mt-4 overflow-hidden">
-            {categories.map((category) => (
-              <MenuCategoryRow
-                key={category.id}
-                id={category.id}
-                venueId={venue.id}
-                name={category.name}
-                sortOrder={category.sortOrder}
-                itemCount={category._count.items}
-              />
-            ))}
+          <Card>
+            <ActionForm action={createMenuCategory} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="venueId" value={venue.id} />
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">New category name</span>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  placeholder="Starters"
+                  className="rounded-md border border-zinc-300 px-3 py-2"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">Order</span>
+                <input type="number" name="sortOrder" defaultValue={0} className="w-28 rounded-md border border-zinc-300 px-3 py-2" />
+              </label>
+              <SubmitButton label="Add category" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
+            </ActionForm>
           </Card>
-        )}
+        </div>
+      </Section>
 
-        <Card className="mt-4">
-          <ActionForm action={createMenuCategory} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="venueId" value={venue.id} />
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">New category name</span>
-              <input
-                type="text"
-                name="name"
-                required
-                placeholder="Starters"
-                className="rounded-md border border-zinc-300 px-3 py-2"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Order</span>
-              <input type="number" name="sortOrder" defaultValue={0} className="w-28 rounded-md border border-zinc-300 px-3 py-2" />
-            </label>
-            <SubmitButton label="Add category" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
-          </ActionForm>
-        </Card>
-      </section>
+      <Section
+        title="Item customisation"
+        description="Reusable customisation steps (e.g. Toppings, Chip Variety, Cheese) - build them here, then attach the ones each item needs, in order, from that item's page. A customer sees these as the step-by-step picker when they tap an item that has any attached."
+      >
+        <div className="flex flex-col gap-4">
+          {modifierGroups.length > 0 ? (
+            <div className="flex flex-col gap-4">
+              {modifierGroups.map((group) => (
+                <ModifierGroupCard
+                  key={group.id}
+                  id={group.id}
+                  venueId={venue.id}
+                  name={group.name}
+                  active={group.active}
+                  options={group.options}
+                  itemCount={group._count.itemGroups}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon={<SlidersHorizontal className="h-5 w-5" strokeWidth={1.75} />} label="No customisation steps yet." />
+          )}
 
-      <section>
-        <h2 className="text-base font-semibold tracking-tight text-zinc-900">Item customisation</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Reusable customisation steps (e.g. Toppings, Chip Variety, Cheese) - build them here, then attach the
-          ones each item needs, in order, from that item&apos;s page. A customer sees these as the step-by-step
-          picker when they tap an item that has any attached.
-        </p>
+          <Card>
+            <ActionForm action={createModifierGroup} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="venueId" value={venue.id} />
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">New step name</span>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  placeholder="Cheese"
+                  className="rounded-md border border-zinc-300 px-3 py-2"
+                />
+              </label>
+              <SubmitButton label="Add step" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
+            </ActionForm>
+          </Card>
+        </div>
+      </Section>
 
-        {modifierGroups.length > 0 && (
-          <div className="mt-4 flex flex-col gap-4">
-            {modifierGroups.map((group) => (
-              <ModifierGroupCard
-                key={group.id}
-                id={group.id}
-                venueId={venue.id}
-                name={group.name}
-                active={group.active}
-                options={group.options}
-                itemCount={group._count.itemGroups}
-              />
-            ))}
-          </div>
-        )}
-
-        <Card className="mt-4">
-          <ActionForm action={createModifierGroup} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="venueId" value={venue.id} />
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">New step name</span>
-              <input
-                type="text"
-                name="name"
-                required
-                placeholder="Cheese"
-                className="rounded-md border border-zinc-300 px-3 py-2"
-              />
-            </label>
-            <SubmitButton label="Add step" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
-          </ActionForm>
-        </Card>
-      </section>
-
-      <section className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold tracking-tight text-zinc-900">Pre-order menus</h2>
-          </div>
+      <Section
+        title="Pre-order menus"
+        action={
           <Link href={`/admin/${venue.slug}/menus/new`} className={buttonStyles("primary", "sm")}>
             <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
             New menu
           </Link>
-        </div>
-
+        }
+      >
         {menus.length === 0 ? (
-          <Card className="flex flex-col items-center gap-2 py-10 text-center">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
-              <UtensilsCrossed className="h-5 w-5" strokeWidth={1.75} />
-            </span>
-            <p className="text-sm text-zinc-500">No menus yet.</p>
-          </Card>
+          <EmptyState icon={<UtensilsCrossed className="h-5 w-5" strokeWidth={1.75} />} label="No menus yet." />
         ) : (
           <Card padded={false} className="overflow-hidden">
             <div className="overflow-x-auto">
@@ -184,7 +187,7 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
             </div>
           </Card>
         )}
-      </section>
+      </Section>
     </div>
   );
 }
