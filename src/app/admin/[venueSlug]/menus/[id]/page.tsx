@@ -26,7 +26,24 @@ export default async function MenuDetailPage({
       include: {
         items: {
           orderBy: { name: "asc" },
-          include: { _count: { select: { modifierGroups: true } } },
+          include: {
+            modifierGroups: {
+              orderBy: { sequence: "asc" },
+              include: {
+                group: {
+                  select: {
+                    id: true,
+                    name: true,
+                    options: {
+                      where: { active: true },
+                      orderBy: { sortOrder: "asc" },
+                      select: { id: true, name: true, priceDeltaPence: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
         availableCategories: { select: { categoryId: true } },
       },
@@ -70,7 +87,10 @@ export default async function MenuDetailPage({
       priceInPence: item.priceInPence,
       dietaryTags: item.dietaryTags,
       categoryId: item.categoryId,
-      customisable: item._count.modifierGroups > 0,
+      modifierGroups: item.modifierGroups.map((attached) => ({
+        sequence: attached.sequence,
+        group: { id: attached.group.id, name: attached.group.name, options: attached.group.options },
+      })),
     }));
 
   return (
@@ -111,7 +131,7 @@ export default async function MenuDetailPage({
                       venueId={venue.id}
                       venueSlug={venue.slug}
                       categories={categoriesForItem(item.categoryId)}
-                      customisationStepCount={item._count.modifierGroups}
+                      customisationStepCount={item.modifierGroups.length}
                     />
                   ))}
                 </tbody>

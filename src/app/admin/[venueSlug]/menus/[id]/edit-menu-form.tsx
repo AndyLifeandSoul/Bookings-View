@@ -53,7 +53,7 @@ export function EditMenuForm({
   const previewCategories = categories.filter((category) => selectedCategoryIds.has(category.id));
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_300px] lg:items-start">
+    <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:items-start">
       <ActionForm action={updateMenu} className="flex flex-col gap-4 rounded-2xl border border-zinc-200/80 bg-white p-5 [box-shadow:var(--shadow-sm)]">
         <input type="hidden" name="id" value={menuId} />
         <input type="hidden" name="venueId" value={venueId} />
