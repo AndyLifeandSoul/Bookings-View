@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Tag, SlidersHorizontal, UtensilsCrossed } from "lucide-react";
+import { Plus, Tag, SlidersHorizontal, UtensilsCrossed, ChefHat } from "lucide-react";
 import { prisma } from "@/lib/db/client";
 import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
 import { ActionForm } from "@/components/action-form";
@@ -9,8 +9,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MenuCategoryRow } from "./menu-category-row";
 import { ModifierGroupCard } from "./modifier-group-card";
+import { ItemRow } from "./item-row";
 import { CollapsibleSection } from "./collapsible-section";
-import { createMenuCategory, createModifierGroup } from "./actions";
+import { createMenuCategory, createModifierGroup, createItem } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,13 +28,13 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
   const { venueSlug } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
 
-  const [menus, categories, modifierGroups] = await Promise.all([
+  const [menus, categories, modifierGroups, items] = await Promise.all([
     prisma.menu.findMany({
       where: { venueId: venue.id },
       orderBy: { name: "asc" },
       include: {
         bookingType: { select: { name: true } },
-        _count: { select: { items: true } },
+        _count: { select: { itemPlacements: true } },
       },
     }),
     prisma.menuCategory.findMany({
@@ -48,6 +49,10 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
         options: { select: { id: true, name: true, priceDeltaPence: true, sortOrder: true, active: true } },
         _count: { select: { itemGroups: true } },
       },
+    }),
+    prisma.menuItem.findMany({
+      where: { venueId: venue.id },
+      orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }],
     }),
   ]);
 
@@ -82,7 +87,7 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
                     <tr key={menu.id} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
                       <td className="px-4 py-3 font-medium text-zinc-900">{menu.name}</td>
                       <td className="px-4 py-3 text-zinc-600">{menu.bookingType?.name ?? "Any"}</td>
-                      <td className="px-4 py-3 tabular-nums text-zinc-600">{menu._count.items}</td>
+                      <td className="px-4 py-3 tabular-nums text-zinc-600">{menu._count.itemPlacements}</td>
                       <td className="px-4 py-3">
                         <Badge variant={menu.active ? "success" : "neutral"}>{menu.active ? "Active" : "Inactive"}</Badge>
                       </td>
@@ -143,6 +148,85 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
                 <input type="number" name="sortOrder" defaultValue={0} className="w-28 rounded-md border border-zinc-300 px-3 py-2" />
               </label>
               <SubmitButton label="Add category" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
+            </ActionForm>
+          </Card>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Items"
+        description="A venue's full item catalogue - DV8 Chips, a Chicken Burger, and so on - typed once here no matter how many menus it ends up on. Putting an existing item on a specific menu, or taking it off one, happens on that menu's own page."
+      >
+        <div className="flex flex-col gap-4">
+          {items.length > 0 ? (
+            <Card padded={false} className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <tbody>
+                    {items.map((item) => (
+                      <ItemRow key={item.id} item={item} venueId={venue.id} categories={categories} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : (
+            <EmptyState icon={<ChefHat className="h-5 w-5" strokeWidth={1.75} />} label="No items yet." />
+          )}
+
+          <Card>
+            <ActionForm action={createItem} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="venueId" value={venue.id} />
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">Name</span>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  placeholder="Fish & chips"
+                  className="w-44 rounded-md border border-zinc-300 px-3 py-2"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">Description</span>
+                <input type="text" name="description" className="w-56 rounded-md border border-zinc-300 px-3 py-2" />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">Price (£)</span>
+                <input
+                  type="number"
+                  name="pricePounds"
+                  min={0}
+                  step={0.01}
+                  required
+                  className="w-24 rounded-md border border-zinc-300 px-3 py-2"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">Dietary tags</span>
+                <input
+                  type="text"
+                  name="dietaryTags"
+                  placeholder="vegetarian, gf"
+                  className="w-40 rounded-md border border-zinc-300 px-3 py-2"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">Category</span>
+                <select name="categoryId" defaultValue="" className="w-40 rounded-md border border-zinc-300 px-3 py-2">
+                  <option value="">Uncategorised</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-1.5 pb-2">
+                <input type="checkbox" name="active" defaultChecked className="h-4 w-4 rounded border-zinc-300" />
+                <span className="text-sm font-medium text-zinc-700">Active</span>
+              </label>
+              <SubmitButton label="Add item" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
             </ActionForm>
           </Card>
         </div>

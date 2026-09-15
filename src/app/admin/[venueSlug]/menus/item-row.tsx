@@ -1,34 +1,32 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
-import { deleteMenuItem, updateMenuItem } from "./actions";
+import { deleteItem, updateItem } from "./actions";
 import type { ActionResult } from "@/components/action-form";
 import type { MenuItem } from "@/generated/prisma";
 import { buttonStyles } from "@/components/ui/button";
 
-export function MenuItemRow({
+/**
+ * A venue's item, editable in place - this is the one place an item's
+ * name/description/price/dietary tags/category are typed (see MenuItem's
+ * doc comment in schema.prisma). Which menus offer it is managed
+ * separately, from each menu's own page.
+ */
+export function ItemRow({
   item,
-  menuId,
   venueId,
-  venueSlug,
   categories,
-  customisationStepCount,
 }: {
   item: MenuItem;
-  menuId: string;
   venueId: string;
-  venueSlug: string;
   categories: { id: string; name: string }[];
-  /** How many ModifierGroup steps (Toppings, Cheese, ...) are attached to this item - 0 means tapping it in the kiosk adds it straight to the basket. */
-  customisationStepCount: number;
 }) {
   const [updateState, updateAction, updatePending] = useActionState<ActionResult, FormData>(
-    async (_prevState, formData) => updateMenuItem(formData),
+    async (_prevState, formData) => updateItem(formData),
     undefined,
   );
   const [deleteState, deleteAction, deletePending] = useActionState<ActionResult, FormData>(
-    async (_prevState, formData) => deleteMenuItem(formData),
+    async (_prevState, formData) => deleteItem(formData),
     undefined,
   );
 
@@ -37,7 +35,6 @@ export function MenuItemRow({
       <td colSpan={5} className="px-4 py-3">
         <form action={updateAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="id" value={item.id} />
-          <input type="hidden" name="menuId" value={menuId} />
           <input type="hidden" name="venueId" value={venueId} />
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-zinc-500">Name</span>
@@ -102,12 +99,6 @@ export function MenuItemRow({
           <button type="submit" disabled={updatePending} className={buttonStyles("secondary", "sm")}>
             {updatePending ? "Saving…" : "Save"}
           </button>
-          <Link
-            href={`/admin/${venueSlug}/menus/${menuId}/items/${item.id}`}
-            className={buttonStyles("secondary", "sm")}
-          >
-            Customise{customisationStepCount > 0 ? ` (${customisationStepCount} step${customisationStepCount === 1 ? "" : "s"})` : ""}
-          </Link>
           <button
             type="submit"
             formAction={deleteAction}

@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db/client";
 import { requireAdminSession } from "@/lib/admin/require-admin-session";
 import type { ActionResult } from "@/components/action-form";
 
-/** venueId comes from a hidden form field (set from the page's route param) — admin sessions are venue-independent, see requireAdminVenue(). */
+/** venueId comes from a hidden form field (set from the page's route param) - admin sessions are venue-independent, see requireAdminVenue(). */
 async function resolveVenue(formData: FormData): Promise<{ id: string; slug: string } | { error: string }> {
   const venueId = String(formData.get("venueId") ?? "").trim();
   if (!venueId) return { error: "Missing venue." };
@@ -118,7 +118,9 @@ export async function deleteMenu(formData: FormData): Promise<ActionResult> {
     };
   }
 
-  // Deleting the menu cascades to its MenuItems (onDelete: Cascade in schema).
+  // Deleting the menu cascades to its MenuItemPlacement rows (onDelete:
+  // Cascade in schema) - the venue's MenuItems themselves, and their
+  // placements on any other menu, are untouched.
   await prisma.menu.deleteMany({ where: { id, venueId: venue.id } });
   revalidatePath(`/admin/${venue.slug}/menus`);
   redirect(`/admin/${venue.slug}/menus`);
@@ -166,7 +168,7 @@ export async function updateMenuCategory(formData: FormData): Promise<ActionResu
 }
 
 /**
- * No blocking check before delete, unlike deleteMenu/deleteMenuItem: a
+ * No blocking check before delete, unlike deleteMenu/deleteItem: a
  * category going away just un-categorises whatever items pointed at it
  * (MenuItem.categoryId is ON DELETE SET NULL, see schema.prisma) rather
  * than losing anything, so there's no data-loss case to guard against here.
@@ -196,19 +198,17 @@ function parseDietaryTags(formData: FormData): string[] {
     .filter(Boolean);
 }
 
-async function assertMenuBelongsToVenue(menuId: string, venueId: string): Promise<boolean> {
-  const menu = await prisma.menu.findFirst({ where: { id: menuId, venueId }, select: { id: true } });
-  return Boolean(menu);
-}
+// ---------------------------------------------------------------------------
+// Items (MenuItem is venue-scoped, see schema.prisma's doc comment on that
+// model) - name/description/price/dietary tags/category are all typed here
+// and only here. Which menus offer a given item is managed separately, see
+// attachItemToMenu/detachItemFromMenu below.
+// ---------------------------------------------------------------------------
 
-export async function createMenuItem(formData: FormData): Promise<ActionResult> {
+export async function createItem(formData: FormData): Promise<ActionResult> {
   await requireAdminSession();
   const venue = await resolveVenue(formData);
   if ("error" in venue) return venue;
-  const menuId = String(formData.get("menuId") ?? "");
-  if (!(await assertMenuBelongsToVenue(menuId, venue.id))) {
-    return { error: "Menu not found for this venue." };
-  }
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required." };
@@ -225,7 +225,7 @@ export async function createMenuItem(formData: FormData): Promise<ActionResult> 
 
   await prisma.menuItem.create({
     data: {
-      menuId,
+      venueId: venue.id,
       categoryId,
       name,
       description,
@@ -234,18 +234,14 @@ export async function createMenuItem(formData: FormData): Promise<ActionResult> 
       dietaryTags: parseDietaryTags(formData),
     },
   });
-  revalidatePath(`/admin/${venue.slug}/menus/${menuId}`);
+  revalidatePath(`/admin/${venue.slug}/menus`);
 }
 
-export async function updateMenuItem(formData: FormData): Promise<ActionResult> {
+export async function updateItem(formData: FormData): Promise<ActionResult> {
   await requireAdminSession();
   const venue = await resolveVenue(formData);
   if ("error" in venue) return venue;
   const id = String(formData.get("id") ?? "");
-  const menuId = String(formData.get("menuId") ?? "");
-  if (!(await assertMenuBelongsToVenue(menuId, venue.id))) {
-    return { error: "Menu not found for this venue." };
-  }
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required." };
@@ -261,37 +257,93 @@ export async function updateMenuItem(formData: FormData): Promise<ActionResult> 
   }
 
   const result = await prisma.menuItem.updateMany({
-    where: { id, menuId },
+    where: { id, venueId: venue.id },
     data: { name, description, active, categoryId, priceInPence: priceOrError, dietaryTags: parseDietaryTags(formData) },
   });
-  if (result.count === 0) return { error: "Menu item not found." };
+  if (result.count === 0) return { error: "Item not found for this venue." };
 
-  revalidatePath(`/admin/${venue.slug}/menus/${menuId}`);
+  revalidatePath(`/admin/${venue.slug}/menus`);
 }
 
-export async function deleteMenuItem(formData: FormData): Promise<ActionResult> {
+/**
+ * Deactivates instead of deleting when the item is on any historical
+ * pre-order, same reasoning as deleteMenu - a past order's PreOrderItem
+ * still points at it (ON DELETE RESTRICT, see schema.prisma), so it can
+ * never be hard-deleted from under that history anyway. Deleting it
+ * outright also cascades to every MenuItemPlacement row for it (onDelete:
+ * Cascade), taking it off every menu it was on, not just one.
+ */
+export async function deleteItem(formData: FormData): Promise<ActionResult> {
   await requireAdminSession();
   const venue = await resolveVenue(formData);
   if ("error" in venue) return venue;
   const id = String(formData.get("id") ?? "");
-  const menuId = String(formData.get("menuId") ?? "");
-  if (!(await assertMenuBelongsToVenue(menuId, venue.id))) {
-    return { error: "Menu not found for this venue." };
-  }
 
-  const item = await prisma.menuItem.findFirst({ where: { id, menuId }, select: { name: true } });
-  if (!item) return { error: "Menu item not found." };
+  const item = await prisma.menuItem.findFirst({ where: { id, venueId: venue.id }, select: { name: true } });
+  if (!item) return { error: "Item not found for this venue." };
 
   const preOrderItemCount = await prisma.preOrderItem.count({ where: { menuItemId: id } });
   if (preOrderItemCount > 0) {
-    await prisma.menuItem.updateMany({ where: { id, menuId }, data: { active: false } });
-    revalidatePath(`/admin/${venue.slug}/menus/${menuId}`);
+    await prisma.menuItem.updateMany({ where: { id, venueId: venue.id }, data: { active: false } });
+    revalidatePath(`/admin/${venue.slug}/menus`);
     return {
       error: `"${item.name}" is on ${preOrderItemCount} existing pre-order(s), so it can't be deleted, deactivated instead.`,
     };
   }
 
-  await prisma.menuItem.deleteMany({ where: { id, menuId } });
+  await prisma.menuItem.deleteMany({ where: { id, venueId: venue.id } });
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
+async function assertMenuBelongsToVenue(menuId: string, venueId: string): Promise<boolean> {
+  const menu = await prisma.menu.findFirst({ where: { id: menuId, venueId }, select: { id: true } });
+  return Boolean(menu);
+}
+
+/**
+ * Puts an existing venue item on a menu. This, and detachItemFromMenu, are
+ * the only way items land on or leave a menu now - nothing about the item
+ * itself (name, price, description, ...) is typed here, staff just pick it
+ * from a dropdown of the venue's existing items (see MenuItemPlacement's
+ * doc comment in schema.prisma).
+ */
+export async function attachItemToMenu(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const menuId = String(formData.get("menuId") ?? "");
+  if (!(await assertMenuBelongsToVenue(menuId, venue.id))) {
+    return { error: "Menu not found for this venue." };
+  }
+
+  const menuItemId = String(formData.get("menuItemId") ?? "");
+  const item = await prisma.menuItem.findFirst({ where: { id: menuItemId, venueId: venue.id }, select: { id: true } });
+  if (!item) return { error: "Item not found for this venue." };
+
+  try {
+    await prisma.menuItemPlacement.create({ data: { menuId, menuItemId } });
+  } catch {
+    return { error: "That item is already on this menu." };
+  }
+  revalidatePath(`/admin/${venue.slug}/menus/${menuId}`);
+}
+
+/**
+ * Takes an item off this one menu - the item itself, and any other menu
+ * it's on, is untouched (see MenuItemPlacement's doc comment).
+ */
+export async function detachItemFromMenu(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const menuId = String(formData.get("menuId") ?? "");
+  if (!(await assertMenuBelongsToVenue(menuId, venue.id))) {
+    return { error: "Menu not found for this venue." };
+  }
+
+  const menuItemId = String(formData.get("menuItemId") ?? "");
+  const result = await prisma.menuItemPlacement.deleteMany({ where: { menuId, menuItemId } });
+  if (result.count === 0) return { error: "That item isn't on this menu." };
   revalidatePath(`/admin/${venue.slug}/menus/${menuId}`);
 }
 
@@ -430,7 +482,7 @@ export async function updateModifierOption(formData: FormData): Promise<ActionRe
 }
 
 /**
- * Always safe to delete outright, unlike menus/menu items: a historical
+ * Always safe to delete outright, unlike menus/items: a historical
  * order's PreOrderItemModifier row snapshots the option's name and price
  * at order time (optionId itself is ON DELETE SET NULL, see schema.prisma)
  * so removing the live option here can never change what a past customer
@@ -449,8 +501,9 @@ export async function deleteModifierOption(formData: FormData): Promise<ActionRe
   revalidatePath(`/admin/${venue.slug}/menus`);
 }
 
-async function assertMenuItemBelongsToVenue(menuItemId: string, venueId: string): Promise<{ menuId: string } | null> {
-  return prisma.menuItem.findFirst({ where: { id: menuItemId, menu: { venueId } }, select: { menuId: true } });
+async function assertMenuItemBelongsToVenue(menuItemId: string, venueId: string): Promise<boolean> {
+  const item = await prisma.menuItem.findFirst({ where: { id: menuItemId, venueId }, select: { id: true } });
+  return Boolean(item);
 }
 
 export async function attachModifierGroupToItem(formData: FormData): Promise<ActionResult> {
@@ -458,8 +511,7 @@ export async function attachModifierGroupToItem(formData: FormData): Promise<Act
   const venue = await resolveVenue(formData);
   if ("error" in venue) return venue;
   const menuItemId = String(formData.get("menuItemId") ?? "");
-  const item = await assertMenuItemBelongsToVenue(menuItemId, venue.id);
-  if (!item) return { error: "Menu item not found for this venue." };
+  if (!(await assertMenuItemBelongsToVenue(menuItemId, venue.id))) return { error: "Menu item not found for this venue." };
 
   const groupId = String(formData.get("groupId") ?? "");
   if (!(await assertGroupBelongsToVenue(groupId, venue.id))) return { error: "Group not found for this venue." };
@@ -472,7 +524,12 @@ export async function attachModifierGroupToItem(formData: FormData): Promise<Act
   } catch {
     return { error: "That group is already a step on this item, or that step order is already taken - pick another." };
   }
-  revalidatePath(`/admin/${venue.slug}/menus/${item.menuId}/items/${menuItemId}`);
+  // menuId is just which menu the staff member navigated from to reach this
+  // item's customisation page (the route's [id] segment) - items are
+  // venue-scoped now, not menu-scoped, so this only tells us which page to
+  // revalidate, not which menu the item "belongs" to.
+  const menuId = String(formData.get("menuId") ?? "");
+  revalidatePath(`/admin/${venue.slug}/menus/${menuId}/items/${menuItemId}`);
 }
 
 export async function updateModifierGroupSequence(formData: FormData): Promise<ActionResult> {
@@ -480,8 +537,7 @@ export async function updateModifierGroupSequence(formData: FormData): Promise<A
   const venue = await resolveVenue(formData);
   if ("error" in venue) return venue;
   const menuItemId = String(formData.get("menuItemId") ?? "");
-  const item = await assertMenuItemBelongsToVenue(menuItemId, venue.id);
-  if (!item) return { error: "Menu item not found for this venue." };
+  if (!(await assertMenuItemBelongsToVenue(menuItemId, venue.id))) return { error: "Menu item not found for this venue." };
 
   const id = String(formData.get("id") ?? "");
   const sequence = Number(formData.get("sequence") ?? 0);
@@ -493,7 +549,8 @@ export async function updateModifierGroupSequence(formData: FormData): Promise<A
   } catch {
     return { error: "That step order is already taken by another step on this item." };
   }
-  revalidatePath(`/admin/${venue.slug}/menus/${item.menuId}/items/${menuItemId}`);
+  const menuId = String(formData.get("menuId") ?? "");
+  revalidatePath(`/admin/${venue.slug}/menus/${menuId}/items/${menuItemId}`);
 }
 
 export async function detachModifierGroupFromItem(formData: FormData): Promise<ActionResult> {
@@ -501,11 +558,11 @@ export async function detachModifierGroupFromItem(formData: FormData): Promise<A
   const venue = await resolveVenue(formData);
   if ("error" in venue) return venue;
   const menuItemId = String(formData.get("menuItemId") ?? "");
-  const item = await assertMenuItemBelongsToVenue(menuItemId, venue.id);
-  if (!item) return { error: "Menu item not found for this venue." };
+  if (!(await assertMenuItemBelongsToVenue(menuItemId, venue.id))) return { error: "Menu item not found for this venue." };
 
   const id = String(formData.get("id") ?? "");
   const result = await prisma.menuItemModifierGroup.deleteMany({ where: { id, menuItemId } });
   if (result.count === 0) return { error: "Step not found." };
-  revalidatePath(`/admin/${venue.slug}/menus/${item.menuId}/items/${menuItemId}`);
+  const menuId = String(formData.get("menuId") ?? "");
+  revalidatePath(`/admin/${venue.slug}/menus/${menuId}/items/${menuItemId}`);
 }

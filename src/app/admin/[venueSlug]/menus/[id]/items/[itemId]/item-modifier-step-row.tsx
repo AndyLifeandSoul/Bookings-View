@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 export function ItemModifierStepRow({
   id,
   menuItemId,
+  menuId,
   venueId,
   groupName,
   groupActive,
@@ -16,6 +17,7 @@ export function ItemModifierStepRow({
 }: {
   id: string;
   menuItemId: string;
+  menuId: string;
   venueId: string;
   groupName: string;
   groupActive: boolean;
@@ -35,6 +37,7 @@ export function ItemModifierStepRow({
       <form action={updateAction} className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="menuItemId" value={menuItemId} />
+        <input type="hidden" name="menuId" value={menuId} />
         <input type="hidden" name="venueId" value={venueId} />
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-zinc-500">Order</span>

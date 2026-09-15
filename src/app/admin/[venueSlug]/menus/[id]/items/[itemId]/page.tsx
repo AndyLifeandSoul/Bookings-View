@@ -30,7 +30,7 @@ export default async function ItemCustomisationPage({
 
   const [item, allGroups] = await Promise.all([
     prisma.menuItem.findFirst({
-      where: { id: itemId, menuId, menu: { venueId: venue.id } },
+      where: { id: itemId, venueId: venue.id },
       include: {
         modifierGroups: {
           orderBy: { sequence: "asc" },
@@ -77,6 +77,7 @@ export default async function ItemCustomisationPage({
               key={mig.id}
               id={mig.id}
               menuItemId={item.id}
+              menuId={menuId}
               venueId={venue.id}
               groupName={mig.group.name}
               groupActive={mig.group.active}
@@ -95,6 +96,7 @@ export default async function ItemCustomisationPage({
         ) : (
           <ActionForm action={attachModifierGroupToItem} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="menuItemId" value={item.id} />
+            <input type="hidden" name="menuId" value={menuId} />
             <input type="hidden" name="venueId" value={venue.id} />
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium text-zinc-700">Step</span>

@@ -128,6 +128,7 @@ model Venue {
   bookings              Booking[]
   enquiries             Enquiry[]
   menus                 Menu[]
+  menuItems             MenuItem[]
   modifierGroups        ModifierGroup[]
   staff                 StaffUser[]
   /// See Payment.venueId's doc comment - a Payment keeps its own venue
@@ -663,7 +664,7 @@ model Menu {
   description   String?
   active        Boolean      @default(true)
 
-  items               MenuItem[]
+  itemPlacements      MenuItemPlacement[]
   preOrders           PreOrder[]
   invites             PreOrderInvite[]
   availableCategories MenuAvailableCategory[]
@@ -711,10 +712,20 @@ model MenuAvailableCategory {
   @@id([menuId, categoryId])
 }
 
+/// A venue's orderable item catalogue - DV8 Chips, a Chicken Burger, and
+/// so on. Deliberately venue-scoped rather than belonging to one Menu: the
+/// same item is often offered on several of a venue's menus (a burger on
+/// both the standard and the Sunday menu), and typing its name/price/
+/// description out again for every menu it appears on invited exactly the
+/// drift you'd expect (two menus quietly disagreeing on a burger's price).
+/// Which menus actually offer it is MenuItemPlacement, a separate join -
+/// see that model's doc comment. Its own customisation steps
+/// (MenuItemModifierGroup) and category are venue-level facts about the
+/// item itself, unaffected by which menus it's placed on.
 model MenuItem {
   id           String        @id @default(cuid())
-  menuId       String
-  menu         Menu          @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  venueId      String
+  venue        Venue         @relation(fields: [venueId], references: [id], onDelete: Cascade)
   /// Nullable: Rumba's flat pizza-choice menu has no need for categories at
   /// all, only DV8's does. An item with no category just doesn't get a
   /// section heading wherever categories are displayed.
@@ -728,6 +739,23 @@ model MenuItem {
 
   preOrderItems  PreOrderItem[]
   modifierGroups MenuItemModifierGroup[]
+  menuPlacements MenuItemPlacement[]
+}
+
+/// Which menus a given MenuItem is offered on - a plain join, same shape
+/// as MenuAvailableCategory, deliberately not "every item shows on every
+/// menu": staff add an existing item to a menu (see the menu page's Items
+/// section, which only ever offers a dropdown of the venue's existing
+/// items, nothing is typed there) rather than recreating it, and removing
+/// a placement here only takes the item off that one menu - the item
+/// itself, and every other menu it's on, is untouched.
+model MenuItemPlacement {
+  menuId     String
+  menu       Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@id([menuId, menuItemId])
 }
 
 /// A staff-initiated request for a customer to submit a pre-order,

@@ -5,8 +5,8 @@ import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { createMenuItem } from "../actions";
-import { MenuItemRow } from "../menu-item-row";
+import { attachItemToMenu } from "../actions";
+import { MenuItemPlacementRow } from "./menu-item-placement-row";
 import { DeleteMenuButton } from "../delete-menu-button";
 import { EditMenuForm } from "./edit-menu-form";
 
@@ -20,24 +20,28 @@ export default async function MenuDetailPage({
   const { venueSlug, id } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
 
-  const [menu, bookingTypes, categories] = await Promise.all([
+  const [menu, bookingTypes, categories, venueItems] = await Promise.all([
     prisma.menu.findFirst({
       where: { id, venueId: venue.id },
       include: {
-        items: {
-          orderBy: { name: "asc" },
+        itemPlacements: {
+          orderBy: { menuItem: { name: "asc" } },
           include: {
-            modifierGroups: {
-              orderBy: { sequence: "asc" },
+            menuItem: {
               include: {
-                group: {
-                  select: {
-                    id: true,
-                    name: true,
-                    options: {
-                      where: { active: true },
-                      orderBy: { sortOrder: "asc" },
-                      select: { id: true, name: true, priceDeltaPence: true },
+                modifierGroups: {
+                  orderBy: { sequence: "asc" },
+                  include: {
+                    group: {
+                      select: {
+                        id: true,
+                        name: true,
+                        options: {
+                          where: { active: true },
+                          orderBy: { sortOrder: "asc" },
+                          select: { id: true, name: true, priceDeltaPence: true },
+                        },
+                      },
                     },
                   },
                 },
@@ -58,27 +62,29 @@ export default async function MenuDetailPage({
       orderBy: { sortOrder: "asc" },
       select: { id: true, name: true },
     }),
+    prisma.menuItem.findMany({
+      where: { venueId: venue.id },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, categoryId: true },
+    }),
   ]);
   if (!menu) notFound();
 
   // Which categories this menu currently offers (see MenuAvailableCategory's
-  // doc comment in schema.prisma) - this is what the Add item / per-item
-  // category dropdowns are scoped to below, not the venue's full list, so
-  // an item can't be miscategorised into a section this menu doesn't use.
+  // doc comment in schema.prisma) - the Add item dropdown below only offers
+  // existing venue items that fit one of these categories, or have no
+  // category at all, so it can't put something on this menu that ends up in
+  // a section the menu doesn't use.
   const availableCategoryIds = new Set(menu.availableCategories.map((a) => a.categoryId));
-  const availableCategories = categories.filter((category) => availableCategoryIds.has(category.id));
 
-  // An item already assigned to a category that's since been unticked for
-  // this menu keeps showing that category as an option on its own row
-  // (just not offered for anything else) - narrowing a menu's categories
-  // should never silently blank out or revert an existing item's data.
-  function categoriesForItem(itemCategoryId: string | null) {
-    if (!itemCategoryId || availableCategoryIds.has(itemCategoryId)) return availableCategories;
-    const orphan = categories.find((category) => category.id === itemCategoryId);
-    return orphan ? [...availableCategories, orphan] : availableCategories;
-  }
+  const placedItems = menu.itemPlacements.map((placement) => placement.menuItem);
+  const placedItemIds = new Set(placedItems.map((item) => item.id));
 
-  const previewItems = menu.items
+  const attachableItems = venueItems.filter(
+    (item) => !placedItemIds.has(item.id) && (!item.categoryId || availableCategoryIds.has(item.categoryId)),
+  );
+
+  const previewItems = placedItems
     .filter((item) => item.active)
     .map((item) => ({
       id: item.id,
@@ -116,21 +122,33 @@ export default async function MenuDetailPage({
 
       <section>
         <h3 className="text-sm font-semibold tracking-tight text-zinc-900">Items</h3>
-        {menu.items.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-500">No items yet, add one below.</p>
+        <p className="mt-1 text-sm text-zinc-500">
+          Existing venue items placed on this menu. Item details themselves are typed once on the venue&apos;s Items
+          section on the Menus page, not here.
+        </p>
+        {placedItems.length === 0 ? (
+          <p className="mt-2 text-sm text-zinc-500">No items on this menu yet, add one below.</p>
         ) : (
           <Card padded={false} className="mt-2 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
+                <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
+                  <tr>
+                    <th className="px-4 py-2.5">Name</th>
+                    <th className="px-4 py-2.5">Price</th>
+                    <th className="px-4 py-2.5">Dietary tags</th>
+                    <th className="px-4 py-2.5">Status</th>
+                    <th className="px-4 py-2.5" />
+                  </tr>
+                </thead>
                 <tbody>
-                  {menu.items.map((item) => (
-                    <MenuItemRow
+                  {placedItems.map((item) => (
+                    <MenuItemPlacementRow
                       key={item.id}
                       item={item}
                       menuId={menu.id}
                       venueId={venue.id}
                       venueSlug={venue.slug}
-                      categories={categoriesForItem(item.categoryId)}
                       customisationStepCount={item.modifierGroups.length}
                     />
                   ))}
@@ -141,60 +159,36 @@ export default async function MenuDetailPage({
         )}
 
         <Card className="mt-4">
-          <ActionForm action={createMenuItem} className="flex flex-wrap items-end gap-3">
-            <input type="hidden" name="menuId" value={menu.id} />
-            <input type="hidden" name="venueId" value={venue.id} />
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-zinc-500">Name</span>
-              <input
-                type="text"
-                name="name"
-                required
-                placeholder="Fish & chips"
-                className="w-44 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-zinc-500">Description</span>
-              <input type="text" name="description" className="w-56 rounded-md border border-zinc-300 px-2 py-1.5 text-sm" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-zinc-500">Price (£)</span>
-              <input
-                type="number"
-                name="pricePounds"
-                min={0}
-                step={0.01}
-                required
-                className="w-24 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-zinc-500">Dietary tags</span>
-              <input
-                type="text"
-                name="dietaryTags"
-                placeholder="vegetarian, gf"
-                className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-zinc-500">Category</span>
-              <select name="categoryId" defaultValue="" className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm">
-                <option value="">Uncategorised</option>
-                {availableCategories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
+          {attachableItems.length === 0 ? (
+            <p className="text-sm text-zinc-500">
+              Every venue item that fits this menu&apos;s categories is already on it. Add a new item, or open up
+              another category on this menu, from the venue&apos;s Items section on the Menus page.
+            </p>
+          ) : (
+            <ActionForm action={attachItemToMenu} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="menuId" value={menu.id} />
+              <input type="hidden" name="venueId" value={venue.id} />
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">Item</span>
+                <select
+                  name="menuItemId"
+                  defaultValue=""
+                  required
+                  className="w-56 rounded-md border border-zinc-300 px-3 py-2"
+                >
+                  <option value="" disabled>
+                    Choose an item
                   </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-1.5 pb-1.5">
-              <input type="checkbox" name="active" defaultChecked className="h-4 w-4 rounded border-zinc-300" />
-              <span className="text-xs font-medium text-zinc-500">Active</span>
-            </label>
-            <SubmitButton label="Add item" pendingLabel="Adding…" className={buttonStyles("primary", "sm")} />
-          </ActionForm>
+                  {attachableItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <SubmitButton label="Add item" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
+            </ActionForm>
+          )}
         </Card>
       </section>
     </div>
