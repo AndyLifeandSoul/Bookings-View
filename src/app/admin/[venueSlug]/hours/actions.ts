@@ -18,6 +18,22 @@ const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /**
+ * TimeFieldSelect (components/time-field-select.tsx) submits a time as two
+ * fields, `${name}-hour` and `${name}-minute`, rather than one native
+ * <input type="time"> - see that component's doc comment for why (a real
+ * Safari bug where typed 24-hour times didn't register before submit).
+ * An empty hour means nothing was picked at all (only meaningful where
+ * `optional` is true) - the minute is ignored in that case, so a blank
+ * hour with a leftover default minute still reads as "not entered".
+ */
+function composeTime(formData: FormData, name: string): string {
+  const hour = String(formData.get(`${name}-hour`) ?? "").trim();
+  if (!hour) return "";
+  const minute = String(formData.get(`${name}-minute`) ?? "").trim();
+  return `${hour}:${minute}`;
+}
+
+/**
  * venueId now arrives via a hidden form field (set from the page's route
  * param), not the session, admin sessions are venue-independent, see
  * requireAdminVenue(). requireAdminSession() (called by every action below)
@@ -47,8 +63,8 @@ export async function saveWeeklyHours(formData: FormData): Promise<ActionResult>
       closedDays.push(day);
       continue;
     }
-    const opensAt = String(formData.get(`opensAt-${day}`) ?? "").trim();
-    const closesAt = String(formData.get(`closesAt-${day}`) ?? "").trim();
+    const opensAt = composeTime(formData, `opensAt-${day}`);
+    const closesAt = composeTime(formData, `closesAt-${day}`);
     if (!TIME_RE.test(opensAt) || !TIME_RE.test(closesAt)) {
       return { error: `Invalid opening hours for ${DAY_NAME(day)}: "${opensAt}"–"${closesAt}". Use HH:mm, e.g. 09:00.` };
     }
@@ -110,8 +126,8 @@ export async function addOverride(formData: FormData): Promise<ActionResult> {
   const canBook = formData.get("canBook") === "on";
   const note = String(formData.get("note") ?? "").trim() || null;
 
-  const startTimeRaw = String(formData.get("startTime") ?? "").trim();
-  const endTimeRaw = String(formData.get("endTime") ?? "").trim();
+  const startTimeRaw = composeTime(formData, "startTime");
+  const endTimeRaw = composeTime(formData, "endTime");
   const hasStart = startTimeRaw !== "";
   const hasEnd = endTimeRaw !== "";
 

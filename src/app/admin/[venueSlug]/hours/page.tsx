@@ -6,6 +6,7 @@ import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { addOverride, saveWeeklyHours } from "./actions";
+import { TimeFieldSelect } from "@/components/time-field-select";
 import { DeleteOverrideButton } from "./delete-override-button";
 
 export const dynamic = "force-dynamic";
@@ -72,20 +73,10 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
                         />
                       </td>
                       <td className="px-4 py-3">
-                        <input
-                          type="time"
-                          name={`opensAt-${day}`}
-                          defaultValue={existing?.opensAt ?? "18:00"}
-                          className="rounded-md border border-zinc-300 px-2 py-1"
-                        />
+                        <TimeFieldSelect name={`opensAt-${day}`} defaultValue={existing?.opensAt ?? "18:00"} />
                       </td>
                       <td className="px-4 py-3">
-                        <input
-                          type="time"
-                          name={`closesAt-${day}`}
-                          defaultValue={existing?.closesAt ?? "23:00"}
-                          className="rounded-md border border-zinc-300 px-2 py-1"
-                        />
+                        <TimeFieldSelect name={`closesAt-${day}`} defaultValue={existing?.closesAt ?? "23:00"} />
                       </td>
                     </tr>
                   );
@@ -154,11 +145,11 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium text-zinc-700">Start time</span>
-              <input type="time" name="startTime" className="rounded-md border border-zinc-300 px-2 py-2" />
+              <TimeFieldSelect name="startTime" optional />
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium text-zinc-700">End time</span>
-              <input type="time" name="endTime" className="rounded-md border border-zinc-300 px-2 py-2" />
+              <TimeFieldSelect name="endTime" optional />
             </label>
             <label className="flex flex-1 flex-col gap-1">
               <span className="text-sm font-medium text-zinc-700">Note (optional)</span>
