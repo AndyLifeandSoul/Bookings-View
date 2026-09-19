@@ -17,6 +17,7 @@ import { Card } from "@/components/ui/card";
 interface OptionForCard {
   id: string;
   name: string;
+  description: string | null;
   priceDeltaPence: number;
   sortOrder: number;
   active: boolean;
@@ -34,6 +35,7 @@ export function ModifierGroupCard({
   id,
   venueId,
   name,
+  description,
   active,
   options,
   itemCount,
@@ -41,6 +43,7 @@ export function ModifierGroupCard({
   id: string;
   venueId: string;
   name: string;
+  description: string | null;
   active: boolean;
   options: OptionForCard[];
   /** How many menu items currently use this group as a step - shown so staff know why a delete might be blocked, without needing to click delete first to find out. */
@@ -71,6 +74,16 @@ export function ModifierGroupCard({
               required
               defaultValue={name}
               className="w-48 rounded-md border border-zinc-300 px-2 py-1.5 text-sm font-semibold"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-zinc-500">Description (optional)</span>
+            <textarea
+              name="description"
+              defaultValue={description ?? ""}
+              rows={1}
+              placeholder="Shown once above the options, e.g. Pick one, extra toppings are 50p each"
+              className="w-64 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
             />
           </label>
           <label className="flex items-center gap-1.5 pb-1.5">
@@ -128,6 +141,15 @@ export function ModifierGroupCard({
             />
           </label>
           <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-zinc-500">Description (optional)</span>
+            <input
+              type="text"
+              name="description"
+              placeholder="What this option is"
+              className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-zinc-500">Extra cost (£)</span>
             <input
               type="number"
@@ -159,6 +181,7 @@ function ModifierOptionRow({
   groupId,
   venueId,
   name,
+  description,
   priceDeltaPence,
   sortOrder,
   active,
@@ -186,6 +209,16 @@ function ModifierOptionRow({
             required
             defaultValue={name}
             className="w-36 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-zinc-500">Description (optional)</span>
+          <input
+            type="text"
+            name="description"
+            defaultValue={description ?? ""}
+            placeholder="What this option is"
+            className="w-40 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
           />
         </label>
         <label className="flex flex-col gap-1">

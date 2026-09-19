@@ -5,12 +5,14 @@ import { useState } from "react";
 export interface KioskPreviewModifierOption {
   id: string;
   name: string;
+  description: string | null;
   priceDeltaPence: number;
 }
 
 export interface KioskPreviewModifierGroup {
   id: string;
   name: string;
+  description: string | null;
   options: KioskPreviewModifierOption[];
 }
 
@@ -351,6 +353,7 @@ function WizardScreen({
         <div className="min-w-0">
           <p className="truncate text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">{breadcrumb}</p>
           <h3 className="text-sm font-bold text-zinc-900">Choose your {group.name.toLowerCase()}</h3>
+          {group.description && <p className="mt-0.5 text-[10px] text-zinc-500">{group.description}</p>}
         </div>
       </div>
       <div className="flex items-center gap-1.5">
@@ -369,8 +372,11 @@ function WizardScreen({
             onClick={() => onPick(option)}
             className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-3 text-left text-xs font-semibold text-zinc-900 hover:border-zinc-900"
           >
-            {option.name}
-            {option.priceDeltaPence > 0 && <span className="text-[11px] font-semibold text-zinc-500">+&pound;{(option.priceDeltaPence / 100).toFixed(2)}</span>}
+            <span className="min-w-0">
+              <span className="block">{option.name}</span>
+              {option.description && <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">{option.description}</span>}
+            </span>
+            {option.priceDeltaPence > 0 && <span className="shrink-0 text-[11px] font-semibold text-zinc-500">+&pound;{(option.priceDeltaPence / 100).toFixed(2)}</span>}
           </button>
         ))}
       </div>

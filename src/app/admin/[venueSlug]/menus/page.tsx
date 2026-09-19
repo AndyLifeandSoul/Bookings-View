@@ -46,7 +46,7 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
       where: { venueId: venue.id },
       orderBy: { name: "asc" },
       include: {
-        options: { select: { id: true, name: true, priceDeltaPence: true, sortOrder: true, active: true } },
+        options: { select: { id: true, name: true, description: true, priceDeltaPence: true, sortOrder: true, active: true } },
         _count: { select: { itemGroups: true } },
       },
     }),
@@ -254,6 +254,7 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
                   id={group.id}
                   venueId={venue.id}
                   name={group.name}
+                  description={group.description}
                   active={group.active}
                   options={group.options}
                   itemCount={group._count.itemGroups}

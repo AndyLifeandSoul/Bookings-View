@@ -378,9 +378,10 @@ export async function createModifierGroup(formData: FormData): Promise<ActionRes
   if ("error" in venue) return venue;
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required." };
+  const description = String(formData.get("description") ?? "").trim() || null;
 
   try {
-    await prisma.modifierGroup.create({ data: { venueId: venue.id, name } });
+    await prisma.modifierGroup.create({ data: { venueId: venue.id, name, description } });
   } catch {
     return { error: `"${name}" already exists for this venue.` };
   }
@@ -394,10 +395,11 @@ export async function updateModifierGroup(formData: FormData): Promise<ActionRes
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required." };
+  const description = String(formData.get("description") ?? "").trim() || null;
   const active = formData.get("active") === "on";
 
   try {
-    const result = await prisma.modifierGroup.updateMany({ where: { id, venueId: venue.id }, data: { name, active } });
+    const result = await prisma.modifierGroup.updateMany({ where: { id, venueId: venue.id }, data: { name, description, active } });
     if (result.count === 0) return { error: "Group not found for this venue." };
   } catch {
     return { error: `"${name}" already exists for this venue.` };
@@ -448,13 +450,14 @@ export async function createModifierOption(formData: FormData): Promise<ActionRe
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required." };
+  const description = String(formData.get("description") ?? "").trim() || null;
   const priceDeltaOrError = parsePriceDeltaToPence(formData);
   if (typeof priceDeltaOrError !== "number") return priceDeltaOrError;
   const sortOrder = Number(formData.get("sortOrder") ?? 0) || 0;
 
   try {
     await prisma.modifierOption.create({
-      data: { groupId, name, priceDeltaPence: priceDeltaOrError, sortOrder },
+      data: { groupId, name, description, priceDeltaPence: priceDeltaOrError, sortOrder },
     });
   } catch {
     return { error: `"${name}" already exists in this group.` };
@@ -472,6 +475,7 @@ export async function updateModifierOption(formData: FormData): Promise<ActionRe
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required." };
+  const description = String(formData.get("description") ?? "").trim() || null;
   const priceDeltaOrError = parsePriceDeltaToPence(formData);
   if (typeof priceDeltaOrError !== "number") return priceDeltaOrError;
   const sortOrder = Number(formData.get("sortOrder") ?? 0) || 0;
@@ -480,7 +484,7 @@ export async function updateModifierOption(formData: FormData): Promise<ActionRe
   try {
     const result = await prisma.modifierOption.updateMany({
       where: { id, groupId },
-      data: { name, priceDeltaPence: priceDeltaOrError, sortOrder, active },
+      data: { name, description, priceDeltaPence: priceDeltaOrError, sortOrder, active },
     });
     if (result.count === 0) return { error: "Option not found." };
   } catch {

@@ -33,10 +33,11 @@ export default async function MenuDetailPage({
                       select: {
                         id: true,
                         name: true,
+                        description: true,
                         options: {
                           where: { active: true },
                           orderBy: { sortOrder: "asc" },
-                          select: { id: true, name: true, priceDeltaPence: true },
+                          select: { id: true, name: true, description: true, priceDeltaPence: true },
                         },
                       },
                     },
@@ -92,7 +93,12 @@ export default async function MenuDetailPage({
       categoryId: item.categoryId,
       modifierGroups: item.modifierGroups.map((attached) => ({
         sequence: attached.sequence,
-        group: { id: attached.group.id, name: attached.group.name, options: attached.group.options },
+        group: {
+          id: attached.group.id,
+          name: attached.group.name,
+          description: attached.group.description,
+          options: attached.group.options,
+        },
       })),
     }));
 

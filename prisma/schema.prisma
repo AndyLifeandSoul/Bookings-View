@@ -850,11 +850,15 @@ model PreOrderItem {
 /// exactly one PreOrderItemModifier per attached group, not by a flag on
 /// this model.
 model ModifierGroup {
-  id      String  @id @default(cuid())
-  venueId String
-  venue   Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  name    String
-  active  Boolean @default(true)
+  id          String  @id @default(cuid())
+  venueId     String
+  venue       Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  name        String
+  /// Optional context shown once above the options on this step's wizard
+  /// screen (e.g. "Pick one, extra toppings are charged separately") -
+  /// distinct from each ModifierOption's own description below.
+  description String?
+  active      Boolean @default(true)
 
   options    ModifierOption[]
   itemGroups MenuItemModifierGroup[]
@@ -873,6 +877,11 @@ model ModifierOption {
   groupId         String
   group           ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   name            String
+  /// Optional detail shown under this option's name in the wizard (e.g.
+  /// what it actually is, or what picking it adds) - not snapshotted onto
+  /// a past order's PreOrderItemModifier, that only ever needed the name
+  /// and price customers actually agreed to at the time.
+  description     String?
   priceDeltaPence Int           @default(0)
   sortOrder       Int           @default(0)
   active          Boolean       @default(true)
