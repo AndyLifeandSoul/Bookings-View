@@ -34,6 +34,22 @@ function composeTime(formData: FormData, name: string): string {
 }
 
 /**
+ * DateFieldSelect (components/date-field-select.tsx) submits a date as
+ * three fields, `${name}-day`/`${name}-month`/`${name}-year`, rather than
+ * one native <input type="date"> - see that component's doc comment for
+ * why (the matching Safari bug to TimeFieldSelect's, on dates instead of
+ * times). Empty if any part is missing, same "incomplete means not
+ * entered" contract as composeTime.
+ */
+function composeDate(formData: FormData, name: string): string {
+  const day = String(formData.get(`${name}-day`) ?? "").trim();
+  const month = String(formData.get(`${name}-month`) ?? "").trim();
+  const year = String(formData.get(`${name}-year`) ?? "").trim();
+  if (!day || !month || !year) return "";
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * venueId now arrives via a hidden form field (set from the page's route
  * param), not the session, admin sessions are venue-independent, see
  * requireAdminVenue(). requireAdminSession() (called by every action below)
@@ -112,10 +128,10 @@ export async function addOverride(formData: FormData): Promise<ActionResult> {
   const venue = await resolveVenue(formData);
   if ("error" in venue) return venue;
 
-  const dateFromStr = String(formData.get("dateFrom") ?? "").trim();
-  const dateToStr = String(formData.get("dateTo") ?? "").trim();
+  const dateFromStr = composeDate(formData, "dateFrom");
+  const dateToStr = composeDate(formData, "dateTo");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFromStr) || !/^\d{4}-\d{2}-\d{2}$/.test(dateToStr)) {
-    return { error: `Invalid date range: "${dateFromStr}" – "${dateToStr}"` };
+    return { error: "Choose a full start date and end date (day, month and year)." };
   }
   const dateFrom = new Date(`${dateFromStr}T00:00:00.000Z`);
   const dateTo = new Date(`${dateToStr}T00:00:00.000Z`);
