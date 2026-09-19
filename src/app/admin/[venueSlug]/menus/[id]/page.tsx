@@ -114,6 +114,7 @@ export default async function MenuDetailPage({
             description={menu.description}
             active={menu.active}
             bookingTypeId={menu.bookingTypeId}
+            maxItemsPerPerson={menu.maxItemsPerPerson}
             bookingTypes={bookingTypes}
             categories={categories}
             availableCategoryIds={[...availableCategoryIds]}

@@ -655,14 +655,21 @@ model Enquiry {
 // ---------------------------------------------------------------------------
 
 model Menu {
-  id            String       @id @default(cuid())
-  venueId       String
-  venue         Venue        @relation(fields: [venueId], references: [id])
-  bookingTypeId String?
-  bookingType   BookingType? @relation(fields: [bookingTypeId], references: [id])
-  name          String
-  description   String?
-  active        Boolean      @default(true)
+  id                String       @id @default(cuid())
+  venueId           String
+  venue             Venue        @relation(fields: [venueId], references: [id])
+  bookingTypeId     String?
+  bookingType       BookingType? @relation(fields: [bookingTypeId], references: [id])
+  name              String
+  description       String?
+  active            Boolean      @default(true)
+  /// Caps how many items in total a single pre-order can contain for this
+  /// menu. Null means unlimited (the pre-existing default). When set, the
+  /// effective cap for a given booking is maxItemsPerPerson multiplied by
+  /// that booking's partySize, checked against the sum of quantities
+  /// across every basket line, not any single item, e.g. a limit of 1 for
+  /// a party of 4 allows 4 items total, in any combination of dishes.
+  maxItemsPerPerson Int?
 
   itemPlacements      MenuItemPlacement[]
   preOrders           PreOrder[]

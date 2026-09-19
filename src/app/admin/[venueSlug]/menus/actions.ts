@@ -15,13 +15,28 @@ async function resolveVenue(formData: FormData): Promise<{ id: string; slug: str
   return venue;
 }
 
-function parseMenuFields(formData: FormData): { name: string; description: string | null; active: boolean; bookingTypeId: string | null } | { error: string } {
+function parseMenuFields(
+  formData: FormData,
+):
+  | { name: string; description: string | null; active: boolean; bookingTypeId: string | null; maxItemsPerPerson: number | null }
+  | { error: string } {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required." };
   const description = String(formData.get("description") ?? "").trim() || null;
   const active = formData.get("active") === "on";
   const bookingTypeId = String(formData.get("bookingTypeId") ?? "").trim() || null;
-  return { name, description, active, bookingTypeId };
+
+  const rawMaxItemsPerPerson = String(formData.get("maxItemsPerPerson") ?? "").trim();
+  let maxItemsPerPerson: number | null = null;
+  if (rawMaxItemsPerPerson) {
+    const parsed = Number(rawMaxItemsPerPerson);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      return { error: "Enter a positive whole number or leave blank for no limit." };
+    }
+    maxItemsPerPerson = parsed;
+  }
+
+  return { name, description, active, bookingTypeId, maxItemsPerPerson };
 }
 
 /**

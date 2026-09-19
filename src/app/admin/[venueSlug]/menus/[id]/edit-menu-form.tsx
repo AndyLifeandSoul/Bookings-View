@@ -21,6 +21,7 @@ export function EditMenuForm({
   description,
   active: initialActive,
   bookingTypeId,
+  maxItemsPerPerson,
   bookingTypes,
   categories,
   availableCategoryIds: initialAvailableCategoryIds,
@@ -32,6 +33,7 @@ export function EditMenuForm({
   description: string | null;
   active: boolean;
   bookingTypeId: string | null;
+  maxItemsPerPerson: number | null;
   bookingTypes: { id: string; name: string }[];
   categories: { id: string; name: string }[];
   availableCategoryIds: string[];
@@ -84,6 +86,23 @@ export function EditMenuForm({
         <label className="flex flex-col gap-1">
           <span className="text-sm font-medium text-zinc-700">Description (optional)</span>
           <textarea name="description" defaultValue={description ?? ""} rows={2} className="rounded-md border border-zinc-300 px-3 py-2" />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-zinc-700">Max items per person (optional)</span>
+          <input
+            type="number"
+            name="maxItemsPerPerson"
+            min={1}
+            step={1}
+            defaultValue={maxItemsPerPerson ?? ""}
+            placeholder="No limit"
+            className="rounded-md border border-zinc-300 px-3 py-2"
+          />
+          <p className="text-xs text-zinc-500">
+            Caps the total items a customer can pre-order for their whole party, e.g. a limit of 1 allows 4 items
+            total for a party of 4, in any combination.
+          </p>
         </label>
 
         {categories.length > 0 && (
