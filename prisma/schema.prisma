@@ -736,6 +736,14 @@ model MenuItem {
   priceInPence Int
   dietaryTags  String[]      @default([])
   active       Boolean       @default(true)
+  /// Display order within a category wherever items are shown to someone
+  /// (the venue's Items list, the live preview, the real customer
+  /// pre-order kiosk) - lower first, ties broken alphabetically by name.
+  /// Staff set this directly (the Items section's Order field), same
+  /// pattern as MenuCategory.sortOrder for categories themselves. Defaults
+  /// to 0 so every item ties until staff deliberately reorder - existing
+  /// items keep exactly today's alphabetical order until then.
+  sortOrder    Int           @default(0)
 
   preOrderItems  PreOrderItem[]
   modifierGroups MenuItemModifierGroup[]

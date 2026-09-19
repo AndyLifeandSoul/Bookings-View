@@ -92,6 +92,15 @@ export function ItemRow({
               ))}
             </select>
           </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-zinc-500">Order</span>
+            <input
+              type="number"
+              name="sortOrder"
+              defaultValue={item.sortOrder}
+              className="w-20 rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+            />
+          </label>
           <label className="flex items-center gap-1.5 pb-1.5">
             <input type="checkbox" name="active" defaultChecked={item.active} className="h-4 w-4 rounded border-zinc-300" />
             <span className="text-xs font-medium text-zinc-500">Active</span>

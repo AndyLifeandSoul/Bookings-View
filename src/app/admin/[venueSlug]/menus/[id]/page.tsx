@@ -1,11 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/client";
 import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
-import { ActionForm } from "@/components/action-form";
-import { SubmitButton } from "@/components/submit-button";
-import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { attachItemToMenu } from "../actions";
+import { AttachItemsForm } from "./attach-items-form";
 import { MenuItemPlacementRow } from "./menu-item-placement-row";
 import { DeleteMenuButton } from "../delete-menu-button";
 import { EditMenuForm } from "./edit-menu-form";
@@ -25,7 +22,7 @@ export default async function MenuDetailPage({
       where: { id, venueId: venue.id },
       include: {
         itemPlacements: {
-          orderBy: { menuItem: { name: "asc" } },
+          orderBy: [{ menuItem: { sortOrder: "asc" } }, { menuItem: { name: "asc" } }],
           include: {
             menuItem: {
               include: {
@@ -165,29 +162,7 @@ export default async function MenuDetailPage({
               another category on this menu, from the venue&apos;s Items section on the Menus page.
             </p>
           ) : (
-            <ActionForm action={attachItemToMenu} className="flex flex-wrap items-end gap-3">
-              <input type="hidden" name="menuId" value={menu.id} />
-              <input type="hidden" name="venueId" value={venue.id} />
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-zinc-700">Item</span>
-                <select
-                  name="menuItemId"
-                  defaultValue=""
-                  required
-                  className="w-56 rounded-md border border-zinc-300 px-3 py-2"
-                >
-                  <option value="" disabled>
-                    Choose an item
-                  </option>
-                  {attachableItems.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <SubmitButton label="Add item" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
-            </ActionForm>
+            <AttachItemsForm menuId={menu.id} venueId={venue.id} items={attachableItems} />
           )}
         </Card>
       </section>

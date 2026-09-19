@@ -52,7 +52,7 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
     }),
     prisma.menuItem.findMany({
       where: { venueId: venue.id },
-      orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }],
+      orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }, { name: "asc" }],
     }),
   ]);
 
@@ -221,6 +221,15 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-zinc-700">Order</span>
+                <input
+                  type="number"
+                  name="sortOrder"
+                  defaultValue={0}
+                  className="w-20 rounded-md border border-zinc-300 px-3 py-2"
+                />
               </label>
               <label className="flex items-center gap-1.5 pb-2">
                 <input type="checkbox" name="active" defaultChecked className="h-4 w-4 rounded border-zinc-300" />

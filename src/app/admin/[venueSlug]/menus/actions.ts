@@ -202,7 +202,7 @@ function parseDietaryTags(formData: FormData): string[] {
 // Items (MenuItem is venue-scoped, see schema.prisma's doc comment on that
 // model) - name/description/price/dietary tags/category are all typed here
 // and only here. Which menus offer a given item is managed separately, see
-// attachItemToMenu/detachItemFromMenu below.
+// attachItemsToMenu/detachItemFromMenu below.
 // ---------------------------------------------------------------------------
 
 export async function createItem(formData: FormData): Promise<ActionResult> {
@@ -222,6 +222,7 @@ export async function createItem(formData: FormData): Promise<ActionResult> {
   if (categoryId && !(await prisma.menuCategory.findFirst({ where: { id: categoryId, venueId: venue.id } }))) {
     return { error: "That category doesn't belong to this venue." };
   }
+  const sortOrder = Number(formData.get("sortOrder") ?? 0) || 0;
 
   await prisma.menuItem.create({
     data: {
@@ -232,6 +233,7 @@ export async function createItem(formData: FormData): Promise<ActionResult> {
       active,
       priceInPence: priceOrError,
       dietaryTags: parseDietaryTags(formData),
+      sortOrder,
     },
   });
   revalidatePath(`/admin/${venue.slug}/menus`);
@@ -255,10 +257,11 @@ export async function updateItem(formData: FormData): Promise<ActionResult> {
   if (categoryId && !(await prisma.menuCategory.findFirst({ where: { id: categoryId, venueId: venue.id } }))) {
     return { error: "That category doesn't belong to this venue." };
   }
+  const sortOrder = Number(formData.get("sortOrder") ?? 0) || 0;
 
   const result = await prisma.menuItem.updateMany({
     where: { id, venueId: venue.id },
-    data: { name, description, active, categoryId, priceInPence: priceOrError, dietaryTags: parseDietaryTags(formData) },
+    data: { name, description, active, categoryId, priceInPence: priceOrError, dietaryTags: parseDietaryTags(formData), sortOrder },
   });
   if (result.count === 0) return { error: "Item not found for this venue." };
 
@@ -301,13 +304,17 @@ async function assertMenuBelongsToVenue(menuId: string, venueId: string): Promis
 }
 
 /**
- * Puts an existing venue item on a menu. This, and detachItemFromMenu, are
- * the only way items land on or leave a menu now - nothing about the item
- * itself (name, price, description, ...) is typed here, staff just pick it
- * from a dropdown of the venue's existing items (see MenuItemPlacement's
- * doc comment in schema.prisma).
+ * Puts one or more existing venue items on a menu in a single submit. This,
+ * and detachItemFromMenu, are the only way items land on or leave a menu
+ * now - nothing about the item itself (name, price, description, ...) is
+ * typed here, staff just tick items from the venue's existing list (see
+ * MenuItemPlacement's doc comment in schema.prisma). Building a brand new
+ * menu used to mean one submit per item, which is exactly what this
+ * batches - skipDuplicates means a stale checkbox for something already
+ * added (e.g. by another admin) between page load and submit is silently
+ * ignored rather than failing the whole batch.
  */
-export async function attachItemToMenu(formData: FormData): Promise<ActionResult> {
+export async function attachItemsToMenu(formData: FormData): Promise<ActionResult> {
   await requireAdminSession();
   const venue = await resolveVenue(formData);
   if ("error" in venue) return venue;
@@ -316,15 +323,16 @@ export async function attachItemToMenu(formData: FormData): Promise<ActionResult
     return { error: "Menu not found for this venue." };
   }
 
-  const menuItemId = String(formData.get("menuItemId") ?? "");
-  const item = await prisma.menuItem.findFirst({ where: { id: menuItemId, venueId: venue.id }, select: { id: true } });
-  if (!item) return { error: "Item not found for this venue." };
+  const requestedIds = [...new Set(formData.getAll("menuItemIds").map((value) => String(value)))];
+  if (requestedIds.length === 0) return { error: "Choose at least one item to add." };
 
-  try {
-    await prisma.menuItemPlacement.create({ data: { menuId, menuItemId } });
-  } catch {
-    return { error: "That item is already on this menu." };
-  }
+  const owned = await prisma.menuItem.findMany({ where: { id: { in: requestedIds }, venueId: venue.id }, select: { id: true } });
+  if (owned.length !== requestedIds.length) return { error: "One or more items don't belong to this venue." };
+
+  await prisma.menuItemPlacement.createMany({
+    data: owned.map((item) => ({ menuId, menuItemId: item.id })),
+    skipDuplicates: true,
+  });
   revalidatePath(`/admin/${venue.slug}/menus/${menuId}`);
 }
 
