@@ -88,6 +88,13 @@ export function MenuKioskPreview({
 
   const totalItems = basket.reduce((sum, line) => sum + line.quantity, 0);
   const totalPence = basket.reduce((sum, line) => sum + lineUnitPricePence(line) * line.quantity, 0);
+  // How many of each item are in the basket right now, regardless of which
+  // modifier selections each basket line has - see pre-order-kiosk.tsx's
+  // matching comment, this preview mirrors that kiosk exactly.
+  const itemQuantities = basket.reduce<Record<string, number>>((acc, line) => {
+    acc[line.menuItemId] = (acc[line.menuItemId] ?? 0) + line.quantity;
+    return acc;
+  }, {});
 
   function addToBasket(menuItemId: string, name: string, basePriceInPence: number, modifiers: BasketLineModifier[]) {
     const key = lineKey(menuItemId, modifiers);
@@ -145,6 +152,7 @@ export function MenuKioskPreview({
               onBack={() => backTo("categories")}
               items={items.filter((item) => item.categoryId === screen.categoryId)}
               onPick={pickItem}
+              itemQuantities={itemQuantities}
             />
           )}
 
@@ -260,12 +268,14 @@ function ItemsScreen({
   onBack,
   items,
   onPick,
+  itemQuantities,
 }: {
   categoryName: string;
   showBack: boolean;
   onBack: () => void;
   items: KioskPreviewItem[];
   onPick: (item: KioskPreviewItem) => void;
+  itemQuantities: Record<string, number>;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -279,15 +289,22 @@ function ItemsScreen({
         <div className="flex flex-col gap-2">
           {items.map((item) => {
             const customisable = item.modifierGroups.length > 0;
+            const quantityInBasket = itemQuantities[item.id] ?? 0;
+            const inBasket = quantityInBasket > 0;
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => onPick(item)}
-                className={`flex items-center justify-between gap-2 rounded-lg p-2.5 text-left hover:bg-zinc-50 ${
-                  customisable ? "border-2 border-zinc-900" : "border border-zinc-200"
+                className={`relative flex items-center justify-between gap-2 rounded-lg p-2.5 text-left hover:bg-zinc-50 ${
+                  inBasket ? "border-2 border-zinc-900" : "border border-zinc-200"
                 }`}
               >
+                {inBasket && (
+                  <span className="absolute -top-1.5 -left-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-zinc-900 px-1 text-[9px] font-semibold text-white">
+                    {quantityInBasket}
+                  </span>
+                )}
                 <div className="min-w-0">
                   <p className="truncate text-xs font-semibold text-zinc-900">{item.name}</p>
                   <p className="mt-0.5 text-[11px] font-medium text-zinc-600">
