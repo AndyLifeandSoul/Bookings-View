@@ -75,7 +75,11 @@ export async function saveWeeklyHours(formData: FormData): Promise<ActionResult>
   const openDays: { day: number; opensAt: string; closesAt: string }[] = [];
 
   for (const day of DAYS) {
-    if (formData.get(`closed-${day}`) === "on") {
+    // Andy's own framing: tick a day to open it, untick to close it - so a
+    // day is closed whenever its own "open" box isn't ticked, whether
+    // that's an explicit untick or (an HTML checkbox convention) the box
+    // simply being absent from the submission at all.
+    if (formData.get(`open-${day}`) !== "on") {
       closedDays.push(day);
       continue;
     }

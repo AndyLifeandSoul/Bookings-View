@@ -70,7 +70,7 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
               <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
                 <tr>
                   <th className="px-4 py-2.5">Day</th>
-                  <th className="px-4 py-2.5">Closed</th>
+                  <th className="px-4 py-2.5">Open</th>
                   <th className="px-4 py-2.5">Opens</th>
                   <th className="px-4 py-2.5">Closes</th>
                 </tr>
@@ -84,8 +84,8 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
-                          name={`closed-${day}`}
-                          defaultChecked={!existing}
+                          name={`open-${day}`}
+                          defaultChecked={!!existing}
                           className="h-4 w-4 rounded border-zinc-300"
                         />
                       </td>
