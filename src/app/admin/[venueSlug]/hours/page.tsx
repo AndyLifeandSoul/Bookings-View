@@ -37,6 +37,22 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
   ]);
 
   const byDay = new Map(weeklyHours.map((row) => [row.dayOfWeek, row]));
+
+  // Forces the weekly-hours ActionForm (and every TimeFieldSelect inside
+  // it) to remount when the underlying data actually changes, rather than
+  // React reconciling onto the same <select> DOM nodes and leaving their
+  // defaultValue-set initial choice in place - the same "stale Router
+  // Cache wins the race against revalidatePath()" class of bug documented
+  // on action-form.tsx and already worked around elsewhere (e.g. the
+  // booking details page's key={booking.updatedAt.getTime()}). OpeningHours
+  // has no updatedAt of its own to key on, so this hashes the actual
+  // per-day hours instead - changes exactly when a save actually changed
+  // something, which is exactly when the form needs to re-initialise.
+  const weeklyHoursKey = DAY_LABELS.map((_, day) => {
+    const existing = byDay.get(day);
+    return existing ? `${day}:${existing.opensAt}-${existing.closesAt}` : `${day}:closed`;
+  }).join(",");
+
   const today = new Date();
   const todayDateOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   // A range still relevant if it hasn't fully finished yet.
@@ -48,7 +64,7 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
       <section>
         <h2 className="text-base font-semibold tracking-tight text-zinc-900">Weekly opening hours</h2>
         <Card padded={false} className="mt-4 overflow-hidden">
-          <ActionForm action={saveWeeklyHours}>
+          <ActionForm key={weeklyHoursKey} action={saveWeeklyHours}>
             <input type="hidden" name="venueId" value={venue.id} />
             <table className="w-full text-left text-sm">
               <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
