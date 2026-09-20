@@ -312,6 +312,15 @@ model BookingType {
 
   requiresPreOrder Boolean @default(false)
 
+  /// When requiresPreOrder is true, whether the pre-order must be paid in
+  /// full during the booking flow itself (a Payment with purpose FULL is
+  /// created alongside the booking, same pattern as depositType/depositAmount
+  /// above) before the booking confirms, or can be left to pay on the day (the
+  /// default, false) - Andy's example: Rumba Congleton's bottomless brunch
+  /// requires payment upfront, DV8's pre-orders don't. Meaningless while
+  /// requiresPreOrder is false.
+  preOrderPaymentRequired Boolean @default(false)
+
   /// Above this party size, a booking of this type is created as ENQUIRY
   /// instead of auto-confirming, for staff to review and confirm manually,
   /// e.g. a table for 10 books instantly, a table for 20 needs a human.
@@ -1005,6 +1014,23 @@ model Payment {
 
   /// Dojo's payment intent id, so webhooks can be reconciled back to this row.
   providerPaymentIntentId String? @unique
+
+  /// The hosted checkout page URL Dojo returned when this intent was
+  /// created. Stored (not just handed back transiently to the caller that
+  /// created it) so a payment request can be shown/copied again later from
+  /// wherever this row is displayed (e.g. bookings-view's booking details
+  /// page), without an extra Dojo API round-trip. Null once Dojo's hosted
+  /// checkout has been used/expired is fine, nothing re-derives this.
+  checkoutUrl String?
+
+  /// Staff-facing label for what a manually-created payment request was
+  /// for (e.g. "Pre-order top-up for +1 guest", "Chasing outstanding
+  /// deposit") - set by staff from bookings-view when they raise an ad-hoc
+  /// payment request against a booking. Null for the two payments the
+  /// system creates automatically at booking time (deposit, and full
+  /// pre-order payment when preOrderPaymentRequired is set) - purpose plus
+  /// the booking itself already explains those without needing a label.
+  description String?
 
   createdAt  DateTime  @default(now())
   capturedAt DateTime?

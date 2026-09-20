@@ -7,10 +7,18 @@ import { getCurrentStaffSession } from "@/lib/auth/session";
 import { findTableConflicts } from "@/lib/staff/table-conflicts";
 import { sendMailAs } from "@/lib/email/graph-client";
 import type { ActionResult } from "@/components/action-form";
-import type { BookingStatus } from "@/generated/prisma";
+import type { BookingStatus, PaymentPurpose } from "@/generated/prisma";
+import { getPaymentProviderForAccount } from "@/lib/payments/get-provider";
+import type { PaymentAccountCode } from "@/lib/payments/types";
+import { getCustomerAppUrl } from "@/lib/pre-order/links";
 
 
 const STATUSES: BookingStatus[] = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
+
+/** The two real-world Dojo merchant accounts currently wired up, see PaymentAccountCode in lib/payments/types.ts. */
+const PAYMENT_ACCOUNT_CODES: PaymentAccountCode[] = ["DV8", "LIFE_AND_SOUL"];
+
+const PAYMENT_PURPOSES: PaymentPurpose[] = ["DEPOSIT", "BALANCE", "FULL"];
 
 /**
  * Same "trust nothing but the session" shape as requireAdminSession, but for
@@ -319,5 +327,249 @@ export async function cancelPreOrderInvite(formData: FormData): Promise<ActionRe
   if (!booking) return { error: "Booking not found for this venue." };
 
   await prisma.preOrderInvite.deleteMany({ where: { bookingId: id, submittedAt: null } });
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+}
+
+/**
+ * Staff-raised ad-hoc payment request against a booking: a Dojo hosted
+ * checkout link for an arbitrary amount, for cases the automatic
+ * deposit/pre-order-payment flow in lifeandsoul-bookings doesn't cover -
+ * Andy's own examples: chasing an outstanding deposit, or any other
+ * one-off charge. Creates the Dojo payment intent directly from this app
+ * rather than round-tripping through lifeandsoul-bookings - see
+ * lib/payments/*.ts's mirrored-file headers: the webhook handler is
+ * generic across whichever app created the Payment row, so this is safe.
+ * The resulting checkoutUrl is persisted on the Payment row itself
+ * (ActionResult can't carry a success payload back to the client, see
+ * action-form.tsx) so it can be shown/copied again from the Payments
+ * section on this page after it refreshes.
+ */
+export async function requestPayment(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const booking = await prisma.booking.findFirst({
+    where: { id, venueId },
+    select: {
+      id: true,
+      venueId: true,
+      date: true,
+      customerEmail: true,
+      venue: { select: { name: true, paymentAccount: { select: { id: true, code: true } } } },
+    },
+  });
+  if (!booking) return { error: "Booking not found for this venue." };
+  if (!booking.venue.paymentAccount) {
+    return { error: `${booking.venue.name} has no Dojo payment account assigned - ask an admin to set one in Admin before requesting payment.` };
+  }
+  if (!PAYMENT_ACCOUNT_CODES.includes(booking.venue.paymentAccount.code as PaymentAccountCode)) {
+    return { error: `${booking.venue.name}'s payment account code "${booking.venue.paymentAccount.code}" isn't recognised.` };
+  }
+
+  const amountPounds = Number(String(formData.get("amountPounds") ?? "").trim());
+  if (!Number.isFinite(amountPounds) || amountPounds <= 0) {
+    return { error: "Enter an amount greater than £0." };
+  }
+  const amountInPence = Math.round(amountPounds * 100);
+
+  const purposeRaw = String(formData.get("purpose") ?? "");
+  if (!PAYMENT_PURPOSES.includes(purposeRaw as PaymentPurpose)) return { error: "Choose what this payment is for." };
+  const purpose = purposeRaw as PaymentPurpose;
+
+  const description = String(formData.get("description") ?? "").trim() || null;
+
+  const provider = getPaymentProviderForAccount(booking.venue.paymentAccount.code as PaymentAccountCode);
+  const customerAppUrl = getCustomerAppUrl();
+
+  try {
+    const intent = await provider.createPaymentIntent({
+      amountInPence,
+      currency: "GBP",
+      captureMode: "AUTO",
+      reference: booking.id,
+      description: description ?? `Payment request for ${booking.venue.name} booking`,
+      customerEmail: booking.customerEmail ?? undefined,
+      returnUrl: `${customerAppUrl}/payment-received?booking=${encodeURIComponent(venueSlug)}`,
+      cancelUrl: `${customerAppUrl}/payment-cancelled?booking=${encodeURIComponent(venueSlug)}`,
+    });
+
+    await prisma.payment.create({
+      data: {
+        bookingId: booking.id,
+        venueId: booking.venueId,
+        bookingDate: booking.date,
+        paymentAccountId: booking.venue.paymentAccount.id,
+        purpose,
+        captureMode: "AUTO",
+        status: "CREATED",
+        amountInPence,
+        currency: "GBP",
+        providerPaymentIntentId: intent.providerPaymentIntentId,
+        checkoutUrl: intent.checkoutUrl ?? null,
+        description,
+      },
+    });
+  } catch (err) {
+    return { error: `Could not create the payment request: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+}
+
+/**
+ * Quick-add: staff add extra pre-order items to a booking that already has
+ * a submitted PreOrder - Andy's example: a table booked and paid for 4,
+ * called back to add a 5th person's dishes. First-pass scope limitation
+ * (disclosed to Andy): only items with no modifier customisation wizard
+ * (MenuItemModifierGroup rows) can be quick-added here - full modifier
+ * selection needs the same validate-and-price logic the customer kiosk
+ * uses (lifeandsoul-bookings' validateAndPricePreOrder), which doesn't
+ * exist in this app. The booking details page only ever offers
+ * modifier-free items as options, but this re-checks server-side
+ * regardless, never trusting an id/quantity typed into a form on its own.
+ *
+ * When the booking type requires payment up front for pre-orders
+ * (BookingType.preOrderPaymentRequired, e.g. Rumba's bottomless brunch),
+ * adding items also raises a BALANCE payment request for exactly the
+ * price of what's being added - not a reconciliation against everything
+ * already paid, just the cost of this addition, which is all Andy's own
+ * example actually needs (charge for the 1 extra person, not re-total the
+ * whole booking). For pay-on-the-day types (DV8), items are added with no
+ * payment step, same as the original pre-order.
+ *
+ * If the items are added but the payment request can't be created (no
+ * payment account configured, or the Dojo call fails), the items are kept
+ * - a hungry table shouldn't lose its order over a payment API hiccup -
+ * and the error tells staff to raise it manually via "Request a payment"
+ * for the same amount instead.
+ */
+export async function addPreOrderItems(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const booking = await prisma.booking.findFirst({
+    where: { id, venueId },
+    select: {
+      id: true,
+      venueId: true,
+      date: true,
+      customerEmail: true,
+      bookingType: { select: { preOrderPaymentRequired: true } },
+      venue: { select: { name: true, paymentAccount: { select: { id: true, code: true } } } },
+      preOrder: { select: { id: true, menuId: true } },
+    },
+  });
+  if (!booking) return { error: "Booking not found for this venue." };
+  if (!booking.preOrder) return { error: "This booking doesn't have a submitted pre-order yet." };
+  const preOrderId = booking.preOrder.id;
+  const menuId = booking.preOrder.menuId;
+
+  const guestLabel = String(formData.get("guestLabel") ?? "").trim() || null;
+
+  const qtyEntries: { menuItemId: string; quantity: number }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("qty__")) continue;
+    const quantity = Math.trunc(Number(value));
+    if (Number.isFinite(quantity) && quantity > 0) {
+      qtyEntries.push({ menuItemId: key.slice("qty__".length), quantity });
+    }
+  }
+  if (qtyEntries.length === 0) return { error: "Enter a quantity for at least one item." };
+
+  // Re-fetch the eligible (modifier-free, on this pre-order's menu) items
+  // server-side - see this action's doc comment on why the form's own ids
+  // aren't trusted on their own.
+  const eligibleItems = await prisma.menuItem.findMany({
+    where: {
+      id: { in: qtyEntries.map((e) => e.menuItemId) },
+      venueId,
+      active: true,
+      menuPlacements: { some: { menuId } },
+      modifierGroups: { none: {} },
+    },
+    select: { id: true, priceInPence: true },
+  });
+  const eligibleById = new Map(eligibleItems.map((item) => [item.id, item]));
+
+  const lines = qtyEntries
+    .map((e) => ({ ...e, item: eligibleById.get(e.menuItemId) }))
+    .filter((e): e is { menuItemId: string; quantity: number; item: { id: string; priceInPence: number } } => e.item !== undefined);
+  if (lines.length === 0) {
+    return {
+      error:
+        "None of the selected items could be added (they may no longer be on this menu, or need customisation this quick-add doesn't support).",
+    };
+  }
+
+  const addedAmountInPence = lines.reduce((sum, l) => sum + l.item.priceInPence * l.quantity, 0);
+
+  await prisma.preOrderItem.createMany({
+    data: lines.map((l) => ({
+      preOrderId,
+      menuItemId: l.menuItemId,
+      quantity: l.quantity,
+      guestLabel,
+    })),
+  });
+
+  if (!booking.bookingType.preOrderPaymentRequired) {
+    revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+    return;
+  }
+
+  const addedAmountDisplay = `£${(addedAmountInPence / 100).toFixed(2)}`;
+
+  if (!booking.venue.paymentAccount || !PAYMENT_ACCOUNT_CODES.includes(booking.venue.paymentAccount.code as PaymentAccountCode)) {
+    revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+    return {
+      error: `Items were added, but ${booking.venue.name} has no valid Dojo payment account, so no payment request could be raised automatically. Use "Request a payment" below for ${addedAmountDisplay}.`,
+    };
+  }
+
+  const provider = getPaymentProviderForAccount(booking.venue.paymentAccount.code as PaymentAccountCode);
+  const customerAppUrl = getCustomerAppUrl();
+  const description = `Pre-order top-up${guestLabel ? ` for ${guestLabel}` : ""}`;
+
+  try {
+    const intent = await provider.createPaymentIntent({
+      amountInPence: addedAmountInPence,
+      currency: "GBP",
+      captureMode: "AUTO",
+      reference: booking.id,
+      description,
+      customerEmail: booking.customerEmail ?? undefined,
+      returnUrl: `${customerAppUrl}/payment-received?booking=${encodeURIComponent(venueSlug)}`,
+      cancelUrl: `${customerAppUrl}/payment-cancelled?booking=${encodeURIComponent(venueSlug)}`,
+    });
+
+    await prisma.payment.create({
+      data: {
+        bookingId: booking.id,
+        venueId: booking.venueId,
+        bookingDate: booking.date,
+        paymentAccountId: booking.venue.paymentAccount.id,
+        purpose: "BALANCE",
+        captureMode: "AUTO",
+        status: "CREATED",
+        amountInPence: addedAmountInPence,
+        currency: "GBP",
+        providerPaymentIntentId: intent.providerPaymentIntentId,
+        checkoutUrl: intent.checkoutUrl ?? null,
+        description,
+      },
+    });
+  } catch (err) {
+    revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+    return {
+      error: `Items were added, but the payment request could not be created (${err instanceof Error ? err.message : String(err)}). Use "Request a payment" below for ${addedAmountDisplay}.`,
+    };
+  }
+
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
 }

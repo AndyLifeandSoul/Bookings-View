@@ -70,7 +70,7 @@ export default async function BookingTypesPage({ params }: { params: Promise<{ v
                     <td className="px-4 py-3 tabular-nums text-zinc-600">
                       {bt.enquiryThresholdPartySize != null ? `${bt.enquiryThresholdPartySize} guests` : "-"}
                     </td>
-                    <td className="px-4 py-3 text-zinc-600">{bt.requiresPreOrder ? "Yes" : "-"}</td>
+                    <td className="px-4 py-3 text-zinc-600">{preOrderLabel(bt.requiresPreOrder, bt.preOrderPaymentRequired)}</td>
                     <td className="px-4 py-3">
                       <Badge variant={bt.active ? "success" : "neutral"}>{bt.active ? "Active" : "Inactive"}</Badge>
                     </td>
@@ -100,4 +100,9 @@ function depositLabel(depositType: string, depositAmount: number | null): string
   if (depositType === "NONE" || depositAmount == null) return "None";
   const pounds = (depositAmount / 100).toFixed(2);
   return depositType === "PER_HEAD" ? `£${pounds}/head` : `£${pounds}`;
+}
+
+function preOrderLabel(requiresPreOrder: boolean, preOrderPaymentRequired: boolean): string {
+  if (!requiresPreOrder) return "-";
+  return preOrderPaymentRequired ? "Yes (paid upfront)" : "Yes (pay on day)";
 }

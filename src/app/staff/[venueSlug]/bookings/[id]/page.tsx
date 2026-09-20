@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, LogIn, MessageSquare, Armchair, UtensilsCrossed, Printer } from "lucide-react";
+import { ArrowLeft, LogIn, MessageSquare, Armchair, UtensilsCrossed, Printer, CreditCard } from "lucide-react";
 import { prisma } from "@/lib/db/client";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { ActionForm } from "@/components/action-form";
@@ -17,11 +17,14 @@ import {
   undoCheckOut,
   requestPreOrder,
   cancelPreOrderInvite,
+  requestPayment,
+  addPreOrderItems,
 } from "./actions";
 import { buildPreOrderLink } from "@/lib/pre-order/links";
 import { groupPreOrderItems, preOrderLineUnitPricePence } from "@/lib/pre-order/group-items";
 import { TableSelectionFields } from "./table-selection-fields";
 import { naturalSortTables } from "@/lib/tables/natural-sort";
+import type { PaymentPurpose, PaymentStatus } from "@/generated/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -35,16 +38,17 @@ export default async function BookingDetailsPage({
   const { venueSlug, id } = await params;
   const { venue } = await requireStaffVenue(venueSlug);
 
-  const [booking, tablesRaw, areas, menus, categories] = await Promise.all([
+  const [booking, tablesRaw, areas, menus, categories, payments, paymentAccount] = await Promise.all([
     prisma.booking.findFirst({
       where: { id, venueId: venue.id },
       include: {
-        bookingType: { select: { name: true, tableFillMode: true } },
+        bookingType: { select: { name: true, tableFillMode: true, preOrderPaymentRequired: true } },
         bookingTables: { select: { tableId: true } },
         messages: { orderBy: { createdAt: "asc" }, include: { staffUser: { select: { name: true } } } },
         preOrder: {
           select: {
             notes: true,
+            menuId: true,
             items: {
               select: {
                 quantity: true,
@@ -74,8 +78,45 @@ export default async function BookingDetailsPage({
       orderBy: { sortOrder: "asc" },
       select: { id: true, name: true },
     }),
+    prisma.payment.findMany({
+      where: { bookingId: id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        purpose: true,
+        status: true,
+        amountInPence: true,
+        currency: true,
+        description: true,
+        checkoutUrl: true,
+        createdAt: true,
+      },
+    }),
+    // Whether this venue even has a Dojo account wired up - both the
+    // Payments section (hide/disable "Request a payment" if not) and the
+    // pre-order quick-add's auto payment-request step need to know this,
+    // see requestPayment/addPreOrderItems in actions.ts for what actually
+    // enforces it.
+    prisma.paymentAccount.findFirst({ where: { venues: { some: { id: venue.id } } }, select: { id: true } }),
   ]);
   if (!booking) notFound();
+
+  // Only items with no modifier customisation wizard can be quick-added to
+  // an existing pre-order (see addPreOrderItems' doc comment for why) -
+  // fetched only once we know the booking's pre-order's menu, so this
+  // can't run inside the Promise.all above.
+  const quickAddItems = booking.preOrder
+    ? await prisma.menuItem.findMany({
+        where: {
+          venueId: venue.id,
+          active: true,
+          menuPlacements: { some: { menuId: booking.preOrder.menuId } },
+          modifierGroups: { none: {} },
+        },
+        orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }, { name: "asc" }],
+        select: { id: true, name: true, priceInPence: true, category: { select: { id: true, name: true } } },
+      })
+    : [];
   const tables = naturalSortTables(tablesRaw);
 
   const assignedTableIds = new Set(booking.bookingTables.map((bt) => bt.tableId));
@@ -331,6 +372,53 @@ export default async function BookingDetailsPage({
                     </div>
                   ))}
                 </div>
+
+                {quickAddItems.length > 0 && (
+                  <details className="rounded-md border border-zinc-200 p-3">
+                    <summary className="cursor-pointer text-sm font-medium text-zinc-700">
+                      Add more items (e.g. an extra guest)
+                    </summary>
+                    <ActionForm action={addPreOrderItems} className="mt-3 flex flex-col gap-3">
+                      <input type="hidden" name="id" value={booking.id} />
+                      <input type="hidden" name="venueId" value={venue.id} />
+                      <input type="hidden" name="venueSlug" value={venue.slug} />
+                      <p className="text-xs text-zinc-500">
+                        Only items with no customisation choices can be added here. For anything else, cancel and
+                        re-request the pre-order instead.
+                        {booking.bookingType.preOrderPaymentRequired &&
+                          " This booking type is paid upfront, so adding items also raises a payment request for what's added."}
+                      </p>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-sm font-medium text-zinc-700">Label (optional, e.g. &quot;Guest 5&quot;)</span>
+                        <input
+                          type="text"
+                          name="guestLabel"
+                          className="w-48 rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                        />
+                      </label>
+                      <div className="flex flex-col divide-y divide-zinc-100">
+                        {quickAddItems.map((item) => (
+                          <div key={item.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                            <span>
+                              {item.name}
+                              <span className="ml-2 text-xs text-zinc-500">£{(item.priceInPence / 100).toFixed(2)}</span>
+                            </span>
+                            <input
+                              type="number"
+                              name={`qty__${item.id}`}
+                              min={0}
+                              defaultValue={0}
+                              className="w-16 rounded-md border border-zinc-300 px-2 py-1 text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <SubmitButton label="Add items" pendingLabel="Adding…" className={buttonStyles("primary", "sm")} />
+                      </div>
+                    </ActionForm>
+                  </details>
+                )}
               </Card>
             ) : menus.length === 0 ? (
               <Card className="mt-3">
@@ -424,6 +512,98 @@ export default async function BookingDetailsPage({
 
           <section>
             <h2 className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-zinc-900">
+              <CreditCard className="h-4 w-4 text-zinc-400" strokeWidth={2.25} />
+              Payments
+            </h2>
+            {payments.length === 0 ? (
+              <Card className="mt-3">
+                <p className="text-sm text-zinc-500">No payments or payment requests on this booking yet.</p>
+              </Card>
+            ) : (
+              <div className="mt-3 flex flex-col gap-2">
+                {payments.map((payment) => (
+                  <Card key={payment.id} padded={false} className="flex flex-col gap-2 p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium text-zinc-900">
+                        £{(payment.amountInPence / 100).toFixed(2)} · {purposeLabel(payment.purpose)}
+                      </span>
+                      <span className={statusBadgeClassName(payment.status)}>{payment.status.replace("_", " ")}</span>
+                    </div>
+                    {payment.description && <p className="text-xs text-zinc-500">{payment.description}</p>}
+                    <p className="text-xs text-zinc-400">
+                      {payment.createdAt.toLocaleString("en-GB", { timeZone: venue.timezone })}
+                    </p>
+                    {payment.checkoutUrl && payment.status === "CREATED" && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          readOnly
+                          value={payment.checkoutUrl}
+                          className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-700"
+                        />
+                        <CopyLinkButton link={payment.checkoutUrl} />
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            <Card className="mt-3">
+              {paymentAccount ? (
+                <ActionForm action={requestPayment} className="flex flex-col gap-4">
+                  <input type="hidden" name="id" value={booking.id} />
+                  <input type="hidden" name="venueId" value={venue.id} />
+                  <input type="hidden" name="venueSlug" value={venue.slug} />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-zinc-700">Amount (£)</span>
+                      <input
+                        type="number"
+                        name="amountPounds"
+                        min="0.01"
+                        step="0.01"
+                        required
+                        className="rounded-md border border-zinc-300 px-3 py-2"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-zinc-700">Purpose</span>
+                      <select name="purpose" defaultValue="BALANCE" className="rounded-md border border-zinc-300 px-3 py-2">
+                        <option value="DEPOSIT">Deposit</option>
+                        <option value="BALANCE">Balance / top-up</option>
+                        <option value="FULL">Full payment</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-zinc-700">Description (optional, shown to the customer)</span>
+                    <input
+                      type="text"
+                      name="description"
+                      placeholder="e.g. Outstanding deposit"
+                      className="rounded-md border border-zinc-300 px-3 py-2"
+                    />
+                  </label>
+                  <div>
+                    <SubmitButton
+                      label="Request a payment"
+                      pendingLabel="Creating…"
+                      className={buttonStyles("primary", "md")}
+                    />
+                  </div>
+                </ActionForm>
+              ) : (
+                <p className="text-sm text-zinc-500">
+                  {venue.name} has no Dojo payment account assigned yet, see Admin, so payment requests can&apos;t be
+                  raised from here.
+                </p>
+              )}
+            </Card>
+          </section>
+
+          <section>
+            <h2 className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-zinc-900">
               <MessageSquare className="h-4 w-4 text-zinc-400" strokeWidth={2.25} />
               Messages
             </h2>
@@ -477,4 +657,31 @@ export default async function BookingDetailsPage({
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+function purposeLabel(purpose: PaymentPurpose): string {
+  switch (purpose) {
+    case "DEPOSIT":
+      return "Deposit";
+    case "BALANCE":
+      return "Balance / top-up";
+    case "FULL":
+      return "Full payment";
+  }
+}
+
+function statusBadgeClassName(status: PaymentStatus): string {
+  const base = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium";
+  switch (status) {
+    case "CAPTURED":
+      return `${base} bg-[var(--success-soft)] text-[var(--success-soft-text)]`;
+    case "CREATED":
+    case "AUTHORIZED":
+      return `${base} bg-amber-50 text-amber-800`;
+    case "REFUNDED":
+    case "REVERSED":
+    case "CANCELLED":
+    case "FAILED":
+      return `${base} bg-zinc-100 text-zinc-600`;
+  }
 }

@@ -345,15 +345,32 @@ export function BookingTypeFields({
         </div>
       </fieldset>
 
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          name="requiresPreOrder"
-          defaultChecked={defaults?.requiresPreOrder ?? false}
-          className="h-4 w-4 rounded border-zinc-300"
-        />
-        <span className="text-sm font-medium text-zinc-700">Requires a pre-order menu selection</span>
-      </label>
+      <div className="flex flex-col gap-2">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="requiresPreOrder"
+            defaultChecked={defaults?.requiresPreOrder ?? false}
+            className="h-4 w-4 rounded border-zinc-300"
+          />
+          <span className="text-sm font-medium text-zinc-700">Requires a pre-order menu selection</span>
+        </label>
+        <label className="ml-6 flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="preOrderPaymentRequired"
+            defaultChecked={defaults?.preOrderPaymentRequired ?? false}
+            className="h-4 w-4 rounded border-zinc-300"
+          />
+          <span className="text-sm text-zinc-700">
+            Payment for the pre-order is taken in full during the booking flow, before the booking confirms
+          </span>
+        </label>
+        <p className="ml-6 text-xs text-zinc-500">
+          Leave unchecked for pre-orders that are paid on the day. Only takes effect while &quot;Requires a
+          pre-order menu selection&quot; above is also checked.
+        </p>
+      </div>
 
       <label className="flex flex-col gap-1">
         <span className="text-sm font-medium text-zinc-700">Sort order</span>
