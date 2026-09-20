@@ -101,20 +101,43 @@ export default async function BookingDetailsPage({
   ]);
   if (!booking) notFound();
 
-  // Only items with no modifier customisation wizard can be quick-added to
-  // an existing pre-order (see addPreOrderItems' doc comment for why) -
-  // fetched only once we know the booking's pre-order's menu, so this
-  // can't run inside the Promise.all above.
+  // Every active item on the booking's pre-order menu, with its full
+  // modifier customisation wizard if it has one - fetched only once we
+  // know the booking's pre-order's menu, so this can't run inside the
+  // Promise.all above. addPreOrderItems re-validates all of this fresh
+  // server-side regardless (see its doc comment), this query is only for
+  // rendering the quick-add form.
   const quickAddItems = booking.preOrder
     ? await prisma.menuItem.findMany({
         where: {
           venueId: venue.id,
           active: true,
           menuPlacements: { some: { menuId: booking.preOrder.menuId } },
-          modifierGroups: { none: {} },
         },
         orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }, { name: "asc" }],
-        select: { id: true, name: true, priceInPence: true, category: { select: { id: true, name: true } } },
+        select: {
+          id: true,
+          name: true,
+          priceInPence: true,
+          category: { select: { id: true, name: true } },
+          modifierGroups: {
+            orderBy: { sequence: "asc" },
+            select: {
+              sequence: true,
+              group: {
+                select: {
+                  id: true,
+                  name: true,
+                  options: {
+                    where: { active: true },
+                    orderBy: { sortOrder: "asc" },
+                    select: { id: true, name: true, priceDeltaPence: true },
+                  },
+                },
+              },
+            },
+          },
+        },
       })
     : [];
   const tables = naturalSortTables(tablesRaw);
@@ -383,8 +406,8 @@ export default async function BookingDetailsPage({
                       <input type="hidden" name="venueId" value={venue.id} />
                       <input type="hidden" name="venueSlug" value={venue.slug} />
                       <p className="text-xs text-zinc-500">
-                        Only items with no customisation choices can be added here. For anything else, cancel and
-                        re-request the pre-order instead.
+                        Set a quantity for anything the extra guest is having. For an item with customisation
+                        choices, its dropdowns default to the first option - check them before saving.
                         {booking.bookingType.preOrderPaymentRequired &&
                           " This booking type is paid upfront, so adding items also raises a payment request for what's added."}
                       </p>
@@ -398,18 +421,40 @@ export default async function BookingDetailsPage({
                       </label>
                       <div className="flex flex-col divide-y divide-zinc-100">
                         {quickAddItems.map((item) => (
-                          <div key={item.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
-                            <span>
-                              {item.name}
-                              <span className="ml-2 text-xs text-zinc-500">£{(item.priceInPence / 100).toFixed(2)}</span>
-                            </span>
-                            <input
-                              type="number"
-                              name={`qty__${item.id}`}
-                              min={0}
-                              defaultValue={0}
-                              className="w-16 rounded-md border border-zinc-300 px-2 py-1 text-sm"
-                            />
+                          <div key={item.id} className="flex flex-col gap-2 py-2 text-sm">
+                            <div className="flex items-center justify-between gap-3">
+                              <span>
+                                {item.name}
+                                <span className="ml-2 text-xs text-zinc-500">£{(item.priceInPence / 100).toFixed(2)}</span>
+                              </span>
+                              <input
+                                type="number"
+                                name={`qty__${item.id}`}
+                                min={0}
+                                defaultValue={0}
+                                className="w-16 rounded-md border border-zinc-300 px-2 py-1 text-sm"
+                              />
+                            </div>
+                            {item.modifierGroups.length > 0 && (
+                              <div className="ml-2 flex flex-wrap gap-2">
+                                {item.modifierGroups.map((attached) => (
+                                  <label key={attached.group.id} className="flex flex-col gap-0.5">
+                                    <span className="text-xs text-zinc-500">{attached.group.name}</span>
+                                    <select
+                                      name={`mod__${item.id}__${attached.group.id}`}
+                                      className="rounded-md border border-zinc-300 px-2 py-1 text-xs"
+                                    >
+                                      {attached.group.options.map((option) => (
+                                        <option key={option.id} value={option.id}>
+                                          {option.name}
+                                          {option.priceDeltaPence > 0 ? ` (+£${(option.priceDeltaPence / 100).toFixed(2)})` : ""}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

@@ -11,6 +11,7 @@ import type { BookingStatus, PaymentPurpose } from "@/generated/prisma";
 import { getPaymentProviderForAccount } from "@/lib/payments/get-provider";
 import type { PaymentAccountCode } from "@/lib/payments/types";
 import { getCustomerAppUrl } from "@/lib/pre-order/links";
+import { validateAndPricePreOrder, InvalidPreOrderError, type PreOrderLineInput, type PreOrderModifierInput } from "@/lib/pre-order/validate";
 
 
 const STATUSES: BookingStatus[] = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
@@ -420,16 +421,26 @@ export async function requestPayment(formData: FormData): Promise<ActionResult> 
 }
 
 /**
- * Quick-add: staff add extra pre-order items to a booking that already has
- * a submitted PreOrder - Andy's example: a table booked and paid for 4,
- * called back to add a 5th person's dishes. First-pass scope limitation
- * (disclosed to Andy): only items with no modifier customisation wizard
- * (MenuItemModifierGroup rows) can be quick-added here - full modifier
- * selection needs the same validate-and-price logic the customer kiosk
- * uses (lifeandsoul-bookings' validateAndPricePreOrder), which doesn't
- * exist in this app. The booking details page only ever offers
- * modifier-free items as options, but this re-checks server-side
- * regardless, never trusting an id/quantity typed into a form on its own.
+ * Quick-add: staff add extra pre-order items (with full modifier
+ * customisation, e.g. DV8 Chips' Toppings/Chip Variety/Cheese steps) to a
+ * booking that already has a submitted PreOrder - Andy's example: a table
+ * booked and paid for 4, called back to add a 5th person's dishes. Goes
+ * through the exact same validateAndPricePreOrder() the customer-facing
+ * booking flow and the staff-invite token flow both use (mirrored from
+ * lifeandsoul-bookings, see that file's header), so pricing and what's
+ * actually orderable is decided in exactly one place, not a second
+ * possibly-diverging copy of this logic - never trusting an id/quantity/
+ * modifier choice typed into a form on its own.
+ *
+ * maxItemsPerPerson is deliberately not enforced here (passed as null
+ * regardless of the menu's own setting): that cap is scoped to a whole
+ * order (limit x partySize, see Menu.maxItemsPerPerson's doc comment),
+ * and this call only ever validates the items being ADDED, not the
+ * existing order plus the addition - applying it here would wrongly cap
+ * an addition to a booking that's already near or at the whole-order
+ * limit. Staff use their own judgement instead, same as they already do
+ * everywhere else on this page (e.g. table assignment has no such cap
+ * either).
  *
  * When the booking type requires payment up front for pre-orders
  * (BookingType.preOrderPaymentRequired, e.g. Rumba's bottomless brunch),
@@ -459,6 +470,7 @@ export async function addPreOrderItems(formData: FormData): Promise<ActionResult
       id: true,
       venueId: true,
       date: true,
+      partySize: true,
       customerEmail: true,
       bookingType: { select: { preOrderPaymentRequired: true } },
       venue: { select: { name: true, paymentAccount: { select: { id: true, code: true } } } },
@@ -472,51 +484,67 @@ export async function addPreOrderItems(formData: FormData): Promise<ActionResult
 
   const guestLabel = String(formData.get("guestLabel") ?? "").trim() || null;
 
-  const qtyEntries: { menuItemId: string; quantity: number }[] = [];
+  // Parse "qty__<menuItemId>" quantities and, for whichever items have a
+  // quantity > 0, gather any "mod__<menuItemId>__<groupId>" selections
+  // into the shape validateAndPricePreOrder expects. Items left at 0 are
+  // dropped entirely here, including whatever modifier values the browser
+  // happened to default their (unused) selects to.
+  const items: PreOrderLineInput[] = [];
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("qty__")) continue;
     const quantity = Math.trunc(Number(value));
-    if (Number.isFinite(quantity) && quantity > 0) {
-      qtyEntries.push({ menuItemId: key.slice("qty__".length), quantity });
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
+    const menuItemId = key.slice("qty__".length);
+    const modifiers: PreOrderModifierInput[] = [];
+    const prefix = `mod__${menuItemId}__`;
+    for (const [modKey, modValue] of formData.entries()) {
+      if (!modKey.startsWith(prefix)) continue;
+      const optionId = String(modValue ?? "");
+      if (!optionId) continue;
+      modifiers.push({ groupId: modKey.slice(prefix.length), optionId });
     }
+    items.push({ menuItemId, quantity, modifiers });
   }
-  if (qtyEntries.length === 0) return { error: "Enter a quantity for at least one item." };
+  if (items.length === 0) return { error: "Enter a quantity for at least one item." };
 
-  // Re-fetch the eligible (modifier-free, on this pre-order's menu) items
-  // server-side - see this action's doc comment on why the form's own ids
-  // aren't trusted on their own.
-  const eligibleItems = await prisma.menuItem.findMany({
-    where: {
-      id: { in: qtyEntries.map((e) => e.menuItemId) },
-      venueId,
-      active: true,
-      menuPlacements: { some: { menuId } },
-      modifierGroups: { none: {} },
-    },
-    select: { id: true, priceInPence: true },
-  });
-  const eligibleById = new Map(eligibleItems.map((item) => [item.id, item]));
-
-  const lines = qtyEntries
-    .map((e) => ({ ...e, item: eligibleById.get(e.menuItemId) }))
-    .filter((e): e is { menuItemId: string; quantity: number; item: { id: string; priceInPence: number } } => e.item !== undefined);
-  if (lines.length === 0) {
-    return {
-      error:
-        "None of the selected items could be added (they may no longer be on this menu, or need customisation this quick-add doesn't support).",
-    };
+  let addedAmountInPence: number;
+  let preparedLines: Awaited<ReturnType<typeof validateAndPricePreOrder>>["lines"];
+  try {
+    const prepared = await validateAndPricePreOrder({
+      menuId,
+      categoryIds: null,
+      maxItemsPerPerson: null, // see this action's doc comment
+      partySize: booking.partySize,
+      items,
+    });
+    preparedLines = prepared.lines;
+    addedAmountInPence = prepared.totalInPence;
+  } catch (err) {
+    if (err instanceof InvalidPreOrderError) return { error: err.message };
+    throw err;
   }
 
-  const addedAmountInPence = lines.reduce((sum, l) => sum + l.item.priceInPence * l.quantity, 0);
-
-  await prisma.preOrderItem.createMany({
-    data: lines.map((l) => ({
-      preOrderId,
-      menuItemId: l.menuItemId,
-      quantity: l.quantity,
-      guestLabel,
-    })),
-  });
+  await prisma.$transaction(
+    preparedLines.map((line) =>
+      prisma.preOrderItem.create({
+        data: {
+          preOrderId,
+          menuItemId: line.menuItemId,
+          quantity: line.quantity,
+          guestLabel,
+          modifiers: {
+            create: line.modifiers.map((modifier) => ({
+              optionId: modifier.optionId,
+              sequence: modifier.sequence,
+              groupNameSnapshot: modifier.groupNameSnapshot,
+              optionNameSnapshot: modifier.optionNameSnapshot,
+              priceDeltaPenceSnapshot: modifier.priceDeltaPenceSnapshot,
+            })),
+          },
+        },
+      }),
+    ),
+  );
 
   if (!booking.bookingType.preOrderPaymentRequired) {
     revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
