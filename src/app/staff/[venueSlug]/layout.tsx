@@ -22,9 +22,12 @@ export const dynamic = "force-dynamic";
  */
 export default async function StaffVenueLayout({
   children,
+  modal,
   params,
 }: {
   children: React.ReactNode;
+  /** The @modal parallel-route slot - the intercepted booking overlay when one is open, otherwise null. See @modal/default.tsx and @modal/(.)bookings/[id]/page.tsx. */
+  modal: React.ReactNode;
   params: Promise<{ venueSlug: string }>;
 }) {
   const { venueSlug } = await params;
@@ -70,6 +73,7 @@ export default async function StaffVenueLayout({
         }
       />
       <div className="flex-1">{children}</div>
+      {modal}
     </>
   );
 }
