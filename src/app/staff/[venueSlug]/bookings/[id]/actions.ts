@@ -12,6 +12,7 @@ import { getPaymentProviderForAccount } from "@/lib/payments/get-provider";
 import type { PaymentAccountCode } from "@/lib/payments/types";
 import { getCustomerAppUrl } from "@/lib/pre-order/links";
 import { validateAndPricePreOrder, InvalidPreOrderError, type PreOrderLineInput, type PreOrderModifierInput } from "@/lib/pre-order/validate";
+import { toMinutes, formatMinutes } from "@/lib/bookings/time";
 
 
 const STATUSES: BookingStatus[] = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
@@ -601,3 +602,97 @@ export async function addPreOrderItems(formData: FormData): Promise<ActionResult
 
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
 }
+
+/**
+ * One-click "they didn't turn up" action, Andy's spec (parity review
+ * section 14): a dedicated button rather than making staff dig into the
+ * Status dropdown for this. Doesn't touch checkedInAt/checkedOutAt - a
+ * no-show by definition never arrived, so those stay null; if staff mis-
+ * click this on someone who did check in, they can still fix it via the
+ * ordinary status control.
+ */
+export async function markNoShow(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { id: true } });
+  if (!booking) return { error: "Booking not found for this venue." };
+
+  await prisma.booking.update({ where: { id }, data: { status: "NO_SHOW" } });
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+  revalidatePath(`/staff/${venueSlug}/diary`);
+  revalidatePath(`/staff/${venueSlug}/list`);
+  revalidatePath("/admin/bookings");
+}
+
+const RUNNING_LATE_MINUTES = [5, 10, 15] as const;
+
+/**
+ * One-click "push this booking back by N minutes" action, Andy's spec
+ * (parity review section 14, matching DesignMyNight's Running late +5/+10/
+ * +15 buttons). Shifts both startTime and endTime by the same amount so
+ * the booking's duration is unchanged, then re-checks the currently
+ * assigned tables for conflicts at the new window the same way
+ * reassignTables does - a shift is still a time change, and two bookings on
+ * the same table are exactly what that check exists to prevent. Uses
+ * toMinutes/formatMinutes (see lib/bookings/time.ts) rather than a plain
+ * Date, since Booking.endTime can already read past "24:00" for an
+ * overnight booking and this has to preserve that convention when it adds
+ * to it.
+ */
+export async function shiftBookingRunningLate(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const minutesRaw = Number(formData.get("minutes"));
+  if (!RUNNING_LATE_MINUTES.includes(minutesRaw as (typeof RUNNING_LATE_MINUTES)[number])) {
+    return { error: "Invalid running-late amount." };
+  }
+
+  const booking = await prisma.booking.findFirst({
+    where: { id, venueId },
+    select: {
+      id: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      status: true,
+      bookingTables: { select: { tableId: true } },
+    },
+  });
+  if (!booking) return { error: "Booking not found for this venue." };
+  if (booking.status === "CANCELLED" || booking.status === "COMPLETED" || booking.status === "NO_SHOW") {
+    return { error: "Can't push back a cancelled, completed or no-show booking." };
+  }
+
+  const newStartTime = formatMinutes(toMinutes(booking.startTime) + minutesRaw);
+  const newEndTime = formatMinutes(toMinutes(booking.endTime) + minutesRaw);
+
+  const tableIds = booking.bookingTables.map((bt) => bt.tableId);
+  if (tableIds.length > 0) {
+    const conflicts = await findTableConflicts({
+      venueId,
+      date: booking.date,
+      startTime: newStartTime,
+      endTime: newEndTime,
+      tableIds,
+      excludeBookingId: id,
+    });
+    if (conflicts.length > 0) {
+      const names = [...new Set(conflicts.map((c) => `${c.tableLabel} (${c.customerName}, ${c.startTime}-${c.endTime})`))];
+      return { error: `Can't push back ${minutesRaw} minutes, already booked at that time: ${names.join(", ")}.` };
+    }
+  }
+
+  await prisma.booking.update({ where: { id }, data: { startTime: newStartTime, endTime: newEndTime } });
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+  revalidatePath(`/staff/${venueSlug}/diary`);
+  revalidatePath(`/staff/${venueSlug}/list`);
+}
+

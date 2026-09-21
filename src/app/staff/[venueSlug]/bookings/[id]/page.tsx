@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, LogIn, MessageSquare, Armchair, UtensilsCrossed, Printer, CreditCard } from "lucide-react";
+import { ArrowLeft, LogIn, MessageSquare, Armchair, UtensilsCrossed, Printer, CreditCard, Clock } from "lucide-react";
 import { prisma } from "@/lib/db/client";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { ActionForm } from "@/components/action-form";
@@ -19,6 +19,8 @@ import {
   cancelPreOrderInvite,
   requestPayment,
   addPreOrderItems,
+  markNoShow,
+  shiftBookingRunningLate,
 } from "./actions";
 import { buildPreOrderLink } from "@/lib/pre-order/links";
 import { groupPreOrderItems, preOrderLineUnitPricePence } from "@/lib/pre-order/group-items";
@@ -28,7 +30,10 @@ import type { PaymentPurpose, PaymentStatus } from "@/generated/prisma";
 
 export const dynamic = "force-dynamic";
 
-const STATUSES = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"] as const;
+// NO_SHOW is deliberately left out - it has its own one-click button in the
+// quick actions row below (see markNoShow), matching DesignMyNight's
+// dedicated No show button rather than making staff find it in a dropdown.
+const STATUSES = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED"] as const;
 
 export default async function BookingDetailsPage({
   params,
@@ -143,6 +148,7 @@ export default async function BookingDetailsPage({
   const tables = naturalSortTables(tablesRaw);
 
   const assignedTableIds = new Set(booking.bookingTables.map((bt) => bt.tableId));
+  const assignedTableLabels = tables.filter((t) => assignedTableIds.has(t.id)).map((t) => t.label);
 
   // Opening this page is what counts as "read", same reasoning email
   // clients use for marking a message read on open. Fire-and-forget: a
@@ -216,6 +222,40 @@ export default async function BookingDetailsPage({
             </ActionForm>
           )}
         </Card>
+
+        {/*
+         * Quick actions: Running late and No show as dedicated one-click
+         * buttons, per the parity review (section 14) rather than routing
+         * both through the general Status dropdown below. Hidden once the
+         * booking has settled into an end state, same reasoning as the
+         * check-in/out card above - there's nothing left to push back or
+         * mark as a no-show once it's cancelled, completed or already a
+         * no-show.
+         */}
+        {booking.status !== "CANCELLED" && booking.status !== "COMPLETED" && booking.status !== "NO_SHOW" && (
+          <Card className="mt-3 flex flex-wrap items-center gap-3">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-500">
+              <Clock className="h-3.5 w-3.5" strokeWidth={2.25} />
+              Running late
+            </span>
+            {[5, 10, 15].map((minutes) => (
+              <ActionForm key={minutes} action={shiftBookingRunningLate}>
+                <input type="hidden" name="id" value={booking.id} />
+                <input type="hidden" name="venueId" value={venue.id} />
+                <input type="hidden" name="venueSlug" value={venue.slug} />
+                <input type="hidden" name="minutes" value={minutes} />
+                <SubmitButton label={`+${minutes} min`} pendingLabel="Moving…" className={buttonStyles("secondary", "sm")} />
+              </ActionForm>
+            ))}
+            <span className="mx-1 h-5 w-px bg-zinc-200" />
+            <ActionForm action={markNoShow}>
+              <input type="hidden" name="id" value={booking.id} />
+              <input type="hidden" name="venueId" value={venue.id} />
+              <input type="hidden" name="venueSlug" value={venue.slug} />
+              <SubmitButton label="No show" pendingLabel="Marking…" className={buttonStyles("ghost", "sm")} />
+            </ActionForm>
+          </Card>
+        )}
 
         <div className="mt-8 flex flex-col gap-8">
           <section>
@@ -317,6 +357,16 @@ export default async function BookingDetailsPage({
               </Card>
             ) : (
               <Card className="mt-3">
+                {/*
+                 * Short "currently assigned" summary above the full
+                 * checkbox list, per the parity review (section 14) -
+                 * staff shouldn't have to scan every table in the venue
+                 * just to see what's already assigned to this booking.
+                 */}
+                <p className="mb-3 text-sm text-zinc-600">
+                  <span className="font-medium text-zinc-900">Currently assigned: </span>
+                  {assignedTableLabels.length > 0 ? assignedTableLabels.join(", ") : "No tables assigned yet."}
+                </p>
                 <ActionForm key={[...assignedTableIds].sort().join(",")} action={reassignTables} className="flex flex-col gap-4">
                   <input type="hidden" name="id" value={booking.id} />
                   <input type="hidden" name="venueId" value={venue.id} />
