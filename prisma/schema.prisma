@@ -360,6 +360,19 @@ model BookingType {
   /// longer required to fit an actual table just to get an available slot.
   enquiryThresholdPartySize Int?
 
+  /// Minutes of advance notice this booking type needs to auto-confirm as
+  /// normal. A booking made with less real notice than this (comparing the
+  /// actual instant "now" against the booking's actual start instant, not
+  /// just which calendar day it falls on) is created as ENQUIRY instead,
+  /// the same treatment as enquiryThresholdPartySize and
+  /// Venue.maxArrivalsPer30Min above - see createBooking.ts's isEnquiry
+  /// composition. Null (the default) means no lead-time restriction,
+  /// matching the pre-existing behaviour. Only ever applies to WIDGET
+  /// bookings, since that's the only source createBooking.ts ever creates
+  /// (Andy: auto-confirm rules are a widget thing, a staff-entered booking
+  /// is confirmed at staff discretion regardless of notice).
+  autoConfirmMinLeadMinutes Int?
+
   /// Legacy direct table restriction, never actually wired up in the admin
   /// UI (nothing sets this today), superseded by areaPriorities below for
   /// the "restrict by area, with an order" case the admin UI does support.

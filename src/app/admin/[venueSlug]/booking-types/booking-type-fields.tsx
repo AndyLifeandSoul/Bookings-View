@@ -348,6 +348,23 @@ export function BookingTypeFields({
         />
       </label>
 
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-zinc-700">Requires this much notice to auto-confirm (minutes, optional)</span>
+        <input
+          type="number"
+          name="autoConfirmMinLeadMinutes"
+          min={0}
+          step={15}
+          defaultValue={defaults?.autoConfirmMinLeadMinutes ?? ""}
+          placeholder="e.g. 120"
+          className="w-32 rounded-md border border-zinc-300 px-3 py-2"
+        />
+        <span className="text-xs text-zinc-500">
+          A booking made with less notice than this becomes an enquiry instead of auto-confirming. Only applies to
+          bookings made through the customer widget, leave blank for no restriction.
+        </span>
+      </label>
+
       <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
         <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Deposit</legend>
         <div className="grid gap-4 sm:grid-cols-2">

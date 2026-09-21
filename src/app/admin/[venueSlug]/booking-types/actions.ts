@@ -30,6 +30,7 @@ interface ParsedFields {
   requiresPreOrder: boolean;
   preOrderPaymentRequired: boolean;
   enquiryThresholdPartySize: number | null;
+  autoConfirmMinLeadMinutes: number | null;
   color: string | null;
   runsUntilClose: boolean;
   earliestBookingTime: string | null;
@@ -141,6 +142,16 @@ function parseFields(formData: FormData): ParseResult {
     enquiryThresholdPartySize = parsed;
   }
 
+  const autoConfirmLeadRaw = String(formData.get("autoConfirmMinLeadMinutes") ?? "").trim();
+  let autoConfirmMinLeadMinutes: number | null = null;
+  if (autoConfirmLeadRaw !== "") {
+    const parsed = Number(autoConfirmLeadRaw);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return { ok: false, error: "Auto-confirm notice must be zero or a positive number of minutes, or left blank." };
+    }
+    autoConfirmMinLeadMinutes = parsed;
+  }
+
   const colorRaw = String(formData.get("color") ?? "").trim();
   if (colorRaw && !/^#[0-9a-fA-F]{6}$/.test(colorRaw)) {
     return { ok: false, error: `"${colorRaw}" isn't a valid colour.` };
@@ -196,6 +207,7 @@ function parseFields(formData: FormData): ParseResult {
       requiresPreOrder,
       preOrderPaymentRequired,
       enquiryThresholdPartySize,
+      autoConfirmMinLeadMinutes,
       color,
       runsUntilClose,
       earliestBookingTime,
