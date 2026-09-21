@@ -19,6 +19,7 @@ type OverrideRow = {
   dateFrom: Date;
   dateTo: Date;
   canBook: boolean;
+  mode: "OPEN" | "PRIVATE_HIRE_ONLY";
   startTime: string | null;
   endTime: string | null;
   note: string | null;
@@ -50,7 +51,7 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
   // something, which is exactly when the form needs to re-initialise.
   const weeklyHoursKey = DAY_LABELS.map((_, day) => {
     const existing = byDay.get(day);
-    return existing ? `${day}:${existing.opensAt}-${existing.closesAt}` : `${day}:closed`;
+    return existing ? `${day}:${existing.mode}:${existing.opensAt}-${existing.closesAt}` : `${day}:closed`;
   }).join(",");
 
   const today = new Date();
@@ -70,7 +71,7 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
               <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
                 <tr>
                   <th className="px-4 py-2.5">Day</th>
-                  <th className="px-4 py-2.5">Open</th>
+                  <th className="px-4 py-2.5">State</th>
                   <th className="px-4 py-2.5">Opens</th>
                   <th className="px-4 py-2.5">Closes</th>
                 </tr>
@@ -82,12 +83,15 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
                     <tr key={day} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
                       <td className="px-4 py-3 font-medium text-zinc-900">{label}</td>
                       <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          name={`open-${day}`}
-                          defaultChecked={!!existing}
-                          className="h-4 w-4 rounded border-zinc-300"
-                        />
+                        <select
+                          name={`state-${day}`}
+                          defaultValue={existing ? (existing.mode === "PRIVATE_HIRE_ONLY" ? "private_hire_only" : "open") : "closed"}
+                          className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+                        >
+                          <option value="closed">Closed</option>
+                          <option value="open">Open</option>
+                          <option value="private_hire_only">Private hire only</option>
+                        </select>
                       </td>
                       <td className="px-4 py-3">
                         <TimeFieldSelect name={`opensAt-${day}`} defaultValue={existing?.opensAt ?? "18:00"} />
@@ -161,6 +165,13 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
               <span className="text-sm font-medium text-zinc-700">Can book</span>
             </label>
             <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-zinc-700">Mode</span>
+              <select name="mode" defaultValue="OPEN" className="rounded-md border border-zinc-300 px-2 py-2 text-sm">
+                <option value="OPEN">Open</option>
+                <option value="PRIVATE_HIRE_ONLY">Private hire only</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
               <span className="text-sm font-medium text-zinc-700">Start time</span>
               <TimeFieldSelect name="startTime" optional />
             </label>
@@ -181,9 +192,10 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
           </ActionForm>
           <p className="mt-3 text-xs text-zinc-500">
             Tick &quot;Can book&quot; for special or altered hours (start/end time required), this replaces the normal
-            weekly hours for these dates. Leave it unticked and both times blank to close the whole range. Leave it
-            unticked and fill in times to block out just that window (e.g. a private event) while the rest of the day
-            stays open as normal.
+            weekly hours for these dates - use Mode to make that window private hire only, same as the weekly table.
+            Leave it unticked and both times blank to close the whole range. Leave it unticked and fill in times to
+            block out just that window (e.g. a private event) while the rest of the day stays open as normal (Mode is
+            ignored when &quot;Can book&quot; is off).
           </p>
         </Card>
 
@@ -219,7 +231,13 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
 }
 
 function overrideStatus(override: OverrideRow) {
-  if (override.canBook) return <Badge variant="success">Open</Badge>;
+  if (override.canBook) {
+    return override.mode === "PRIVATE_HIRE_ONLY" ? (
+      <Badge variant="warning">Private hire only</Badge>
+    ) : (
+      <Badge variant="success">Open</Badge>
+    );
+  }
   if (override.startTime && override.endTime) return <Badge variant="danger">Blocked</Badge>;
   return <Badge variant="danger">Closed</Badge>;
 }

@@ -144,6 +144,17 @@ model Venue {
 
 /// Recurring weekly opening hours. One row per (venue, dayOfWeek); absence of
 /// a row for a given day means closed that day by default.
+/// Andy's third opening-hours state, alongside plain open/closed: a day (or
+/// override window) that's bookable, but only for a booking type flagged
+/// isPrivateHireType (see that field's doc comment) - ordinary booking
+/// types treat a PRIVATE_HIRE_ONLY window exactly like closed. Matches
+/// DesignMyNight's open/closed/private-hire-only weekly-hours control from
+/// the parity review (section 1/13).
+enum OpeningHoursMode {
+  OPEN
+  PRIVATE_HIRE_ONLY
+}
+
 model OpeningHours {
   id      String @id @default(cuid())
   venueId String
@@ -155,6 +166,12 @@ model OpeningHours {
   /// Stored as "HH:mm" 24hr strings, interpreted in the venue's timezone.
   opensAt  String
   closesAt String
+
+  /// OPEN (the pre-existing default) or PRIVATE_HIRE_ONLY - see
+  /// OpeningHoursMode's doc comment. A day with no row at all is still
+  /// "closed" exactly as before, this only distinguishes the two states a
+  /// row can represent now that there's more than one.
+  mode OpeningHoursMode @default(OPEN)
 
   @@unique([venueId, dayOfWeek])
 }
@@ -197,6 +214,16 @@ model OpeningHoursOverride {
   dateFrom DateTime @db.Date
   dateTo   DateTime @db.Date
   canBook  Boolean
+
+  /// Only meaningful when canBook is true (a row that makes the range
+  /// bookable at all) - OPEN (default) for an ordinary special/altered-
+  /// hours override, PRIVATE_HIRE_ONLY to carry the same third state into
+  /// a one-off date range (Andy: "add the third state, and carry it over
+  /// into the override"), e.g. a normally-open Tuesday switched to
+  /// private-hire-only for one date, or a normally-closed day opened for
+  /// private hire on a specific evening. Ignored on a canBook=false row
+  /// (a closure or a carved-out block has no "who can book it" question).
+  mode OpeningHoursMode @default(OPEN)
 
   /// Both set together or both null. Required when canBook is true (it's
   /// the special/altered hours window). Optional when canBook is false:
@@ -375,6 +402,17 @@ model BookingType {
   /// colour picked from a fixed palette (hashed on id) when this is unset,
   /// see colourForBookingType() in bookings-view's diary-grid.tsx.
   color String?
+
+  /// Marks this as one of the venue's "private hire" booking type(s) -
+  /// the only type(s) that can book into a venue window whose
+  /// OpeningHours/OpeningHoursOverride mode is PRIVATE_HIRE_ONLY (see
+  /// OpeningHoursMode's doc comment). Not exclusive: a venue could in
+  /// principle flag more than one type this way, though in practice
+  /// there's usually just one "Private Hire" type. Doesn't affect
+  /// anything during an OPEN window - a private-hire type still needs its
+  /// own availableDaysOfWeek/dateOverrides to be offered then, exactly as
+  /// before this field existed.
+  isPrivateHireType Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

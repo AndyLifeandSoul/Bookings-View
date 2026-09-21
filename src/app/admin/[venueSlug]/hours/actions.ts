@@ -72,14 +72,15 @@ export async function saveWeeklyHours(formData: FormData): Promise<ActionResult>
   if ("error" in venue) return venue;
 
   const closedDays: number[] = [];
-  const openDays: { day: number; opensAt: string; closesAt: string }[] = [];
+  const openDays: { day: number; opensAt: string; closesAt: string; mode: "OPEN" | "PRIVATE_HIRE_ONLY" }[] = [];
 
   for (const day of DAYS) {
-    // Andy's own framing: tick a day to open it, untick to close it - so a
-    // day is closed whenever its own "open" box isn't ticked, whether
-    // that's an explicit untick or (an HTML checkbox convention) the box
-    // simply being absent from the submission at all.
-    if (formData.get(`open-${day}`) !== "on") {
+    // Three states per day now: closed, open, or private hire only - see
+    // OpeningHoursMode's doc comment in schema.prisma. `state-${day}` is a
+    // <select>, not a checkbox, so an absent/unrecognised value still reads
+    // as closed, matching the old checkbox's "absent means closed" default.
+    const state = String(formData.get(`state-${day}`) ?? "closed");
+    if (state !== "open" && state !== "private_hire_only") {
       closedDays.push(day);
       continue;
     }
@@ -88,16 +89,16 @@ export async function saveWeeklyHours(formData: FormData): Promise<ActionResult>
     if (!TIME_RE.test(opensAt) || !TIME_RE.test(closesAt)) {
       return { error: `Invalid opening hours for ${DAY_NAME(day)}: "${opensAt}"–"${closesAt}". Use HH:mm, e.g. 09:00.` };
     }
-    openDays.push({ day, opensAt, closesAt });
+    openDays.push({ day, opensAt, closesAt, mode: state === "private_hire_only" ? "PRIVATE_HIRE_ONLY" : "OPEN" });
   }
 
   await prisma.$transaction([
     prisma.openingHours.deleteMany({ where: { venueId: venue.id, dayOfWeek: { in: closedDays } } }),
-    ...openDays.map(({ day, opensAt, closesAt }) =>
+    ...openDays.map(({ day, opensAt, closesAt, mode }) =>
       prisma.openingHours.upsert({
         where: { venueId_dayOfWeek: { venueId: venue.id, dayOfWeek: day } },
-        create: { venueId: venue.id, dayOfWeek: day, opensAt, closesAt },
-        update: { opensAt, closesAt },
+        create: { venueId: venue.id, dayOfWeek: day, opensAt, closesAt, mode },
+        update: { opensAt, closesAt, mode },
       }),
     ),
   ]);
@@ -145,6 +146,10 @@ export async function addOverride(formData: FormData): Promise<ActionResult> {
 
   const canBook = formData.get("canBook") === "on";
   const note = String(formData.get("note") ?? "").trim() || null;
+  // Only meaningful when canBook is true, see OpeningHoursOverride.mode's
+  // doc comment in schema.prisma - stored as plain OPEN on a canBook=false
+  // row regardless of what the select was left on, since it's ignored there.
+  const mode = canBook && formData.get("mode") === "PRIVATE_HIRE_ONLY" ? "PRIVATE_HIRE_ONLY" : "OPEN";
 
   const startTimeRaw = composeTime(formData, "startTime");
   const endTimeRaw = composeTime(formData, "endTime");
@@ -178,7 +183,7 @@ export async function addOverride(formData: FormData): Promise<ActionResult> {
   // else: canBook is false and both times are blank -> whole range closed.
 
   await prisma.openingHoursOverride.create({
-    data: { venueId: venue.id, dateFrom, dateTo, canBook, startTime, endTime, note },
+    data: { venueId: venue.id, dateFrom, dateTo, canBook, mode, startTime, endTime, note },
   });
   revalidatePath(`/admin/${venue.slug}/hours`);
 }

@@ -76,6 +76,22 @@ export function BookingTypeFields({
         <span className="text-sm font-medium text-zinc-700">Active</span>
       </label>
 
+      <div className="flex flex-col gap-1">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="isPrivateHireType"
+            defaultChecked={defaults?.isPrivateHireType ?? false}
+            className="h-4 w-4 rounded border-zinc-300"
+          />
+          <span className="text-sm font-medium text-zinc-700">Private hire type</span>
+        </label>
+        <p className="ml-6 text-xs text-zinc-500">
+          Only a booking type flagged this way can be booked into a day (or override window) set to &quot;Private
+          hire only&quot; in Opening hours. Leave unchecked for ordinary booking types.
+        </p>
+      </div>
+
       <label className="flex flex-col gap-1">
         <span className="text-sm font-medium text-zinc-700">Diary colour</span>
         <input

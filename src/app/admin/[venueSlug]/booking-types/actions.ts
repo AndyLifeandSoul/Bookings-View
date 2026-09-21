@@ -16,6 +16,7 @@ interface ParsedFields {
   slug: string;
   description: string | null;
   active: boolean;
+  isPrivateHireType: boolean;
   sortOrder: number;
   minPartySize: number;
   maxPartySize: number;
@@ -64,6 +65,7 @@ function parseFields(formData: FormData): ParseResult {
 
   const description = String(formData.get("description") ?? "").trim() || null;
   const active = formData.get("active") === "on";
+  const isPrivateHireType = formData.get("isPrivateHireType") === "on";
   const sortOrderRaw = Number(formData.get("sortOrder") ?? 0);
   const sortOrder = Number.isFinite(sortOrderRaw) ? sortOrderRaw : 0;
 
@@ -173,6 +175,7 @@ function parseFields(formData: FormData): ParseResult {
       slug,
       description,
       active,
+      isPrivateHireType,
       sortOrder,
       minPartySize,
       maxPartySize,
