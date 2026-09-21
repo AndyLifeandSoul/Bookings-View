@@ -414,6 +414,17 @@ model BookingType {
   /// before this field existed.
   isPrivateHireType Boolean @default(false)
 
+  /// Minutes of turnaround/reset time this booking type needs on its
+  /// table(s) after it ends before the next booking can start there, e.g.
+  /// a bottomless brunch needing 15-20 minutes to clear and reset a table.
+  /// 0 (the default) is the pre-existing behaviour: back-to-back bookings
+  /// with no gap at all. Applied symmetrically in the availability engine
+  /// (see effectiveRangesOverlap in generate-slots.ts) - both the existing
+  /// booking's own buffer and the new booking's buffer are checked, so a
+  /// booking is kept clear of whatever's scheduled to start right after it
+  /// too, not just protected from what came before.
+  bufferMinutes Int @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

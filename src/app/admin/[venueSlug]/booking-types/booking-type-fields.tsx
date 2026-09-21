@@ -207,6 +207,22 @@ export function BookingTypeFields({
         </label>
       </div>
 
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-zinc-700">Buffer between bookings (minutes)</span>
+        <input
+          type="number"
+          name="bufferMinutes"
+          min={0}
+          step={5}
+          defaultValue={defaults?.bufferMinutes ?? 0}
+          className="w-48 rounded-md border border-zinc-300 px-3 py-2"
+        />
+        <span className="text-xs text-zinc-500">
+          Turnaround time this type needs on its table(s) after a booking ends, before the next one can start there.
+          Leave at 0 for back-to-back bookings.
+        </span>
+      </label>
+
       <label className="flex items-center gap-2">
         <input
           type="checkbox"

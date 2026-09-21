@@ -17,6 +17,7 @@ interface ParsedFields {
   description: string | null;
   active: boolean;
   isPrivateHireType: boolean;
+  bufferMinutes: number;
   sortOrder: number;
   minPartySize: number;
   maxPartySize: number;
@@ -66,6 +67,12 @@ function parseFields(formData: FormData): ParseResult {
   const description = String(formData.get("description") ?? "").trim() || null;
   const active = formData.get("active") === "on";
   const isPrivateHireType = formData.get("isPrivateHireType") === "on";
+
+  const bufferMinutesRaw = String(formData.get("bufferMinutes") ?? "0").trim();
+  const bufferMinutes = bufferMinutesRaw === "" ? 0 : Number(bufferMinutesRaw);
+  if (!Number.isFinite(bufferMinutes) || bufferMinutes < 0) {
+    return { ok: false, error: "Buffer between bookings must be zero or a positive number of minutes." };
+  }
   const sortOrderRaw = Number(formData.get("sortOrder") ?? 0);
   const sortOrder = Number.isFinite(sortOrderRaw) ? sortOrderRaw : 0;
 
@@ -176,6 +183,7 @@ function parseFields(formData: FormData): ParseResult {
       description,
       active,
       isPrivateHireType,
+      bufferMinutes,
       sortOrder,
       minPartySize,
       maxPartySize,
