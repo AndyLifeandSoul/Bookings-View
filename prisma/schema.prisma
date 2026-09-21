@@ -1270,6 +1270,17 @@ model Customer {
   dateOfBirth    DateTime? @db.Date
   marketingOptIn Boolean   @default(false)
 
+  /// Free-text, staff-entered, e.g. "regular, prefers the window table" or
+  /// "requested a high chair last time". Never touched by the
+  /// reconciliation job's upsert (that only ever writes name/dateOfBirth/
+  /// marketingOptIn/lastBookingDate), but IS cleared by
+  /// scrubExpiredCustomers and the on-demand erasure action alongside the
+  /// rest of this row, on the assumption a note about a specific person is
+  /// itself personal data covered by an erasure request. Andy: "add the
+  /// customer notes field." Not legal advice, worth a real compliance check
+  /// if this venue group wants that assumption confirmed.
+  staffNotes String?
+
   /// Max booking.date across every Booking that reconciled into this row -
   /// the anchor for this row's own retention window (12 months if
   /// marketingOptIn is false, 24 if true, see the data-retention cron job).

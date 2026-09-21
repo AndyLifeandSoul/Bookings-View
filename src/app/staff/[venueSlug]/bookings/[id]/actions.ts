@@ -13,6 +13,7 @@ import type { PaymentAccountCode } from "@/lib/payments/types";
 import { getCustomerAppUrl } from "@/lib/pre-order/links";
 import { validateAndPricePreOrder, InvalidPreOrderError, type PreOrderLineInput, type PreOrderModifierInput } from "@/lib/pre-order/validate";
 import { toMinutes, formatMinutes } from "@/lib/bookings/time";
+import { customerIdentity, setStaffNotes } from "@/lib/admin/customer-record";
 
 
 const STATUSES: BookingStatus[] = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
@@ -76,6 +77,40 @@ export async function updateBookingDetails(formData: FormData): Promise<ActionRe
 
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   revalidatePath(`/staff/${venueSlug}`);
+}
+
+/**
+ * Staff notes about the *customer* (Customer.staffNotes), not the booking -
+ * a persistent note that follows this person across every future booking
+ * ("regular, prefers the window table", "requested a high chair last
+ * time"). Keyed on the booking's email/phone identity (see
+ * customer-record.ts), and edited here from the booking details page
+ * because that's where staff are looking at the person; the Customer row is
+ * created on the spot if the reconciliation cron hasn't made one yet. A
+ * booking with neither email nor phone has no customer identity to hang a
+ * note on, so the editor isn't shown for it and this guards against being
+ * called anyway.
+ */
+export async function updateCustomerNotes(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+
+  const booking = await prisma.booking.findFirst({
+    where: { id, venueId },
+    select: { customerName: true, customerEmail: true, customerPhone: true, date: true },
+  });
+  if (!booking) return { error: "Booking not found for this venue." };
+
+  const identity = customerIdentity(booking.customerEmail, booking.customerPhone);
+  if (!identity) return { error: "This booking has no email or phone, so there's no customer to attach a note to." };
+
+  const notes = String(formData.get("staffNotes") ?? "");
+  await setStaffNotes({ identity, name: booking.customerName, seedBookingDate: booking.date, notes });
+
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
 }
 
 export async function reassignTables(formData: FormData): Promise<ActionResult> {

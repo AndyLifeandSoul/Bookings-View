@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, LogIn, MessageSquare, Armchair, UtensilsCrossed, Printer, CreditCard, Clock } from "lucide-react";
+import { ArrowLeft, LogIn, MessageSquare, Armchair, UtensilsCrossed, Printer, CreditCard, Clock, StickyNote } from "lucide-react";
 import { prisma } from "@/lib/db/client";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { ActionForm } from "@/components/action-form";
@@ -21,8 +21,10 @@ import {
   addPreOrderItems,
   markNoShow,
   shiftBookingRunningLate,
+  updateCustomerNotes,
 } from "./actions";
 import { buildPreOrderLink } from "@/lib/pre-order/links";
+import { customerIdentity, getStaffNotes } from "@/lib/admin/customer-record";
 import { groupPreOrderItems, preOrderLineUnitPricePence } from "@/lib/pre-order/group-items";
 import { TableSelectionFields } from "./table-selection-fields";
 import { naturalSortTables } from "@/lib/tables/natural-sort";
@@ -117,6 +119,12 @@ export async function BookingDetailsBody({
     prisma.paymentAccount.findFirst({ where: { venues: { some: { id: venue.id } } }, select: { id: true } }),
   ]);
   if (!booking) notFound();
+
+  // Persistent staff notes about this customer (Customer.staffNotes), keyed
+  // on the booking's email/phone identity - shown and edited below when the
+  // booking has an identity to hang them on. See customer-record.ts.
+  const customerIdentityKey = customerIdentity(booking.customerEmail, booking.customerPhone);
+  const customerStaffNotes = customerIdentityKey ? await getStaffNotes(customerIdentityKey) : null;
 
   // Every active item on the booking's pre-order menu, with its full
   // modifier customisation wizard if it has one - fetched only once we
@@ -414,6 +422,37 @@ export async function BookingDetailsBody({
               </div>
             </Card>
           </section>
+
+          {customerIdentityKey && (
+            <section>
+              <h2 className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-zinc-900">
+                <StickyNote className="h-4 w-4 text-zinc-400" strokeWidth={2.25} />
+                Customer notes
+              </h2>
+              <Card className="mt-3">
+                <ActionForm key={customerStaffNotes ?? ""} action={updateCustomerNotes} className="flex flex-col gap-3">
+                  <input type="hidden" name="id" value={booking.id} />
+                  <input type="hidden" name="venueId" value={venue.id} />
+                  <input type="hidden" name="venueSlug" value={venue.slug} />
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm text-zinc-500">
+                      Private notes about this customer, kept across all their bookings. Not shown to the customer.
+                    </span>
+                    <textarea
+                      name="staffNotes"
+                      rows={3}
+                      defaultValue={customerStaffNotes ?? ""}
+                      placeholder="e.g. Regular, prefers the window table. Requested a high chair last time."
+                      className="rounded-md border border-zinc-300 px-3 py-2"
+                    />
+                  </label>
+                  <div>
+                    <SubmitButton label="Save customer notes" pendingLabel="Saving…" className={buttonStyles("primary", "md")} />
+                  </div>
+                </ActionForm>
+              </Card>
+            </section>
+          )}
 
           <section>
             <h2 className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-zinc-900">
