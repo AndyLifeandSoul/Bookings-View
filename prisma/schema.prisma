@@ -472,10 +472,39 @@ model Area {
   /// the Patio last, Area Hire might prefer it first).
   bookingTypeAreas BookingTypeArea[]
 
+  /// Date-range closures of this whole area, see AreaClosure's doc comment.
+  closures AreaClosure[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([venueId, name])
+}
+
+/// Closes every table in an Area for a date range, e.g. "Terrace" reserved
+/// for a private function 24-26 Dec, or an area shut for refurbishment.
+/// Every date in [dateFrom, dateTo] inclusive is affected, a single day is
+/// just a row where dateFrom equals dateTo. Unlike OpeningHoursOverride
+/// (whole-venue) or BookingType.dateOverrides (whole booking type), this
+/// closes specific tables regardless of booking type - get-availability.ts
+/// and create-booking.ts simply drop a closed area's tables from
+/// consideration for any affected date before ever reaching the
+/// availability engine, so generate-slots.ts itself stays unaware of this
+/// concept entirely, same table-filtering approach as
+/// resolveBookingTypeTableScope. A party still gets a normal slot as long
+/// as another area (or an unrestricted booking type's full table pool) has
+/// room, exactly as if the closed area's tables didn't exist for that date.
+model AreaClosure {
+  id       String   @id @default(cuid())
+  areaId   String
+  area     Area     @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  dateFrom DateTime @db.Date
+  dateTo   DateTime @db.Date
+  note     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([areaId, dateFrom, dateTo])
 }
 
 /// Join row giving one (BookingType, Area) pair a fill priority specific to

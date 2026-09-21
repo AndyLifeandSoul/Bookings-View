@@ -11,8 +11,10 @@ import { AreaRow } from "./area-row";
 import { AreaBulkToggle } from "./area-bulk-toggle";
 import { DeleteTableButton } from "./delete-table-button";
 import { DeleteLinkButton } from "./delete-link-button";
-import { createArea, createTableLink } from "./actions";
+import { DeleteAreaClosureButton } from "./delete-area-closure-button";
+import { createArea, createTableLink, addAreaClosure } from "./actions";
 import { naturalSortTables } from "@/lib/tables/natural-sort";
+import { DateFieldSelect } from "@/components/date-field-select";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,7 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
   const { venueSlug } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
 
-  const [areas, tablesRaw, links] = await Promise.all([
+  const [areas, tablesRaw, links, closures] = await Promise.all([
     prisma.area.findMany({
       where: { venueId: venue.id },
       orderBy: { priority: "asc" },
@@ -36,8 +38,18 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
       where: { tableA: { venueId: venue.id } },
       include: { tableA: { select: { label: true } }, tableB: { select: { label: true } } },
     }),
+    prisma.areaClosure.findMany({
+      where: { area: { venueId: venue.id } },
+      include: { area: { select: { name: true } } },
+      orderBy: { dateFrom: "asc" },
+    }),
   ]);
   const tables = naturalSortTables(tablesRaw);
+
+  const today = new Date();
+  const todayDateOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const upcomingClosures = closures.filter((c) => c.dateTo >= todayDateOnly);
+  const pastClosures = closures.filter((c) => c.dateTo < todayDateOnly);
 
   return (
     <div className="flex flex-col gap-10">
@@ -79,6 +91,105 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
             <SubmitButton label="Add area" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
           </ActionForm>
         </Card>
+      </section>
+
+      <section>
+        <h2 className="text-base font-semibold tracking-tight text-zinc-900">Area closures</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Close every table in an area for a date range, e.g. the Terrace reserved for a private function, or an
+          area shut for refurbishment. Bookings can still be offered as normal using any other area.
+        </p>
+
+        {areas.length === 0 ? (
+          <p className="mt-4 text-sm text-zinc-500">Add an area above before you can close one for a date range.</p>
+        ) : (
+          <>
+            {upcomingClosures.length > 0 && (
+              <Card padded={false} className="mt-4 overflow-hidden">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
+                    <tr>
+                      <th className="px-4 py-2.5">Area</th>
+                      <th className="px-4 py-2.5">Dates</th>
+                      <th className="px-4 py-2.5">Note</th>
+                      <th className="px-4 py-2.5" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {upcomingClosures.map((closure) => (
+                      <tr key={closure.id} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
+                        <td className="px-4 py-3 font-medium text-zinc-900">{closure.area.name}</td>
+                        <td className="px-4 py-3">{formatDateRange(closure.dateFrom, closure.dateTo)}</td>
+                        <td className="px-4 py-3 text-zinc-500">{closure.note ?? "-"}</td>
+                        <td className="px-4 py-3 text-right">
+                          <DeleteAreaClosureButton id={closure.id} venueId={venue.id} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            )}
+
+            <Card className="mt-4">
+              <ActionForm action={addAreaClosure} className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+                <input type="hidden" name="venueId" value={venue.id} />
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm font-medium text-zinc-700">Area</span>
+                  <select name="areaId" required className="rounded-md border border-zinc-300 px-3 py-2">
+                    {areas.map((area) => (
+                      <option key={area.id} value={area.id}>
+                        {area.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm font-medium text-zinc-700">Start date</span>
+                  <DateFieldSelect name="dateFrom" />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm font-medium text-zinc-700">End date</span>
+                  <DateFieldSelect name="dateTo" />
+                </label>
+                <label className="flex flex-1 flex-col gap-1">
+                  <span className="text-sm font-medium text-zinc-700">Note (optional)</span>
+                  <input
+                    type="text"
+                    name="note"
+                    placeholder="e.g. Private function"
+                    className="rounded-md border border-zinc-300 px-3 py-2"
+                  />
+                </label>
+                <SubmitButton label="Close area" pendingLabel="Saving…" className={buttonStyles("primary", "md")} />
+              </ActionForm>
+            </Card>
+
+            {pastClosures.length > 0 && (
+              <details className="mt-4">
+                <summary className="cursor-pointer text-sm text-zinc-500 transition-colors hover:text-zinc-700">
+                  {pastClosures.length} past closure{pastClosures.length === 1 ? "" : "s"}
+                </summary>
+                <Card padded={false} className="mt-2 overflow-hidden">
+                  <table className="w-full text-left text-sm">
+                    <tbody>
+                      {pastClosures.map((closure) => (
+                        <tr key={closure.id} className="border-b border-zinc-50 last:border-0">
+                          <td className="px-4 py-3 font-medium text-zinc-900">{closure.area.name}</td>
+                          <td className="px-4 py-3 text-zinc-500">{formatDateRange(closure.dateFrom, closure.dateTo)}</td>
+                          <td className="px-4 py-3 text-zinc-500">{closure.note ?? "-"}</td>
+                          <td className="px-4 py-3 text-right">
+                            <DeleteAreaClosureButton id={closure.id} venueId={venue.id} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Card>
+              </details>
+            )}
+          </>
+        )}
       </section>
 
       <section>
@@ -248,4 +359,19 @@ function groupByArea<T extends { areaId: string | null }>(
   const noArea = groups.get(null);
   if (noArea) result.push({ areaId: null, areaName: "No area", tables: noArea });
   return result;
+}
+
+function formatDateRange(from: Date, to: Date): string {
+  if (from.getTime() === to.getTime()) return formatDate(from);
+  return `${formatDate(from)} - ${formatDate(to)}`;
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }

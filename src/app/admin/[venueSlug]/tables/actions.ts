@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db/client";
 import { requireAdminSession } from "@/lib/admin/require-admin-session";
 import type { ActionResult } from "@/components/action-form";
 
-/** venueId comes from a hidden form field (set from the page's route param) — admin sessions are venue-independent, see requireAdminVenue(). */
+/** venueId comes from a hidden form field (set from the page's route param), admin sessions are venue-independent, see requireAdminVenue(). */
 async function resolveVenue(formData: FormData): Promise<{ id: string; slug: string } | { error: string }> {
   const venueId = String(formData.get("venueId") ?? "").trim();
   if (!venueId) return { error: "Missing venue." };
@@ -92,7 +92,7 @@ export async function deleteArea(formData: FormData): Promise<ActionResult> {
   if ("error" in venue) return venue;
   const id = String(formData.get("id") ?? "");
 
-  // Table.areaId is ON DELETE SET NULL (schema.prisma) — any tables in this
+  // Table.areaId is ON DELETE SET NULL (schema.prisma), any tables in this
   // area just become unassigned, never blocked or cascade-deleted, so this
   // is always safe.
   await prisma.area.deleteMany({ where: { id, venueId: venue.id } });
@@ -183,7 +183,7 @@ export async function deleteTable(formData: FormData): Promise<ActionResult> {
   const table = await prisma.table.findFirst({ where: { id, venueId: venue.id }, select: { label: true } });
   if (!table) return { error: "Table not found for this venue." };
 
-  // BookingTable.tableId is ON DELETE RESTRICT (schema.prisma) — a table
+  // BookingTable.tableId is ON DELETE RESTRICT (schema.prisma), a table
   // that's ever been assigned to a real booking can't be hard-deleted, so
   // deactivate instead, matching the same pattern used for booking types
   // and menus once real records reference them.
@@ -222,7 +222,7 @@ export async function createTableLink(formData: FormData): Promise<ActionResult>
 
   // TableLink is modelled as a directed pair (see schema.prisma's doc
   // comment on the model) but meant to be read as unordered, so check both
-  // orderings before inserting — otherwise A-B and B-A could both exist as
+  // orderings before inserting, otherwise A-B and B-A could both exist as
   // "different" links representing the same physical adjacency.
   const existing = await prisma.tableLink.findFirst({
     where: {
@@ -254,5 +254,69 @@ export async function deleteTableLink(formData: FormData): Promise<ActionResult>
   if (!link) return { error: "Link not found for this venue." };
 
   await prisma.tableLink.delete({ where: { id } });
+  revalidatePath(`/admin/${venue.slug}/tables`);
+}
+
+// ---------------------------------------------------------------------------
+// Area closures
+// ---------------------------------------------------------------------------
+
+/**
+ * DateFieldSelect (components/date-field-select.tsx) submits a date as
+ * three fields, `${name}-day`/`${name}-month`/`${name}-year`, same
+ * component and same reason as the hours admin form's identical helper
+ * (see that file's doc comment) - not shared between the two since it's a
+ * few lines either way and these two admin sections don't otherwise
+ * import from each other.
+ */
+function composeDate(formData: FormData, name: string): string {
+  const day = String(formData.get(`${name}-day`) ?? "").trim();
+  const month = String(formData.get(`${name}-month`) ?? "").trim();
+  const year = String(formData.get(`${name}-year`) ?? "").trim();
+  if (!day || !month || !year) return "";
+  return `${year}-${month}-${day}`;
+}
+
+export async function addAreaClosure(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+
+  const areaId = String(formData.get("areaId") ?? "").trim();
+  const area = await prisma.area.findFirst({ where: { id: areaId, venueId: venue.id }, select: { id: true } });
+  if (!area) return { error: "Pick an area that belongs to this venue." };
+
+  const dateFromStr = composeDate(formData, "dateFrom");
+  const dateToStr = composeDate(formData, "dateTo");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFromStr) || !/^\d{4}-\d{2}-\d{2}$/.test(dateToStr)) {
+    return { error: "Choose a full start date and end date (day, month and year)." };
+  }
+  const dateFrom = new Date(`${dateFromStr}T00:00:00.000Z`);
+  const dateTo = new Date(`${dateToStr}T00:00:00.000Z`);
+  if (dateTo < dateFrom) {
+    return { error: "End date must be on or after start date." };
+  }
+
+  const note = String(formData.get("note") ?? "").trim() || null;
+
+  await prisma.areaClosure.create({ data: { areaId: area.id, dateFrom, dateTo, note } });
+  revalidatePath(`/admin/${venue.slug}/tables`);
+}
+
+export async function deleteAreaClosure(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const id = String(formData.get("id") ?? "");
+
+  // Scope the delete through a venue-owned area rather than trusting the
+  // closure id alone, same pattern as deleteTableLink above.
+  const closure = await prisma.areaClosure.findFirst({
+    where: { id, area: { venueId: venue.id } },
+    select: { id: true },
+  });
+  if (!closure) return { error: "Closure not found for this venue." };
+
+  await prisma.areaClosure.delete({ where: { id } });
   revalidatePath(`/admin/${venue.slug}/tables`);
 }
