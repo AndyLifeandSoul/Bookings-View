@@ -274,9 +274,22 @@ export async function BookingDetailsBody({
         )}
 
         <div className="mt-8 flex flex-col gap-8">
+          {/*
+           * Details and Tables merged into one compact card, per the
+           * parity review (section 14/15): DesignMyNight's overlay is one
+           * card with no scrolling, ours used to be two separately-saved
+           * cards. They stay two separate ActionForms/save actions under
+           * the hood (Andy's decision: table reassignment is its own
+           * deliberate save, not a "smaller action" to fold into the same
+           * click as name/email/party size), just one visual block now.
+           * The full table checkbox list collapses behind a <details> -
+           * it's the one part of this card that can run long (every
+           * table in the venue), open by default only when nothing's
+           * assigned yet.
+           */}
           <section>
             <h2 className="text-base font-semibold tracking-tight text-zinc-900">Details</h2>
-            <Card className="mt-3">
+            <Card className="mt-3 flex flex-col gap-5">
               <ActionForm key={booking.updatedAt.getTime()} action={updateBookingDetails} className="flex flex-col gap-4">
                 <input type="hidden" name="id" value={booking.id} />
                 <input type="hidden" name="venueId" value={venue.id} />
@@ -359,50 +372,47 @@ export async function BookingDetailsBody({
                   <SubmitButton label="Save changes" pendingLabel="Saving…" className={buttonStyles("primary", "md")} />
                 </div>
               </ActionForm>
-            </Card>
-          </section>
 
-          <section>
-            <h2 className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-zinc-900">
-              <Armchair className="h-4 w-4 text-zinc-400" strokeWidth={2.25} />
-              Tables
-            </h2>
-            {tables.length === 0 ? (
-              <Card className="mt-3">
-                <p className="text-sm text-zinc-500">No tables set up for this venue yet, see Tables &amp; Areas in Admin.</p>
-              </Card>
-            ) : (
-              <Card className="mt-3">
-                {/*
-                 * Short "currently assigned" summary above the full
-                 * checkbox list, per the parity review (section 14) -
-                 * staff shouldn't have to scan every table in the venue
-                 * just to see what's already assigned to this booking.
-                 */}
-                <p className="mb-3 text-sm text-zinc-600">
-                  <span className="font-medium text-zinc-900">Currently assigned: </span>
-                  {assignedTableLabels.length > 0 ? assignedTableLabels.join(", ") : "No tables assigned yet."}
-                </p>
-                <ActionForm key={[...assignedTableIds].sort().join(",")} action={reassignTables} className="flex flex-col gap-4">
-                  <input type="hidden" name="id" value={booking.id} />
-                  <input type="hidden" name="venueId" value={venue.id} />
-                  <input type="hidden" name="venueSlug" value={venue.slug} />
-                  <TableSelectionFields
-                    tables={tables}
-                    areas={areas}
-                    initialSelectedIds={[...assignedTableIds]}
-                    tableFillMode={booking.bookingType.tableFillMode}
-                  />
-                  <div>
-                    <SubmitButton
-                      label="Save table assignment"
-                      pendingLabel="Saving…"
-                      className={buttonStyles("primary", "md")}
-                    />
-                  </div>
-                </ActionForm>
-              </Card>
-            )}
+              <div className="border-t border-zinc-100 pt-5">
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+                  <Armchair className="h-4 w-4 text-zinc-400" strokeWidth={2.25} />
+                  Tables
+                </h3>
+                {tables.length === 0 ? (
+                  <p className="mt-2 text-sm text-zinc-500">No tables set up for this venue yet, see Tables &amp; Areas in Admin.</p>
+                ) : (
+                  <details className="mt-2" open={assignedTableLabels.length === 0}>
+                    <summary className="cursor-pointer text-sm text-zinc-600 select-none">
+                      <span className="font-medium text-zinc-900">Currently assigned: </span>
+                      {assignedTableLabels.length > 0 ? assignedTableLabels.join(", ") : "No tables assigned yet."}
+                      <span className="ml-1.5 text-xs text-[var(--accent)]">Change</span>
+                    </summary>
+                    <ActionForm
+                      key={[...assignedTableIds].sort().join(",")}
+                      action={reassignTables}
+                      className="mt-3 flex flex-col gap-4"
+                    >
+                      <input type="hidden" name="id" value={booking.id} />
+                      <input type="hidden" name="venueId" value={venue.id} />
+                      <input type="hidden" name="venueSlug" value={venue.slug} />
+                      <TableSelectionFields
+                        tables={tables}
+                        areas={areas}
+                        initialSelectedIds={[...assignedTableIds]}
+                        tableFillMode={booking.bookingType.tableFillMode}
+                      />
+                      <div>
+                        <SubmitButton
+                          label="Save table assignment"
+                          pendingLabel="Saving…"
+                          className={buttonStyles("primary", "md")}
+                        />
+                      </div>
+                    </ActionForm>
+                  </details>
+                )}
+              </div>
+            </Card>
           </section>
 
           <section>
