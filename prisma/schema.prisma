@@ -716,6 +716,15 @@ model Booking {
   checkedInAt  DateTime?
   checkedOutAt DateTime?
 
+  /// Timestamps for the automated customer emails, so each is sent at most
+  /// once per booking (the booking-emails cron in lifeandsoul-bookings sets
+  /// these when it sends and skips any booking that already has the matching
+  /// one). Null = not yet sent. Mirrored here only for schema parity; this
+  /// app doesn't send these emails, the cron lives in lifeandsoul-bookings.
+  reminderSentAt        DateTime?
+  followUpSentAt        DateTime?
+  paymentReminderSentAt DateTime?
+
   bookingTables  BookingTable[]
   payments       Payment[]
   preOrder       PreOrder?
