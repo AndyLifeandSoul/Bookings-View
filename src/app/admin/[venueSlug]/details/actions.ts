@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db/client";
 import { requireAdminSession } from "@/lib/admin/require-admin-session";
 import type { ActionResult } from "@/components/action-form";
 
-/** venueId comes from a hidden form field, same pattern as every other admin actions.ts — see booking-types/actions.ts's resolveVenue() doc comment. */
+/** venueId comes from a hidden form field, same pattern as every other admin actions.ts, see booking-types/actions.ts's resolveVenue() doc comment. */
 async function resolveVenue(formData: FormData): Promise<{ id: string; slug: string } | { error: string }> {
   const venueId = String(formData.get("venueId") ?? "").trim();
   if (!venueId) return { error: "Missing venue." };
@@ -52,9 +52,22 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
     maxArrivalsPer30Min = Math.trunc(parsed);
   }
 
+  // Email branding, see Venue.logoUrl / Venue.brandColorHex. Both optional.
+  const logoUrlRaw = String(formData.get("logoUrl") ?? "").trim();
+  if (logoUrlRaw && !/^https?:\/\//i.test(logoUrlRaw)) {
+    return { error: "Logo URL must be a full web address starting with https:// (email clients can't load anything else)." };
+  }
+  const logoUrl = logoUrlRaw || null;
+
+  const brandColorRaw = String(formData.get("brandColorHex") ?? "").trim();
+  if (brandColorRaw && !/^#[0-9a-fA-F]{6}$/.test(brandColorRaw)) {
+    return { error: 'Brand colour must be a 6-digit hex code like "#7c3aed".' };
+  }
+  const brandColorHex = brandColorRaw || null;
+
   await prisma.venue.update({
     where: { id: venue.id },
-    data: { name, address, phone, email, bookingCode, maxArrivalsPer30Min },
+    data: { name, address, phone, email, bookingCode, maxArrivalsPer30Min, logoUrl, brandColorHex },
   });
 
   revalidatePath(`/admin/${venue.slug}/details`);

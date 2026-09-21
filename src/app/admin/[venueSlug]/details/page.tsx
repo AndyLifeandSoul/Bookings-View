@@ -23,6 +23,8 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
       email: true,
       bookingCode: true,
       maxArrivalsPer30Min: true,
+      logoUrl: true,
+      brandColorHex: true,
     },
   });
 
@@ -97,6 +99,39 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
               className="w-32 rounded-md border border-zinc-300 px-3 py-2"
             />
           </label>
+
+          <fieldset className="flex flex-col gap-4 rounded-md border border-zinc-200 p-4">
+            <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Email branding</legend>
+            <p className="text-xs text-zinc-500">
+              Shown on this venue&apos;s customer emails (confirmations, reminders and so on). Both optional: with no
+              logo the venue name is used as text, and with no colour a neutral default is applied.
+            </p>
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-zinc-700">Logo URL (optional)</span>
+              <input
+                type="url"
+                name="logoUrl"
+                defaultValue={venue.logoUrl ?? ""}
+                placeholder="https://yourvenue.co.uk/logo.png"
+                className="rounded-md border border-zinc-300 px-3 py-2"
+              />
+              <span className="text-xs text-zinc-400">
+                A full https:// link to a hosted image. Email clients can&apos;t load a file from your computer, so it
+                has to be online (your website&apos;s logo works well).
+              </span>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-zinc-700">Brand colour (optional)</span>
+              <input
+                type="text"
+                name="brandColorHex"
+                defaultValue={venue.brandColorHex ?? ""}
+                placeholder="#7c3aed"
+                className="w-40 rounded-md border border-zinc-300 px-3 py-2"
+              />
+              <span className="text-xs text-zinc-400">A 6-digit hex code, e.g. #7c3aed. Used for headings and buttons.</span>
+            </label>
+          </fieldset>
 
           <div>
             <SubmitButton label="Save details" pendingLabel="Saving…" className={buttonStyles("primary", "md")} />

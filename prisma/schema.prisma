@@ -78,6 +78,20 @@ model Venue {
   phone   String?
   email   String?
 
+  /// Absolute https URL of this venue's logo, shown at the top of its
+  /// branded customer emails (see lib/email/templates.ts). Null means no
+  /// logo, the email falls back to the venue name as styled text, never a
+  /// broken image. Must be a publicly reachable URL, email clients can't
+  /// load anything behind auth or on localhost; staff paste in a hosted
+  /// image URL (the venue's own website logo, a CDN link, etc).
+  logoUrl String?
+
+  /// Brand accent colour as a "#rrggbb" hex string, used for headings and
+  /// the button in this venue's branded emails. Null falls back to a
+  /// neutral default (see EMAIL_DEFAULT_ACCENT in lib/email/templates.ts),
+  /// so an unset venue still sends a tidy, if generic, branded email.
+  brandColorHex String?
+
   // Nullable on purpose: a venue can exist (and take non-deposit bookings
   // or enquiries) before its Dojo merchant account assignment is settled.
   // Arriba is the current example, not part of either named Dojo account
