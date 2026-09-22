@@ -38,6 +38,7 @@ export async function sendBookingConfirmationEmail(params: {
   startTime: string;
   partySize: number;
   isEnquiry: boolean;
+  bookingTypeName: string;
 }): Promise<void> {
   const { venue, customerEmail } = params;
   if (!venue.email || !customerEmail) return;
@@ -64,6 +65,7 @@ export async function sendBookingConfirmationEmail(params: {
     ...(params.bookingRef ? [{ label: "Reference", value: params.bookingRef }] : []),
     { label: "Date", value: dateLabel },
     { label: "Time", value: params.startTime },
+    { label: "Booking type", value: params.bookingTypeName },
     { label: "Party size", value: String(params.partySize) },
   ];
 

@@ -137,6 +137,7 @@ export async function createManualBooking(formData: FormData): Promise<ActionRes
     date,
     startTime,
     partySize,
+    bookingTypeName: bookingType.name,
     isEnquiry: false,
   });
 
