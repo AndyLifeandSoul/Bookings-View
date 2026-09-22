@@ -6,8 +6,8 @@ import type { ActionResult } from "@/components/action-form";
 import { buttonStyles } from "@/components/ui/button";
 
 /**
- * Areas are simple enough (name + priority) that inline edit-in-place beats
- * a separate edit page — but each row needs its own independent Save, and a
+ * Areas are edited inline (just a name now, fill order is set by dragging,
+ * see reorderAreas). Inline edit-in-place beats a separate edit page, but each row needs its own independent Save, and a
  * <form> can't cleanly wrap table rows/cells, so this section is laid out as
  * flex rows rather than an actual <table> (see the Tables section below,
  * which uses a real table + a separate /tables/[id] edit page instead, since
@@ -17,13 +17,11 @@ export function AreaRow({
   id,
   venueId,
   name,
-  priority,
   tableCount,
 }: {
   id: string;
   venueId: string;
   name: string;
-  priority: number;
   tableCount: number;
 }) {
   const [editState, editAction, editPending] = useActionState<ActionResult, FormData>(
@@ -48,15 +46,6 @@ export function AreaRow({
             required
             defaultValue={name}
             className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-zinc-500">Priority</span>
-          <input
-            type="number"
-            name="priority"
-            defaultValue={priority}
-            className="w-28 rounded-md border border-zinc-300 px-3 py-1.5 text-sm"
           />
         </label>
         <span className="pt-4 text-xs text-zinc-400">

@@ -1,19 +1,16 @@
-import Link from "next/link";
-import { Plus, Armchair } from "lucide-react";
 import { prisma } from "@/lib/db/client";
 import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { AreaRow } from "./area-row";
-import { AreaBulkToggle } from "./area-bulk-toggle";
-import { DeleteTableButton } from "./delete-table-button";
 import { DeleteLinkButton } from "./delete-link-button";
 import { DeleteAreaClosureButton } from "./delete-area-closure-button";
-import { createArea, createTableLink, addAreaClosure } from "./actions";
+import { createArea, createTableLink, addAreaClosure, reorderAreas } from "./actions";
+import { SortableList } from "@/components/sortable-list";
 import { naturalSortTables } from "@/lib/tables/natural-sort";
+import { TablesGrid, type GridTable } from "./tables-grid";
 import { DateFieldSelect } from "@/components/date-field-select";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +41,10 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
       orderBy: { dateFrom: "asc" },
     }),
   ]);
-  const tables = naturalSortTables(tablesRaw);
+  const gridTables: GridTable[] = naturalSortTables(tablesRaw)
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((t) => ({ id: t.id, label: t.label, areaId: t.areaId, minCovers: t.minCovers, maxCovers: t.maxCovers, active: t.active }));
 
   const today = new Date();
   const todayDateOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
@@ -57,18 +57,20 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
         <h2 className="text-base font-semibold tracking-tight text-zinc-900">Areas</h2>
 
         {areas.length > 0 && (
-          <Card padded={false} className="mt-4 overflow-hidden">
-            {areas.map((area) => (
-              <AreaRow
-                key={area.id}
-                id={area.id}
-                venueId={venue.id}
-                name={area.name}
-                priority={area.priority}
-                tableCount={area._count.tables}
+          <>
+            <p className="mt-1 text-sm text-zinc-500">Drag to set the fill order (tables in the first area are filled first).</p>
+            <Card padded={false} className="mt-3 overflow-hidden">
+              <SortableList
+                items={areas.map((area) => ({
+                  id: area.id,
+                  content: (
+                    <AreaRow id={area.id} venueId={venue.id} name={area.name} tableCount={area._count.tables} />
+                  ),
+                }))}
+                reorder={reorderAreas.bind(null, venue.id)}
               />
-            ))}
-          </Card>
+            </Card>
+          </>
         )}
 
         <Card className="mt-4">
@@ -83,10 +85,6 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
                 placeholder="Downstairs"
                 className="rounded-md border border-zinc-300 px-3 py-2"
               />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Priority</span>
-              <input type="number" name="priority" defaultValue={0} className="w-28 rounded-md border border-zinc-300 px-3 py-2" />
             </label>
             <SubmitButton label="Add area" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
           </ActionForm>
@@ -193,82 +191,15 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
       </section>
 
       <section>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold tracking-tight text-zinc-900">Tables</h2>
-          </div>
-          <Link href={`/admin/${venue.slug}/tables/new`} className={buttonStyles("primary", "sm")}>
-            <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
-            New table
-          </Link>
+        <div>
+          <h2 className="text-base font-semibold tracking-tight text-zinc-900">Tables</h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Edit every table inline, drag the handle to reorder, then Save. Zone is the area used for fill priority.
+          </p>
         </div>
-
-        {tables.length === 0 ? (
-          <Card className="mt-4 flex flex-col items-center gap-2 py-10 text-center">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-400">
-              <Armchair className="h-5 w-5" strokeWidth={1.75} />
-            </span>
-            <p className="text-sm text-zinc-500">No tables yet. Auto-assignment has nothing to seat parties at until at least one exists.</p>
-          </Card>
-        ) : (
-          <div className="mt-4 flex flex-col gap-5">
-            {groupByArea(tables, areas).map(({ areaId, areaName, tables: groupTables }) => (
-              <Card key={areaName} padded={false} className="overflow-hidden">
-                <div className="flex flex-wrap items-center gap-2 border-b border-zinc-100 bg-zinc-50/60 px-4 py-2.5">
-                  <h3 className="text-sm font-semibold tracking-tight text-zinc-800">{areaName}</h3>
-                  <span className="text-xs text-zinc-400">
-                    {groupTables.length} {groupTables.length === 1 ? "table" : "tables"}
-                  </span>
-                  {areaId && (
-                    <AreaBulkToggle
-                      venueId={venue.id}
-                      areaId={areaId}
-                      areaName={areaName}
-                      hasActive={groupTables.some((t) => t.active)}
-                      hasInactive={groupTables.some((t) => !t.active)}
-                    />
-                  )}
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-left text-sm">
-                    <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
-                      <tr>
-                        <th className="px-4 py-2">Label</th>
-                        <th className="px-4 py-2">Covers</th>
-                        <th className="px-4 py-2">Status</th>
-                        <th className="px-4 py-2" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groupTables.map((table) => (
-                        <tr key={table.id} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
-                          <td className="px-4 py-3 font-medium text-zinc-900">{table.label}</td>
-                          <td className="px-4 py-3 tabular-nums text-zinc-600">
-                            {table.minCovers}–{table.maxCovers}
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge variant={table.active ? "success" : "neutral"}>{table.active ? "Active" : "Inactive"}</Badge>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-3">
-                              <Link
-                                href={`/admin/${venue.slug}/tables/${table.id}`}
-                                className="text-sm font-medium text-zinc-600 underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--accent)]"
-                              >
-                                Edit
-                              </Link>
-                              <DeleteTableButton id={table.id} label={table.label} venueId={venue.id} />
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
+        <div className="mt-4">
+          <TablesGrid venueId={venue.id} areas={areas.map((a) => ({ id: a.id, name: a.name }))} tables={gridTables} />
+        </div>
       </section>
 
       <section>
@@ -293,14 +224,14 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
           </Card>
         )}
 
-        {tables.length >= 2 ? (
+        {gridTables.length >= 2 ? (
           <Card className="mt-4">
             <ActionForm action={createTableLink} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="venueId" value={venue.id} />
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium text-zinc-700">Table A</span>
                 <select name="tableAId" required className="rounded-md border border-zinc-300 px-3 py-2">
-                  {tables.map((table) => (
+                  {gridTables.map((table) => (
                     <option key={table.id} value={table.id}>
                       {table.label}
                     </option>
@@ -310,7 +241,7 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium text-zinc-700">Table B</span>
                 <select name="tableBId" required className="rounded-md border border-zinc-300 px-3 py-2">
-                  {tables.map((table) => (
+                  {gridTables.map((table) => (
                     <option key={table.id} value={table.id}>
                       {table.label}
                     </option>
@@ -328,38 +259,6 @@ export default async function TablesPage({ params }: { params: Promise<{ venueSl
   );
 }
 
-/**
- * Groups the already-natural-sorted table list by area, in the same
- * priority order as the Areas section above (lower priority number first,
- * matching auto-assignment's own fill order) - the Area column each row
- * already showed becomes a section header instead, so a venue with 40+
- * tables reads as its physical layout rather than one long alphabetic
- * list. Tables with no area go in a trailing "No area" group (areaId
- * null, only shown when at least one table actually has no area) - that
- * group gets no AreaBulkToggle on the page, there's no Area row for it to
- * act on.
- */
-function groupByArea<T extends { areaId: string | null }>(
-  tables: T[],
-  areas: { id: string; name: string; priority: number }[],
-): { areaId: string | null; areaName: string; tables: T[] }[] {
-  const orderedAreas = [...areas].sort((a, b) => a.priority - b.priority);
-  const groups = new Map<string | null, T[]>();
-  for (const table of tables) {
-    const key = table.areaId;
-    const existing = groups.get(key);
-    if (existing) existing.push(table);
-    else groups.set(key, [table]);
-  }
-  const result: { areaId: string | null; areaName: string; tables: T[] }[] = [];
-  for (const area of orderedAreas) {
-    const group = groups.get(area.id);
-    if (group) result.push({ areaId: area.id, areaName: area.name, tables: group });
-  }
-  const noArea = groups.get(null);
-  if (noArea) result.push({ areaId: null, areaName: "No area", tables: noArea });
-  return result;
-}
 
 function formatDateRange(from: Date, to: Date): string {
   if (from.getTime() === to.getTime()) return formatDate(from);

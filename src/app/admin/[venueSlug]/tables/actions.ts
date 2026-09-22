@@ -37,7 +37,12 @@ export async function createArea(formData: FormData): Promise<ActionResult> {
   const existing = await prisma.area.findUnique({ where: { venueId_name: { venueId: venue.id, name: parsed.name } } });
   if (existing) return { error: `An area called "${parsed.name}" already exists for this venue.` };
 
-  await prisma.area.create({ data: { venueId: venue.id, ...parsed } });
+  // New areas go last; fill order is set by dragging (see reorderAreas), not
+  // a typed priority, so a create just appends past the current highest.
+  const max = await prisma.area.aggregate({ where: { venueId: venue.id }, _max: { priority: true } });
+  const priority = (max._max.priority ?? -1) + 1;
+
+  await prisma.area.create({ data: { venueId: venue.id, name: parsed.name, priority } });
   revalidatePath(`/admin/${venue.slug}/tables`);
 }
 
@@ -54,7 +59,7 @@ export async function updateArea(formData: FormData): Promise<ActionResult> {
     return { error: `An area called "${parsed.name}" already exists for this venue.` };
   }
 
-  const result = await prisma.area.updateMany({ where: { id, venueId: venue.id }, data: parsed });
+  const result = await prisma.area.updateMany({ where: { id, venueId: venue.id }, data: { name: parsed.name } });
   if (result.count === 0) return { error: "Area not found for this venue." };
   revalidatePath(`/admin/${venue.slug}/tables`);
 }
@@ -318,5 +323,116 @@ export async function deleteAreaClosure(formData: FormData): Promise<ActionResul
   if (!closure) return { error: "Closure not found for this venue." };
 
   await prisma.areaClosure.delete({ where: { id } });
+  revalidatePath(`/admin/${venue.slug}/tables`);
+}
+
+// ---------------------------------------------------------------------------
+// Inline tables grid (bulk save + drag reorder)
+// ---------------------------------------------------------------------------
+
+export interface TableRowInput {
+  /** Existing table id, or null for a new row added in the grid. */
+  id: string | null;
+  label: string;
+  areaId: string | null;
+  minCovers: number;
+  maxCovers: number;
+  active: boolean;
+}
+
+/**
+ * Saves the whole tables grid in one go (DMN-style: edit every table
+ * inline, one Save), instead of a separate edit page per table. Updates
+ * existing rows, creates new ones, and sets each table's sortOrder to its
+ * position in the grid so drag-reorder persists. Deletion is handled
+ * separately by the per-row remove (deleteTable), so a row simply missing
+ * from this list is never auto-deleted. Called directly from the client,
+ * so it takes plain args.
+ */
+export async function saveTables(venueId: string, rows: TableRowInput[]): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { id: true, slug: true } });
+  if (!venue) return { error: "Unknown venue." };
+
+  // Basic validation up front, so nothing is written if any row is invalid.
+  const seenLabels = new Set<string>();
+  for (const row of rows) {
+    const label = row.label.trim();
+    if (!label) return { error: "Every table needs a label." };
+    const key = label.toLowerCase();
+    if (seenLabels.has(key)) return { error: `More than one table is labelled "${label}".` };
+    seenLabels.add(key);
+    if (!Number.isFinite(row.minCovers) || !Number.isFinite(row.maxCovers) || row.minCovers < 1 || row.maxCovers < row.minCovers) {
+      return { error: `"${label}" has an invalid covers range (max must be at least min, min at least 1).` };
+    }
+  }
+
+  const validAreaIds = new Set(
+    (await prisma.area.findMany({ where: { venueId: venue.id }, select: { id: true } })).map((a) => a.id),
+  );
+
+  await prisma.$transaction(
+    rows.map((row, index) => {
+      const data = {
+        label: row.label.trim(),
+        areaId: row.areaId && validAreaIds.has(row.areaId) ? row.areaId : null,
+        minCovers: Math.trunc(row.minCovers),
+        maxCovers: Math.trunc(row.maxCovers),
+        active: row.active,
+        sortOrder: index,
+      };
+      return row.id
+        ? prisma.table.updateMany({ where: { id: row.id, venueId: venue.id }, data })
+        : prisma.table.create({ data: { venueId: venue.id, ...data } });
+    }),
+  );
+
+  revalidatePath(`/admin/${venue.slug}/tables`);
+}
+
+/**
+ * Persists a new Area fill-order from the drag-to-reorder list (lower
+ * priority number fills first, see Area.priority). Only areas belonging to
+ * this venue are touched. Called directly from the client.
+ */
+export async function reorderAreas(venueId: string, orderedIds: string[]): Promise<void> {
+  await requireAdminSession();
+  const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { id: true, slug: true } });
+  if (!venue) return;
+
+  const owned = await prisma.area.findMany({ where: { venueId: venue.id }, select: { id: true } });
+  const ownedIds = new Set(owned.map((a) => a.id));
+
+  await prisma.$transaction(
+    orderedIds
+      .filter((id) => ownedIds.has(id))
+      .map((id, index) => prisma.area.update({ where: { id }, data: { priority: index } })),
+  );
+
+  revalidatePath(`/admin/${venue.slug}/tables`);
+}
+
+/**
+ * Plain-args table delete for the inline grid's per-row remove, mirroring
+ * deleteTable's rule: a table ever assigned to a real booking is
+ * deactivated rather than hard-deleted (BookingTable.tableId is ON DELETE
+ * RESTRICT). Returns an ActionResult so the grid can surface that case.
+ */
+export async function removeTable(venueId: string, id: string): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { id: true, slug: true } });
+  if (!venue) return { error: "Unknown venue." };
+
+  const table = await prisma.table.findFirst({ where: { id, venueId: venue.id }, select: { label: true } });
+  if (!table) return { error: "Table not found for this venue." };
+
+  const bookingCount = await prisma.bookingTable.count({ where: { tableId: id } });
+  if (bookingCount > 0) {
+    await prisma.table.updateMany({ where: { id, venueId: venue.id }, data: { active: false } });
+    revalidatePath(`/admin/${venue.slug}/tables`);
+    return { error: `"${table.label}" has ${bookingCount} booking(s) against it, so it was deactivated rather than deleted.` };
+  }
+
+  await prisma.table.deleteMany({ where: { id, venueId: venue.id } });
   revalidatePath(`/admin/${venue.slug}/tables`);
 }
