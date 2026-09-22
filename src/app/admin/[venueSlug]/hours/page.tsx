@@ -9,6 +9,7 @@ import { addOverride, saveWeeklyHours } from "./actions";
 import { TimeFieldSelect } from "@/components/time-field-select";
 import { DateFieldSelect } from "@/components/date-field-select";
 import { DeleteOverrideButton } from "./delete-override-button";
+import { WeeklyHoursTable, type WeeklyDay } from "./weekly-hours-table";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,17 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
     return existing ? `${day}:${existing.mode}:${existing.opensAt}-${existing.closesAt}` : `${day}:closed`;
   }).join(",");
 
+  const weeklyDays: WeeklyDay[] = DAY_LABELS.map((label, day) => {
+    const existing = byDay.get(day);
+    return {
+      day,
+      label,
+      state: existing ? (existing.mode === "PRIVATE_HIRE_ONLY" ? "private_hire_only" : "open") : "closed",
+      opensAt: existing?.opensAt ?? "18:00",
+      closesAt: existing?.closesAt ?? "23:00",
+    };
+  });
+
   const today = new Date();
   const todayDateOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   // A range still relevant if it hasn't fully finished yet.
@@ -67,43 +79,7 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
         <Card padded={false} className="mt-4 overflow-hidden">
           <ActionForm key={weeklyHoursKey} action={saveWeeklyHours}>
             <input type="hidden" name="venueId" value={venue.id} />
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-4 py-2.5">Day</th>
-                  <th className="px-4 py-2.5">State</th>
-                  <th className="px-4 py-2.5">Opens</th>
-                  <th className="px-4 py-2.5">Closes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {DAY_LABELS.map((label, day) => {
-                  const existing = byDay.get(day);
-                  return (
-                    <tr key={day} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
-                      <td className="px-4 py-3 font-medium text-zinc-900">{label}</td>
-                      <td className="px-4 py-3">
-                        <select
-                          name={`state-${day}`}
-                          defaultValue={existing ? (existing.mode === "PRIVATE_HIRE_ONLY" ? "private_hire_only" : "open") : "closed"}
-                          className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
-                        >
-                          <option value="closed">Closed</option>
-                          <option value="open">Open</option>
-                          <option value="private_hire_only">Private hire only</option>
-                        </select>
-                      </td>
-                      <td className="px-4 py-3">
-                        <TimeFieldSelect name={`opensAt-${day}`} defaultValue={existing?.opensAt ?? "18:00"} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <TimeFieldSelect name={`closesAt-${day}`} defaultValue={existing?.closesAt ?? "23:00"} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+<WeeklyHoursTable days={weeklyDays} />
             <div className="border-t border-zinc-100 bg-zinc-50/60 px-4 py-3">
               <SubmitButton label="Save weekly hours" pendingLabel="Saving…" className={buttonStyles("primary", "md")} />
             </div>
