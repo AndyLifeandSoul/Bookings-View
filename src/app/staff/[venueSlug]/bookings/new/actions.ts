@@ -1,5 +1,7 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
+
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/client";
 import { getCurrentStaffSession } from "@/lib/auth/session";
@@ -116,6 +118,7 @@ export async function createManualBooking(formData: FormData): Promise<ActionRes
         partySize,
         status: "CONFIRMED",
         source: "PHONE",
+        manageToken: randomBytes(24).toString("base64url"),
         customerName,
         customerEmail: customerEmail || null,
         customerPhone: customerPhone || null,
@@ -139,6 +142,7 @@ export async function createManualBooking(formData: FormData): Promise<ActionRes
     partySize,
     bookingTypeName: bookingType.name,
     isEnquiry: false,
+    manageToken: booking.manageToken,
   });
 
   redirect(`/staff/${venueSlug}/diary?date=${dateStr}`);

@@ -18,3 +18,8 @@ export function getCustomerAppUrl(): string {
 export function buildPreOrderLink(token: string): string {
   return `${getCustomerAppUrl()}/pre-order/${token}`;
 }
+
+/** The customer self-service manage link (change party size / cancel), sent in confirmation and reminder emails. Lives in the customer app, same as the pre-order portal. */
+export function buildManageBookingLink(manageToken: string): string {
+  return `${getCustomerAppUrl()}/manage-booking/${manageToken}`;
+}

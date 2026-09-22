@@ -702,6 +702,11 @@ model Booking {
   /// so its absence on an old row isn't a bug.
   bookingRef String? @unique
 
+  /// Unguessable token for the customer's self-service "manage your booking"
+  /// link (see /manage-booking/[token]). Null for bookings made before this
+  /// existed; generated crypto-random for every new booking.
+  manageToken String? @unique
+
   customerName  String
   /// Nullable, the customer widget still always requires it (validated at
   /// the API layer, not the DB), but a same-day manual "Add booking" in

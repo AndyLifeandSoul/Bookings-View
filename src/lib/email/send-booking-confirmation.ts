@@ -1,5 +1,6 @@
 import { sendVenueMail } from "./send";
 import { renderVenueEmail, type VenueBrand } from "./templates";
+import { buildManageBookingLink } from "@/lib/pre-order/links";
 import { logOutboundEmail } from "./log-message";
 
 /**
@@ -39,6 +40,8 @@ export async function sendBookingConfirmationEmail(params: {
   partySize: number;
   isEnquiry: boolean;
   bookingTypeName: string;
+  /** Null for enquiries or older rows; the manage link is simply omitted when absent. */
+  manageToken: string | null;
 }): Promise<void> {
   const { venue, customerEmail } = params;
   if (!venue.email || !customerEmail) return;
@@ -88,7 +91,12 @@ export async function sendBookingConfirmationEmail(params: {
             `Your booking at ${venue.name} is confirmed. We look forward to seeing you.`,
           ],
           details,
-          outro: ["Reply to this email if you need to change or cancel."],
+          ...(params.manageToken
+            ? { button: { label: "Manage your booking", url: buildManageBookingLink(params.manageToken) } }
+            : {}),
+          outro: [
+            "Need to change your party size or cancel? Use the button above, or just reply to this email.",
+          ],
         },
   );
   const subject = params.isEnquiry

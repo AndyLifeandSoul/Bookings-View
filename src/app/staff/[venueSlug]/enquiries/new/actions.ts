@@ -119,6 +119,7 @@ export async function createManualEnquiry(formData: FormData): Promise<ActionRes
     partySize,
     bookingTypeName: bookingType.name,
     isEnquiry: true,
+    manageToken: booking.manageToken,
   });
 
   redirect(`/staff/${venueSlug}/bookings/${booking.id}`);
