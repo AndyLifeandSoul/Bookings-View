@@ -8,7 +8,7 @@ import { findTableConflicts } from "@/lib/staff/table-conflicts";
 import { sendVenueMail } from "@/lib/email/send";
 import type { ActionResult } from "@/components/action-form";
 import type { BookingStatus, PaymentPurpose } from "@/generated/prisma";
-import { getPaymentProviderForAccount } from "@/lib/payments/get-provider";
+import { createPaymentIntentViaCustomerApp } from "@/lib/payments/remote-intent";
 import { PAYMENT_ACCOUNT_CODES, type PaymentAccountCode } from "@/lib/payments/types";
 import { getCustomerAppUrl } from "@/lib/pre-order/links";
 import { validateAndPricePreOrder, InvalidPreOrderError, type PreOrderLineInput, type PreOrderModifierInput } from "@/lib/pre-order/validate";
@@ -419,11 +419,9 @@ export async function requestPayment(formData: FormData): Promise<ActionResult> 
   const customerAppUrl = getCustomerAppUrl();
 
   try {
-    const provider = getPaymentProviderForAccount(booking.venue.paymentAccount.code as PaymentAccountCode);
-    const intent = await provider.createPaymentIntent({
+    const intent = await createPaymentIntentViaCustomerApp({
+      accountCode: booking.venue.paymentAccount.code as PaymentAccountCode,
       amountInPence,
-      currency: "GBP",
-      captureMode: "AUTO",
       reference: booking.id,
       description: description ?? `Payment request for ${booking.venue.name} booking`,
       customerEmail: booking.customerEmail ?? undefined,
@@ -598,11 +596,9 @@ export async function addPreOrderItems(formData: FormData): Promise<ActionResult
   const description = `Pre-order top-up${guestLabel ? ` for ${guestLabel}` : ""}`;
 
   try {
-    const provider = getPaymentProviderForAccount(booking.venue.paymentAccount.code as PaymentAccountCode);
-    const intent = await provider.createPaymentIntent({
+    const intent = await createPaymentIntentViaCustomerApp({
+      accountCode: booking.venue.paymentAccount.code as PaymentAccountCode,
       amountInPence: addedAmountInPence,
-      currency: "GBP",
-      captureMode: "AUTO",
       reference: booking.id,
       description,
       customerEmail: booking.customerEmail ?? undefined,
