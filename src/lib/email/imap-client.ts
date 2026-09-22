@@ -7,13 +7,13 @@ import { mailboxPassword } from "./credentials";
  * Reads a venue's mailbox over IMAP, the receiving counterpart to
  * smtp-client.ts's SMTP sending. Andy's mailboxes are Microsoft 365 with
  * IMAP/SMTP AUTH enabled, so this uses the same per-mailbox passwords
- * (SMTP_CREDENTIALS_JSON) against imap.office365.com, no Azure app
+ * (SMTP_CREDENTIALS_JSON) against outlook.office365.com, no Azure app
  * registration needed. Returns the same InboundMessage shape as the Graph
  * reader (graph-client.ts) so poll-inbox doesn't care which one ran.
  *
  * Config from env, never the repo:
  *  - SMTP_CREDENTIALS_JSON: the mailbox -> password map (shared with sending).
- *  - IMAP_HOST / IMAP_PORT: default imap.office365.com:993 (implicit TLS).
+ *  - IMAP_HOST / IMAP_PORT: default outlook.office365.com:993 (implicit TLS).
  *
  * Same Microsoft basic-auth deprecation caveat as SMTP: works where IMAP
  * AUTH is enabled per mailbox, the Graph reader is the fallback otherwise.
@@ -43,7 +43,7 @@ export async function listRecentInboxViaImap(mailbox: string, sinceIso: string |
   const password = mailboxPassword(mailbox);
   if (!password) return [];
 
-  const host = process.env.IMAP_HOST || "imap.office365.com";
+  const host = process.env.IMAP_HOST || "outlook.office365.com";
   const port = Number(process.env.IMAP_PORT || "993");
   const since = sinceIso ? new Date(sinceIso) : new Date(Date.now() - FIRST_RUN_LOOKBACK_MS);
 
