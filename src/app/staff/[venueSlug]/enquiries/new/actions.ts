@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/client";
 import { getCurrentStaffSession } from "@/lib/auth/session";
 import { formatBookingRef } from "@/lib/bookings/booking-reference";
 import type { ActionResult } from "@/components/action-form";
+import { sendBookingConfirmationEmail } from "@/lib/email/send-booking-confirmation";
 
 async function requireVenueAccess(venueId: string): Promise<{ ok: true } | { error: string }> {
   const session = await getCurrentStaffSession();
@@ -16,12 +17,12 @@ async function requireVenueAccess(venueId: string): Promise<{ ok: true } | { err
 }
 
 /**
- * Manual "Add enquiry" — a phoned-in or in-person enquiry staff log
+ * Manual "Add enquiry" - a phoned-in or in-person enquiry staff log
  * directly. Unlike Add booking, every field here is required (per Andy's
  * spec): name, email, phone, booking type, date, time, who took it, and a
- * note of what was discussed — there's no "lighter" same-day version of an
+ * note of what was discussed - there's no "lighter" same-day version of an
  * enquiry the way there is for a confirmed booking, since an enquiry by
- * definition still needs staff to follow up. No table — enquiries skip
+ * definition still needs staff to follow up. No table - enquiries skip
  * table assignment until staff convert one to a confirmed booking, same as
  * every other enquiry in the system (see create-booking.ts's isEnquiry
  * branch in the canonical repo).
@@ -32,7 +33,10 @@ export async function createManualEnquiry(formData: FormData): Promise<ActionRes
   const access = await requireVenueAccess(venueId);
   if ("error" in access) return access;
 
-  const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { id: true, bookingCode: true } });
+  const venue = await prisma.venue.findUnique({
+    where: { id: venueId },
+    select: { id: true, bookingCode: true, name: true, email: true, logoUrl: true, brandColorHex: true, address: true, phone: true },
+  });
   if (!venue) return { error: "Unknown venue." };
 
   const dateStr = String(formData.get("date") ?? "");
@@ -62,7 +66,7 @@ export async function createManualEnquiry(formData: FormData): Promise<ActionRes
   const partySize = Math.trunc(partySizeRaw);
 
   // An enquiry's end time isn't something the customer/staff negotiate up
-  // front the way a confirmed booking's is — default to the booking type's
+  // front the way a confirmed booking's is - default to the booking type's
   // minimum duration, same starting assumption generateAvailableSlots uses
   // before a duration is actually chosen; it's revisable from the booking
   // details page once this is confirmed.
@@ -99,6 +103,21 @@ export async function createManualEnquiry(formData: FormData): Promise<ActionRes
         takenByStaffName,
       },
     });
+  });
+
+  // Send the branded "enquiry received" email and log it on the thread,
+  // mirroring the customer widget. An enquiry always has an email (required
+  // above), so this always sends.
+  await sendBookingConfirmationEmail({
+    venue,
+    bookingId: booking.id,
+    bookingRef: booking.bookingRef,
+    customerName,
+    customerEmail,
+    date,
+    startTime,
+    partySize,
+    isEnquiry: true,
   });
 
   redirect(`/staff/${venueSlug}/bookings/${booking.id}`);

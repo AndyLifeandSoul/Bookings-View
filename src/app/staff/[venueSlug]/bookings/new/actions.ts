@@ -6,8 +6,9 @@ import { getCurrentStaffSession } from "@/lib/auth/session";
 import { findTableConflicts } from "@/lib/staff/table-conflicts";
 import { formatBookingRef } from "@/lib/bookings/booking-reference";
 import type { ActionResult } from "@/components/action-form";
+import { sendBookingConfirmationEmail } from "@/lib/email/send-booking-confirmation";
 
-/** Same "trust nothing but the session" shape as the booking-details actions — see that file's requireVenueAccess doc comment. */
+/** Same "trust nothing but the session" shape as the booking-details actions - see that file's requireVenueAccess doc comment. */
 async function requireVenueAccess(venueId: string): Promise<{ ok: true } | { error: string }> {
   const session = await getCurrentStaffSession();
   if (!session) return { error: "Not signed in." };
@@ -23,12 +24,12 @@ function todayUtcDateOnly(): Date {
 }
 
 /**
- * Manual "Add booking" — a phoned-in or walk-in booking staff enter
+ * Manual "Add booking" - a phoned-in or walk-in booking staff enter
  * directly, skipping the customer widget's availability/deposit flow
  * entirely (this always creates a CONFIRMED booking with a table already
  * picked, not something needing payment or slot validation). Per Andy's
  * rules: a same-day booking only needs a time, name, table and booking
- * type — no contact details required (someone booking a table for tonight
+ * type - no contact details required (someone booking a table for tonight
  * over the phone doesn't need to give an email). A future-dated booking
  * needs a name and at least one of email/phone, plus who took it, since
  * there's no other record of that conversation.
@@ -39,7 +40,10 @@ export async function createManualBooking(formData: FormData): Promise<ActionRes
   const access = await requireVenueAccess(venueId);
   if ("error" in access) return access;
 
-  const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { id: true, bookingCode: true } });
+  const venue = await prisma.venue.findUnique({
+    where: { id: venueId },
+    select: { id: true, bookingCode: true, name: true, email: true, logoUrl: true, brandColorHex: true, address: true, phone: true },
+  });
   if (!venue) return { error: "Unknown venue." };
 
   const dateStr = String(formData.get("date") ?? "");
@@ -90,7 +94,7 @@ export async function createManualBooking(formData: FormData): Promise<ActionRes
     }
   }
 
-  await prisma.$transaction(async (tx) => {
+  const booking = await prisma.$transaction(async (tx) => {
     let bookingRef: string | null = null;
     if (venue.bookingCode) {
       const updated = await tx.venue.update({
@@ -119,6 +123,21 @@ export async function createManualBooking(formData: FormData): Promise<ActionRes
         bookingTables: tableIds.length > 0 ? { create: tableIds.map((tableId) => ({ tableId })) } : undefined,
       },
     });
+  });
+
+  // Fire the branded confirmation to the customer and log it on the
+  // booking's message thread, exactly as the customer widget does. No-ops
+  // when there's no email on file (a same-day phone booking may have none).
+  await sendBookingConfirmationEmail({
+    venue,
+    bookingId: booking.id,
+    bookingRef: booking.bookingRef,
+    customerName,
+    customerEmail,
+    date,
+    startTime,
+    partySize,
+    isEnquiry: false,
   });
 
   redirect(`/staff/${venueSlug}/diary?date=${dateStr}`);
