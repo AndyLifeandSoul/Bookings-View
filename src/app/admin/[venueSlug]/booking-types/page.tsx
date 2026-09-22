@@ -5,7 +5,9 @@ import { requireAdminVenue } from "@/lib/admin/require-admin-venue";
 import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SortableList, type SortableItem } from "@/components/sortable-list";
 import { DeleteBookingTypeButton } from "./delete-button";
+import { reorderBookingTypes } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +20,37 @@ export default async function BookingTypesPage({ params }: { params: Promise<{ v
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 
+  const items: SortableItem[] = bookingTypes.map((bt) => ({
+    id: bt.id,
+    content: (
+      <div className="flex items-center gap-3 px-3 py-3">
+        <span
+          className="h-8 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: bt.color ?? "var(--accent)" }}
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium text-zinc-900">{bt.name}</div>
+          <div className="truncate text-xs text-zinc-500">{summary(bt)}</div>
+        </div>
+        <Badge variant={bt.active ? "success" : "neutral"}>{bt.active ? "Active" : "Inactive"}</Badge>
+        <Link
+          href={`/admin/${venue.slug}/booking-types/${bt.id}`}
+          className="text-sm font-medium text-zinc-600 underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--accent)]"
+        >
+          Edit
+        </Link>
+        <DeleteBookingTypeButton id={bt.id} name={bt.name} venueId={venue.id} />
+      </div>
+    ),
+  }));
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold tracking-tight text-zinc-900">Booking types</h2>
+          <p className="mt-1 text-sm text-zinc-500">Drag to set the order customers see them in.</p>
         </div>
         <Link href={`/admin/${venue.slug}/booking-types/new`} className={buttonStyles("primary", "sm")}>
           <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
@@ -39,70 +67,30 @@ export default async function BookingTypesPage({ params }: { params: Promise<{ v
         </Card>
       ) : (
         <Card padded={false} className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-4 py-2.5">Name</th>
-                  <th className="px-4 py-2.5">Party size</th>
-                  <th className="px-4 py-2.5">Duration</th>
-                  <th className="px-4 py-2.5">Deposit</th>
-                  <th className="px-4 py-2.5">Enquiry above</th>
-                  <th className="px-4 py-2.5">Pre-order</th>
-                  <th className="px-4 py-2.5">Status</th>
-                  <th className="px-4 py-2.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {bookingTypes.map((bt) => (
-                  <tr key={bt.id} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-zinc-900">{bt.name}</div>
-                      <div className="text-xs text-zinc-500">{bt.slug}</div>
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-zinc-600">
-                      {bt.minPartySize}–{bt.maxPartySize}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-zinc-600">
-                      {bt.minDurationMinutes}–{bt.maxDurationMinutes} min
-                    </td>
-                    <td className="px-4 py-3 text-zinc-600">{depositLabel(bt.depositType, bt.depositAmount)}</td>
-                    <td className="px-4 py-3 tabular-nums text-zinc-600">
-                      {bt.enquiryThresholdPartySize != null ? `${bt.enquiryThresholdPartySize} guests` : "-"}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-600">{preOrderLabel(bt.requiresPreOrder, bt.preOrderPaymentRequired)}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={bt.active ? "success" : "neutral"}>{bt.active ? "Active" : "Inactive"}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-3">
-                        <Link
-                          href={`/admin/${venue.slug}/booking-types/${bt.id}`}
-                          className="text-sm font-medium text-zinc-600 underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--accent)]"
-                        >
-                          Edit
-                        </Link>
-                        <DeleteBookingTypeButton id={bt.id} name={bt.name} venueId={venue.id} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SortableList items={items} reorder={reorderBookingTypes.bind(null, venue.id)} />
         </Card>
       )}
     </div>
   );
 }
 
-function depositLabel(depositType: string, depositAmount: number | null): string {
-  if (depositType === "NONE" || depositAmount == null) return "None";
-  const pounds = (depositAmount / 100).toFixed(2);
-  return depositType === "PER_HEAD" ? `£${pounds}/head` : `£${pounds}`;
-}
-
-function preOrderLabel(requiresPreOrder: boolean, preOrderPaymentRequired: boolean): string {
-  if (!requiresPreOrder) return "-";
-  return preOrderPaymentRequired ? "Yes (paid upfront)" : "Yes (pay on day)";
+function summary(bt: {
+  minPartySize: number;
+  maxPartySize: number;
+  minDurationMinutes: number;
+  maxDurationMinutes: number;
+  depositType: string;
+  depositAmount: number | null;
+  requiresPreOrder: boolean;
+}): string {
+  const parts = [
+    `${bt.minPartySize}-${bt.maxPartySize} guests`,
+    `${bt.minDurationMinutes}-${bt.maxDurationMinutes} min`,
+  ];
+  if (bt.depositType !== "NONE" && bt.depositAmount != null) {
+    const pounds = (bt.depositAmount / 100).toFixed(2);
+    parts.push(bt.depositType === "PER_HEAD" ? `£${pounds}/head deposit` : `£${pounds} deposit`);
+  }
+  if (bt.requiresPreOrder) parts.push("pre-order");
+  return parts.join(" · ");
 }

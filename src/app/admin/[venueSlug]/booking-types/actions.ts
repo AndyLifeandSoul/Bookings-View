@@ -7,13 +7,38 @@ import { requireAdminSession } from "@/lib/admin/require-admin-session";
 import type { ActionResult } from "@/components/action-form";
 import type { DepositType, TableFillMode } from "@/generated/prisma";
 
-const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+/**
+ * Booking types no longer ask staff for a slug (Andy: "why do we ask for
+ * these") - it's auto-generated from the name. Slug is still the stable,
+ * unique, URL-safe identifier the customer booking flow uses, so it's
+ * generated once on create and never changed on rename (changing it would
+ * break existing booking links).
+ */
+function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return base || "booking-type";
+}
+
+async function uniqueSlug(venueId: string, base: string): Promise<string> {
+  const existing = await prisma.bookingType.findMany({
+    where: { venueId, slug: { startsWith: base } },
+    select: { slug: true },
+  });
+  const taken = new Set(existing.map((b) => b.slug));
+  if (!taken.has(base)) return base;
+  for (let i = 2; ; i++) {
+    const candidate = `${base}-${i}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
 const DEPOSIT_TYPES: DepositType[] = ["NONE", "FIXED", "PER_HEAD"];
 const TABLE_FILL_MODES: TableFillMode[] = ["PER_BOOKING", "WHOLE_AREA", "WHOLE_VENUE"];
 
 interface ParsedFields {
   name: string;
-  slug: string;
   description: string | null;
   active: boolean;
   isPrivateHireType: boolean;
@@ -54,16 +79,6 @@ async function resolveVenue(formData: FormData): Promise<{ id: string; slug: str
 function parseFields(formData: FormData): ParseResult {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { ok: false, error: "Name is required." };
-
-  const slug = String(formData.get("slug") ?? "")
-    .trim()
-    .toLowerCase();
-  if (!SLUG_RE.test(slug)) {
-    return {
-      ok: false,
-      error: `Slug "${slug}" must be lowercase letters, numbers, and hyphens only, e.g. "standard-dining".`,
-    };
-  }
 
   const description = String(formData.get("description") ?? "").trim() || null;
   const active = formData.get("active") === "on";
@@ -190,7 +205,6 @@ function parseFields(formData: FormData): ParseResult {
     ok: true,
     fields: {
       name,
-      slug,
       description,
       active,
       isPrivateHireType,
@@ -293,16 +307,12 @@ export async function createBookingType(formData: FormData): Promise<ActionResul
   const dateOverrides = parseDateOverrides(formData);
   if (!dateOverrides.ok) return { error: dateOverrides.error };
 
-  const existing = await prisma.bookingType.findUnique({
-    where: { venueId_slug: { venueId: venue.id, slug: fields.slug } },
-  });
-  if (existing) {
-    return { error: `A booking type with slug "${fields.slug}" already exists for this venue.` };
-  }
+  const slug = await uniqueSlug(venue.id, slugify(fields.name));
 
   await prisma.bookingType.create({
     data: {
       venueId: venue.id,
+      slug,
       ...fields,
       areaPriorities: { createMany: { data: areaPriorities.rows } },
       dateOverrides: { createMany: { data: dateOverrides.rows } },
@@ -324,13 +334,6 @@ export async function updateBookingType(formData: FormData): Promise<ActionResul
   if (!areaPriorities.ok) return { error: areaPriorities.error };
   const dateOverrides = parseDateOverrides(formData);
   if (!dateOverrides.ok) return { error: dateOverrides.error };
-
-  const existing = await prisma.bookingType.findUnique({
-    where: { venueId_slug: { venueId: venue.id, slug: fields.slug } },
-  });
-  if (existing && existing.id !== id) {
-    return { error: `A booking type with slug "${fields.slug}" already exists for this venue.` };
-  }
 
   const owned = await prisma.bookingType.findFirst({ where: { id, venueId: venue.id }, select: { id: true } });
   if (!owned) return { error: "Booking type not found for this venue." };
@@ -384,5 +387,29 @@ export async function deleteBookingType(formData: FormData): Promise<ActionResul
   }
 
   await prisma.bookingType.deleteMany({ where: { id, venueId: venue.id } });
+  revalidatePath(`/admin/${venue.slug}/booking-types`);
+}
+
+/**
+ * Persists a new booking-type display order from the drag-to-reorder list
+ * (see SortableList). Sets each type's sortOrder to its position in
+ * orderedIds; only ids belonging to this venue are touched, so a stray id
+ * can't reorder another venue's types. Called directly from the client (not
+ * via a form), so it takes plain args rather than FormData.
+ */
+export async function reorderBookingTypes(venueId: string, orderedIds: string[]): Promise<void> {
+  await requireAdminSession();
+  const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { id: true, slug: true } });
+  if (!venue) return;
+
+  const owned = await prisma.bookingType.findMany({ where: { venueId: venue.id }, select: { id: true } });
+  const ownedIds = new Set(owned.map((b) => b.id));
+
+  await prisma.$transaction(
+    orderedIds
+      .filter((id) => ownedIds.has(id))
+      .map((id, index) => prisma.bookingType.update({ where: { id }, data: { sortOrder: index } })),
+  );
+
   revalidatePath(`/admin/${venue.slug}/booking-types`);
 }
