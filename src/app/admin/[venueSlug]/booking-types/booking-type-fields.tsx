@@ -423,6 +423,34 @@ export function BookingTypeFields({
           Leave unchecked for pre-orders that are paid on the day. Only takes effect while &quot;Requires a
           pre-order menu selection&quot; above is also checked.
         </p>
+        <div className="ml-6 flex gap-4">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm text-zinc-700">Min items per guest</span>
+            <input
+              type="number"
+              name="preOrderMinItemsPerPerson"
+              min={0}
+              defaultValue={defaults?.preOrderMinItemsPerPerson ?? ""}
+              placeholder="Any"
+              className="w-32 rounded-md border border-zinc-300 px-3 py-2"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm text-zinc-700">Max items per guest</span>
+            <input
+              type="number"
+              name="preOrderMaxItemsPerPerson"
+              min={0}
+              defaultValue={defaults?.preOrderMaxItemsPerPerson ?? ""}
+              placeholder="Any"
+              className="w-32 rounded-md border border-zinc-300 px-3 py-2"
+            />
+          </label>
+        </div>
+        <p className="ml-6 text-xs text-zinc-500">
+          How many pre-order items each guest must / may choose, multiplied by party size to bound the whole order.
+          Leave blank for no limit. For bottomless brunch set both to 1: exactly one item per guest.
+        </p>
       </div>
 
       <label className="flex flex-col gap-1">

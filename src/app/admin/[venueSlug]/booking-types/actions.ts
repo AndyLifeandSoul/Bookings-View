@@ -55,6 +55,8 @@ interface ParsedFields {
   requiresPreOrder: boolean;
   preOrderPaymentRequired: boolean;
   preOrderMenuId: string | null;
+  preOrderMinItemsPerPerson: number | null;
+  preOrderMaxItemsPerPerson: number | null;
   enquiryThresholdPartySize: number | null;
   autoConfirmMinLeadMinutes: number | null;
   color: string | null;
@@ -143,6 +145,26 @@ function parseFields(formData: FormData): ParseResult {
   const preOrderPaymentRequired = formData.get("preOrderPaymentRequired") === "on";
   const preOrderMenuId = String(formData.get("preOrderMenuId") ?? "").trim() || null;
 
+  const parseItemBound = (raw: FormDataEntryValue | null): number | null | "invalid" => {
+    const v = String(raw ?? "").trim();
+    if (v === "") return null;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 0) return "invalid";
+    return n;
+  };
+  const preOrderMinItemsPerPerson = parseItemBound(formData.get("preOrderMinItemsPerPerson"));
+  const preOrderMaxItemsPerPerson = parseItemBound(formData.get("preOrderMaxItemsPerPerson"));
+  if (preOrderMinItemsPerPerson === "invalid" || preOrderMaxItemsPerPerson === "invalid") {
+    return { ok: false, error: "Items per guest must be a whole number (0 or more), or left blank." };
+  }
+  if (
+    preOrderMinItemsPerPerson !== null &&
+    preOrderMaxItemsPerPerson !== null &&
+    preOrderMinItemsPerPerson > preOrderMaxItemsPerPerson
+  ) {
+    return { ok: false, error: "Min items per guest can't be more than max items per guest." };
+  }
+
   const enquiryThresholdRaw = String(formData.get("enquiryThresholdPartySize") ?? "").trim();
   let enquiryThresholdPartySize: number | null = null;
   if (enquiryThresholdRaw !== "") {
@@ -223,6 +245,8 @@ function parseFields(formData: FormData): ParseResult {
       requiresPreOrder,
       preOrderPaymentRequired,
       preOrderMenuId,
+      preOrderMinItemsPerPerson,
+      preOrderMaxItemsPerPerson,
       enquiryThresholdPartySize,
       autoConfirmMinLeadMinutes,
       color,

@@ -363,6 +363,12 @@ model BookingType {
   /// requiresPreOrder is false.
   preOrderPaymentRequired Boolean @default(false)
 
+  /// Mirror of lifeandsoul-bookings: min / max pre-order items per guest for
+  /// this booking type (bounds scale by party size). Null means no bound on
+  /// that side. Set/edited here in the admin; enforced in the customer app.
+  preOrderMinItemsPerPerson Int?
+  preOrderMaxItemsPerPerson Int?
+
   /// Above this party size, a booking of this type is created as ENQUIRY
   /// instead of auto-confirming, for staff to review and confirm manually,
   /// e.g. a table for 10 books instantly, a table for 20 needs a human.
