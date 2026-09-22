@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
-import { isEmailConfigured, listRecentInbox } from "@/lib/email/graph-client";
+import { isInboxConfigured, listRecentInbox } from "@/lib/email/inbox";
 
 /**
  * Polls every venue's real mailbox for new mail and turns each one into an
- * INBOUND Message row (read: false) on whichever booking it's a reply to —
+ * INBOUND Message row (read: false) on whichever booking it's a reply to,
  * see docs/email-setup.md for the full picture and how to point a
  * scheduler at this. Not a Graph webhook on purpose: no public endpoint
  * validation handshake or subscription-renewal cron needed, at the cost of
- * near-real-time becoming "as fresh as the last poll" — fine for booking
+ * near-real-time becoming "as fresh as the last poll", fine for booking
  * replies, not for live chat.
  *
- * Auth is a shared secret (CRON_SECRET), not a staff session — this is
+ * Auth is a shared secret (CRON_SECRET), not a staff session, this is
  * called by a scheduler, not a browser. Returns 200 with a no-op summary
  * (not an error) when email isn't configured yet, so an unconfigured
  * deploy's scheduler doesn't sit there erroring every run.
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  if (!isEmailConfigured()) {
+  if (!isInboxConfigured()) {
     return NextResponse.json({ ok: true, configured: false, venuesPolled: 0, messagesCreated: 0 });
   }
 
