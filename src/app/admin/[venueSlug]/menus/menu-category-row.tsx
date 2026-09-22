@@ -6,8 +6,8 @@ import type { ActionResult } from "@/components/action-form";
 import { buttonStyles } from "@/components/ui/button";
 
 /**
- * Same inline edit-in-place shape as AreaRow (tables/area-row.tsx) - name +
- * a sort order number, simple enough that a separate edit page would be
+ * Same inline edit-in-place shape as AreaRow (tables/area-row.tsx) - name only, order is set by
+ * dragging (see reorderMenuCategories), simple enough that a separate edit page would be
  * overkill. No confirmation on delete (unlike menus/menu items): removing
  * a category only un-categorises whatever items pointed at it, see
  * deleteMenuCategory's doc comment.
@@ -16,13 +16,11 @@ export function MenuCategoryRow({
   id,
   venueId,
   name,
-  sortOrder,
   itemCount,
 }: {
   id: string;
   venueId: string;
   name: string;
-  sortOrder: number;
   itemCount: number;
 }) {
   const [editState, editAction, editPending] = useActionState<ActionResult, FormData>(
@@ -47,15 +45,6 @@ export function MenuCategoryRow({
             required
             defaultValue={name}
             className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-zinc-500">Order</span>
-          <input
-            type="number"
-            name="sortOrder"
-            defaultValue={sortOrder}
-            className="w-24 rounded-md border border-zinc-300 px-3 py-1.5 text-sm"
           />
         </label>
         <span className="pt-4 text-xs text-zinc-400">

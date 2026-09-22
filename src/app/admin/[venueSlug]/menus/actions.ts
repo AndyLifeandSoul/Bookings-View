@@ -154,7 +154,10 @@ export async function createMenuCategory(formData: FormData): Promise<ActionResu
   if ("error" in venue) return venue;
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required." };
-  const sortOrder = Number(formData.get("sortOrder") ?? 0) || 0;
+  // Order is set by dragging (see reorderMenuCategories), so a new category
+  // just appends past the current highest sortOrder.
+  const max = await prisma.menuCategory.aggregate({ where: { venueId: venue.id }, _max: { sortOrder: true } });
+  const sortOrder = (max._max.sortOrder ?? -1) + 1;
 
   try {
     await prisma.menuCategory.create({ data: { venueId: venue.id, name, sortOrder } });
@@ -171,14 +174,35 @@ export async function updateMenuCategory(formData: FormData): Promise<ActionResu
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required." };
-  const sortOrder = Number(formData.get("sortOrder") ?? 0) || 0;
 
   try {
-    const result = await prisma.menuCategory.updateMany({ where: { id, venueId: venue.id }, data: { name, sortOrder } });
+    const result = await prisma.menuCategory.updateMany({ where: { id, venueId: venue.id }, data: { name } });
     if (result.count === 0) return { error: "Category not found for this venue." };
   } catch {
     return { error: `"${name}" already exists for this venue.` };
   }
+  revalidatePath(`/admin/${venue.slug}/menus`);
+}
+
+/**
+ * Persists a new menu-category display order from the drag-to-reorder list.
+ * Only categories belonging to this venue are touched. Called directly from
+ * the client.
+ */
+export async function reorderMenuCategories(venueId: string, orderedIds: string[]): Promise<void> {
+  await requireAdminSession();
+  const venue = await prisma.venue.findUnique({ where: { id: venueId }, select: { id: true, slug: true } });
+  if (!venue) return;
+
+  const owned = await prisma.menuCategory.findMany({ where: { venueId: venue.id }, select: { id: true } });
+  const ownedIds = new Set(owned.map((m) => m.id));
+
+  await prisma.$transaction(
+    orderedIds
+      .filter((id) => ownedIds.has(id))
+      .map((id, index) => prisma.menuCategory.update({ where: { id }, data: { sortOrder: index } })),
+  );
+
   revalidatePath(`/admin/${venue.slug}/menus`);
 }
 

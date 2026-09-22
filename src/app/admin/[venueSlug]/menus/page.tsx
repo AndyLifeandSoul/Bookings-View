@@ -8,10 +8,11 @@ import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MenuCategoryRow } from "./menu-category-row";
+import { SortableList } from "@/components/sortable-list";
 import { ModifierGroupCard } from "./modifier-group-card";
 import { ItemRow } from "./item-row";
 import { CollapsibleSection } from "./collapsible-section";
-import { createMenuCategory, createModifierGroup, createItem } from "./actions";
+import { createMenuCategory, createModifierGroup, createItem, reorderMenuCategories } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -114,18 +115,25 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
       >
         <div className="flex flex-col gap-4">
           {categories.length > 0 ? (
-            <Card padded={false} className="overflow-hidden">
-              {categories.map((category) => (
-                <MenuCategoryRow
-                  key={category.id}
-                  id={category.id}
-                  venueId={venue.id}
-                  name={category.name}
-                  sortOrder={category.sortOrder}
-                  itemCount={category._count.items}
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-zinc-500">Drag to reorder how categories appear on menus.</p>
+              <Card padded={false} className="overflow-hidden">
+                <SortableList
+                  items={categories.map((category) => ({
+                    id: category.id,
+                    content: (
+                      <MenuCategoryRow
+                        id={category.id}
+                        venueId={venue.id}
+                        name={category.name}
+                        itemCount={category._count.items}
+                      />
+                    ),
+                  }))}
+                  reorder={reorderMenuCategories.bind(null, venue.id)}
                 />
-              ))}
-            </Card>
+              </Card>
+            </div>
           ) : (
             <EmptyState icon={<Tag className="h-5 w-5" strokeWidth={1.75} />} label="No categories yet." />
           )}
@@ -142,10 +150,6 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
                   placeholder="Starters"
                   className="rounded-md border border-zinc-300 px-3 py-2"
                 />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-zinc-700">Order</span>
-                <input type="number" name="sortOrder" defaultValue={0} className="w-28 rounded-md border border-zinc-300 px-3 py-2" />
               </label>
               <SubmitButton label="Add category" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
             </ActionForm>
