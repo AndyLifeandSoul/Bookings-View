@@ -16,6 +16,58 @@ import { isInboxConfigured, listRecentInbox } from "@/lib/email/inbox";
  * (not an error) when email isn't configured yet, so an unconfigured
  * deploy's scheduler doesn't sit there erroring every run.
  */
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;|&apos;/gi, "'")
+    .replace(/&#(\d{1,7});/g, (whole, n) => {
+      try {
+        return String.fromCodePoint(Number(n));
+      } catch {
+        return whole;
+      }
+    })
+    .replace(/&amp;/gi, "&");
+}
+
+/**
+ * Cuts an email reply down to just the new message, dropping the quoted
+ * original beneath it. The body is already flattened to a single line by
+ * stripHtml, so we cut at the earliest quote marker: Outlook's
+ * "From: ... Sent:" / "From: ... To: ... Subject:" header, the Gmail/Apple
+ * "On ... wrote:" line, or an "Original Message" divider. If cutting would
+ * leave nothing (a reply that is only quoted text), keep the decoded body
+ * rather than storing a blank message.
+ */
+function stripQuotedReply(text: string): string {
+  const markers: RegExp[] = [
+    /-{2,}\s*Original Message\s*-{2,}/i,
+    /\bFrom:\s.+?\bSent:\s/i,
+    /\bFrom:\s.+?\bTo:\s.+?\bSubject:/i,
+    /\bOn\s.{1,160}?\bwrote:/i,
+  ];
+  let cut = text.length;
+  for (const re of markers) {
+    const m = text.match(re);
+    if (m && m.index !== undefined && m.index < cut) cut = m.index;
+  }
+  return text.slice(0, cut).trim();
+}
+
+/** Decode entities, drop the quoted thread, and tidy whitespace. */
+function cleanInboundBody(raw: string): string {
+  const decoded = decodeEntities(raw).replace(/\s+/g, " ").trim();
+  const trimmed = stripQuotedReply(decoded);
+  return trimmed || decoded;
+}
+
+/**
+ * A booking whose date is yesterday or later, for the sender-address
+ * fallback match (see below).
+ */
 function yesterdayUtc(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
@@ -88,7 +140,7 @@ export async function POST(request: NextRequest) {
             bookingId,
             direction: "INBOUND",
             subject: message.subject || null,
-            body: message.bodyText,
+            body: cleanInboundBody(message.bodyText),
             read: false,
           },
         });
