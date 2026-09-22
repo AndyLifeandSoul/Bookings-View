@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/client";
 import { getCurrentStaffSession } from "@/lib/auth/session";
 import { findTableConflicts } from "@/lib/staff/table-conflicts";
-import { sendMailAs } from "@/lib/email/graph-client";
+import { sendVenueMail } from "@/lib/email/send";
 import type { ActionResult } from "@/components/action-form";
 import type { BookingStatus, PaymentPurpose } from "@/generated/prisma";
 import { getPaymentProviderForAccount } from "@/lib/payments/get-provider";
@@ -156,7 +156,8 @@ export async function reassignTables(formData: FormData): Promise<ActionResult> 
 }
 
 /**
- * Sends a reply as the venue's mailbox (Venue.email) via Graph and logs it
+ * Sends a reply as the venue's mailbox (Venue.email) via sendVenueMail (SMTP,
+ * with a Graph fallback) and logs it
  * as an OUTBOUND Message either way - even when Graph isn't configured or
  * the send fails, so staff always have a record of what they meant to say,
  * with the send failure surfaced as the action's error rather than losing
@@ -188,7 +189,7 @@ export async function sendReply(formData: FormData): Promise<ActionResult> {
   } else if (!booking.customerEmail) {
     sendError = "This booking has no customer email on file, logged only, not sent.";
   } else {
-    const result = await sendMailAs(booking.venue.email, booking.customerEmail, subject, body);
+    const result = await sendVenueMail({ mailbox: booking.venue.email, to: booking.customerEmail, subject, text: body });
     if (!result.ok) sendError = `Logged, but sending failed: ${result.error}`;
   }
 
