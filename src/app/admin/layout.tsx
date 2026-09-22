@@ -1,4 +1,5 @@
 import { requireAdminSession } from "@/lib/admin/require-admin-session";
+import { getUnreadMessageCountAllVenues } from "@/lib/staff/get-unread-message-count";
 import { TopBar } from "@/components/top-bar";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await requireAdminSession();
+  const unreadCount = await getUnreadMessageCountAllVenues();
 
   return (
     <>
@@ -31,6 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           { href: "/admin", label: "Home", exact: true, icon: "home" },
           { href: "/admin/diary", label: "Diary", icon: "calendar" },
           { href: "/admin/enquiries", label: "Enquiries", icon: "inbox" },
+          { href: "/admin/messages", label: unreadCount > 0 ? `Messages (${unreadCount})` : "Messages", icon: "messages" },
           { href: "/admin/bookings", label: "All bookings", icon: "bookings" },
           { href: "/admin/settings", label: "Settings", fallback: true, icon: "settings" },
           { href: "/admin/customers", label: "Customers", icon: "customers" },
