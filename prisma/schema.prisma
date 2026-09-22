@@ -779,6 +779,7 @@ model Booking {
 
   bookingTables  BookingTable[]
   payments       Payment[]
+  amendments     BookingAmendment[]
   preOrder       PreOrder?
   preOrderInvite PreOrderInvite?
   messages       Message[]
@@ -1205,6 +1206,10 @@ model Payment {
   capturedAt DateTime?
   refundedAt DateTime?
 
+  /// Set when this payment is a customer self-service "add guests" top-up
+  /// (mirror of lifeandsoul-bookings); the change is applied on capture.
+  amendment BookingAmendment?
+
   @@index([bookingId])
   @@index([venueId])
 }
@@ -1368,4 +1373,34 @@ model Customer {
   updatedAt DateTime @updatedAt
 
   @@index([phone])
+}
+
+
+/// Mirror of lifeandsoul-bookings: a customer self-service change to a
+/// confirmed, paid booking (party-size increase + added guests' pre-order
+/// items), PENDING until its top-up payment captures, then APPLIED by the
+/// customer app's Dojo webhook. Present here so this app's Prisma client
+/// stays in sync with the shared database; this app never migrates.
+model BookingAmendment {
+  id        String  @id @default(cuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  paymentId String  @unique
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  newPartySize       Int
+  addedPreOrderLines Json
+
+  status    AmendmentStatus @default(PENDING)
+  createdAt DateTime        @default(now())
+  appliedAt DateTime?
+
+  @@index([bookingId])
+}
+
+enum AmendmentStatus {
+  PENDING
+  APPLIED
+  CANCELLED
 }
