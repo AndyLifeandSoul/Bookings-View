@@ -214,32 +214,57 @@ export async function createTableLink(formData: FormData): Promise<ActionResult>
   const venue = await resolveVenue(formData);
   if ("error" in venue) return venue;
 
-  const tableAId = String(formData.get("tableAId") ?? "").trim();
-  const tableBId = String(formData.get("tableBId") ?? "").trim();
-  if (!tableAId || !tableBId) return { error: "Pick two tables to link." };
-  if (tableAId === tableBId) return { error: "A table can't be linked to itself." };
+  const ids = [...new Set(formData.getAll("tableIds").map((v) => String(v).trim()).filter(Boolean))];
+  if (ids.length < 2) return { error: "Pick at least two tables to link together." };
 
-  const [tableA, tableB] = await Promise.all([
-    prisma.table.findFirst({ where: { id: tableAId, venueId: venue.id }, select: { id: true } }),
-    prisma.table.findFirst({ where: { id: tableBId, venueId: venue.id }, select: { id: true } }),
-  ]);
-  if (!tableA || !tableB) return { error: "Both tables must belong to this venue." };
+  const count = await prisma.table.count({ where: { id: { in: ids }, venueId: venue.id } });
+  if (count !== ids.length) return { error: "All tables must belong to this venue." };
 
-  // TableLink is modelled as a directed pair (see schema.prisma's doc
-  // comment on the model) but meant to be read as unordered, so check both
-  // orderings before inserting, otherwise A-B and B-A could both exist as
-  // "different" links representing the same physical adjacency.
-  const existing = await prisma.tableLink.findFirst({
-    where: {
-      OR: [
-        { tableAId, tableBId },
-        { tableAId: tableBId, tableBId: tableAId },
-      ],
-    },
+  // TableLink is an unordered pair, stored once (see schema.prisma). Linking
+  // a group means every table in it can combine with every other, so create
+  // a link for each pair in the selected set, stored in a canonical (sorted)
+  // order so A-B and B-A can't both exist. Skip any pair already linked in
+  // either direction, which is what lets you add a table to an existing
+  // group by re-selecting the whole group.
+  const existing = await prisma.tableLink.findMany({
+    where: { tableAId: { in: ids }, tableBId: { in: ids } },
+    select: { tableAId: true, tableBId: true },
   });
-  if (existing) return { error: "These two tables are already linked." };
+  const have = new Set(existing.map((l) => [l.tableAId, l.tableBId].sort().join("|")));
 
-  await prisma.tableLink.create({ data: { tableAId, tableBId } });
+  const toCreate: { tableAId: string; tableBId: string }[] = [];
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const [a, b] = [ids[i], ids[j]].sort();
+      const key = `${a}|${b}`;
+      if (!have.has(key)) {
+        have.add(key);
+        toCreate.push({ tableAId: a, tableBId: b });
+      }
+    }
+  }
+
+  if (toCreate.length === 0) return { error: "Those tables are already linked." };
+  await prisma.tableLink.createMany({ data: toCreate, skipDuplicates: true });
+  revalidatePath(`/admin/${venue.slug}/tables`);
+}
+
+/**
+ * Removes every link within a group of tables (all the pairwise links whose
+ * both ends are in the selected set), so "unlink" on a group of four clears
+ * the whole group in one action rather than pair by pair.
+ */
+export async function unlinkTableGroup(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+
+  const ids = [...new Set(formData.getAll("tableIds").map((v) => String(v).trim()).filter(Boolean))];
+  if (ids.length < 2) return { error: "Nothing to unlink." };
+
+  await prisma.tableLink.deleteMany({
+    where: { tableA: { venueId: venue.id }, tableAId: { in: ids }, tableBId: { in: ids } },
+  });
   revalidatePath(`/admin/${venue.slug}/tables`);
 }
 
