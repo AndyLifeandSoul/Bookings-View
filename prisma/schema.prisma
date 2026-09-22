@@ -456,7 +456,14 @@ model BookingType {
   updatedAt DateTime @updatedAt
 
   bookings Booking[]
-  menus    Menu[]
+
+  /// The single pre-order menu this booking type uses, if any. Menus are
+  /// standalone and shared, so several booking types can reference the same
+  /// menu (Andy's reusable pre-order menu: build one, attach it to many).
+  /// Null means no pre-order menu; combined with requiresPreOrder that's a
+  /// config error the booking flow surfaces (see PreOrderRequiredError).
+  preOrderMenuId String?
+  preOrderMenu   Menu?   @relation(fields: [preOrderMenuId], references: [id])
 
   @@unique([venueId, slug])
 }
@@ -778,14 +785,12 @@ model Enquiry {
 // ---------------------------------------------------------------------------
 
 model Menu {
-  id                String       @id @default(cuid())
+  id                String  @id @default(cuid())
   venueId           String
-  venue             Venue        @relation(fields: [venueId], references: [id])
-  bookingTypeId     String?
-  bookingType       BookingType? @relation(fields: [bookingTypeId], references: [id])
+  venue             Venue   @relation(fields: [venueId], references: [id])
   name              String
   description       String?
-  active            Boolean      @default(true)
+  active            Boolean @default(true)
   /// Caps how many items in total a single pre-order can contain for this
   /// menu. Null means unlimited (the pre-existing default). When set, the
   /// effective cap for a given booking is maxItemsPerPerson multiplied by
@@ -798,6 +803,11 @@ model Menu {
   preOrders           PreOrder[]
   invites             PreOrderInvite[]
   availableCategories MenuAvailableCategory[]
+
+  /// Booking types that use this menu as their pre-order menu. A menu is
+  /// standalone and reusable: many booking types can point at the same one
+  /// (Andy: build one menu, attach it to many), see BookingType.preOrderMenuId.
+  bookingTypes BookingType[]
 }
 
 /// Per-venue grouping for MenuItem ("Starters", "Mains", "Desserts"), e.g.

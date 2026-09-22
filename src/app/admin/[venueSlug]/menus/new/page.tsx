@@ -8,18 +8,11 @@ export const dynamic = "force-dynamic";
 export default async function NewMenuPage({ params }: { params: Promise<{ venueSlug: string }> }) {
   const { venueSlug } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
-  const [bookingTypes, categories] = await Promise.all([
-    prisma.bookingType.findMany({
-      where: { venueId: venue.id },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-    prisma.menuCategory.findMany({
-      where: { venueId: venue.id },
-      orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true },
-    }),
-  ]);
+  const categories = await prisma.menuCategory.findMany({
+    where: { venueId: venue.id },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, name: true },
+  });
 
   return (
     <div className="flex flex-col gap-4">
@@ -32,7 +25,7 @@ export default async function NewMenuPage({ params }: { params: Promise<{ venueS
         </Link>
         <h2 className="mt-2 text-base font-semibold text-zinc-900">New menu</h2>
       </div>
-      <NewMenuForm venueId={venue.id} bookingTypes={bookingTypes} categories={categories} />
+      <NewMenuForm venueId={venue.id} categories={categories} />
     </div>
   );
 }

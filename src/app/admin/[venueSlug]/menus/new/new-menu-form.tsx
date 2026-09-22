@@ -26,11 +26,9 @@ import { MenuKioskPreview } from "../menu-kiosk-preview";
  */
 export function NewMenuForm({
   venueId,
-  bookingTypes,
   categories,
 }: {
   venueId: string;
-  bookingTypes: { id: string; name: string }[];
   categories: { id: string; name: string }[];
 }) {
   const [name, setName] = useState("");
@@ -70,17 +68,6 @@ export function NewMenuForm({
         <label className="flex flex-col gap-1">
           <span className="text-sm font-medium text-zinc-700">Description (optional)</span>
           <textarea name="description" rows={2} className="rounded-md border border-zinc-300 px-3 py-2" />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-zinc-700">Linked booking type</span>
-          <select name="bookingTypeId" defaultValue="" className="rounded-md border border-zinc-300 px-3 py-2">
-            <option value="">Any</option>
-            {bookingTypes.map((bt) => (
-              <option key={bt.id} value={bt.id}>
-                {bt.name}
-              </option>
-            ))}
-          </select>
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-sm font-medium text-zinc-700">Max items per person (optional)</span>

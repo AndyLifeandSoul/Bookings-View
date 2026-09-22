@@ -34,7 +34,7 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
       where: { venueId: venue.id },
       orderBy: { name: "asc" },
       include: {
-        bookingType: { select: { name: true } },
+        bookingTypes: { select: { id: true, name: true } },
         _count: { select: { itemPlacements: true } },
       },
     }),
@@ -77,7 +77,7 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
                 <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
                   <tr>
                     <th className="px-4 py-2.5">Name</th>
-                    <th className="px-4 py-2.5">Linked booking type</th>
+                    <th className="px-4 py-2.5">Used by</th>
                     <th className="px-4 py-2.5">Items</th>
                     <th className="px-4 py-2.5">Status</th>
                     <th className="px-4 py-2.5" />
@@ -87,7 +87,7 @@ export default async function MenusPage({ params }: { params: Promise<{ venueSlu
                   {menus.map((menu) => (
                     <tr key={menu.id} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
                       <td className="px-4 py-3 font-medium text-zinc-900">{menu.name}</td>
-                      <td className="px-4 py-3 text-zinc-600">{menu.bookingType?.name ?? "Any"}</td>
+                      <td className="px-4 py-3 text-zinc-600">{menu.bookingTypes.length > 0 ? menu.bookingTypes.map((bt) => bt.name).join(", ") : "Not attached"}</td>
                       <td className="px-4 py-3 tabular-nums text-zinc-600">{menu._count.itemPlacements}</td>
                       <td className="px-4 py-3">
                         <Badge variant={menu.active ? "success" : "neutral"}>{menu.active ? "Active" : "Inactive"}</Badge>

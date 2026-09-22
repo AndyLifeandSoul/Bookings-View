@@ -18,14 +18,12 @@ async function resolveVenue(formData: FormData): Promise<{ id: string; slug: str
 function parseMenuFields(
   formData: FormData,
 ):
-  | { name: string; description: string | null; active: boolean; bookingTypeId: string | null; maxItemsPerPerson: number | null }
+  | { name: string; description: string | null; active: boolean; maxItemsPerPerson: number | null }
   | { error: string } {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required." };
   const description = String(formData.get("description") ?? "").trim() || null;
   const active = formData.get("active") === "on";
-  const bookingTypeId = String(formData.get("bookingTypeId") ?? "").trim() || null;
-
   const rawMaxItemsPerPerson = String(formData.get("maxItemsPerPerson") ?? "").trim();
   let maxItemsPerPerson: number | null = null;
   if (rawMaxItemsPerPerson) {
@@ -36,7 +34,7 @@ function parseMenuFields(
     maxItemsPerPerson = parsed;
   }
 
-  return { name, description, active, bookingTypeId, maxItemsPerPerson };
+  return { name, description, active, maxItemsPerPerson };
 }
 
 /**
@@ -63,13 +61,6 @@ export async function createMenu(formData: FormData): Promise<ActionResult> {
   const parsed = parseMenuFields(formData);
   if ("error" in parsed) return parsed;
 
-  if (parsed.bookingTypeId) {
-    const bookingType = await prisma.bookingType.findFirst({
-      where: { id: parsed.bookingTypeId, venueId: venue.id },
-    });
-    if (!bookingType) return { error: "That booking type doesn't belong to this venue." };
-  }
-
   const categoryIds = await resolveSelectedCategories(formData, venue.id);
   if ("error" in categoryIds) return categoryIds;
 
@@ -91,13 +82,6 @@ export async function updateMenu(formData: FormData): Promise<ActionResult> {
   const id = String(formData.get("id") ?? "");
   const parsed = parseMenuFields(formData);
   if ("error" in parsed) return parsed;
-
-  if (parsed.bookingTypeId) {
-    const bookingType = await prisma.bookingType.findFirst({
-      where: { id: parsed.bookingTypeId, venueId: venue.id },
-    });
-    if (!bookingType) return { error: "That booking type doesn't belong to this venue." };
-  }
 
   const categoryIds = await resolveSelectedCategories(formData, venue.id);
   if ("error" in categoryIds) return categoryIds;

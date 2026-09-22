@@ -20,9 +20,7 @@ export function EditMenuForm({
   name: initialName,
   description,
   active: initialActive,
-  bookingTypeId,
   maxItemsPerPerson,
-  bookingTypes,
   categories,
   availableCategoryIds: initialAvailableCategoryIds,
   items,
@@ -32,9 +30,7 @@ export function EditMenuForm({
   name: string;
   description: string | null;
   active: boolean;
-  bookingTypeId: string | null;
   maxItemsPerPerson: number | null;
-  bookingTypes: { id: string; name: string }[];
   categories: { id: string; name: string }[];
   availableCategoryIds: string[];
   items: KioskPreviewItem[];
@@ -70,17 +66,6 @@ export function EditMenuForm({
               onChange={(e) => setName(e.target.value)}
               className="rounded-md border border-zinc-300 px-3 py-2"
             />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-zinc-700">Linked booking type</span>
-            <select name="bookingTypeId" defaultValue={bookingTypeId ?? ""} className="rounded-md border border-zinc-300 px-3 py-2">
-              <option value="">Any</option>
-              {bookingTypes.map((bt) => (
-                <option key={bt.id} value={bt.id}>
-                  {bt.name}
-                </option>
-              ))}
-            </select>
           </label>
         </div>
         <label className="flex flex-col gap-1">

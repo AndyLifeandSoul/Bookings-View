@@ -15,12 +15,13 @@ export default async function EditBookingTypePage({
   const { venueSlug, id } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
 
-  const [bookingType, areas] = await Promise.all([
+  const [bookingType, areas, menus] = await Promise.all([
     prisma.bookingType.findFirst({
       where: { id, venueId: venue.id },
       include: { dateOverrides: true, areaPriorities: true },
     }),
     prisma.area.findMany({ where: { venueId: venue.id }, orderBy: { priority: "asc" }, select: { id: true, name: true } }),
+    prisma.menu.findMany({ where: { venueId: venue.id, active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!bookingType) notFound();
 
@@ -29,7 +30,7 @@ export default async function EditBookingTypePage({
       <h2 className="text-base font-semibold tracking-tight text-zinc-900">Edit {bookingType.name}</h2>
       <ActionForm action={updateBookingType}>
         <input type="hidden" name="venueId" value={venue.id} />
-        <BookingTypeFields defaults={bookingType} areas={areas} submitLabel="Save changes" />
+        <BookingTypeFields defaults={bookingType} areas={areas} menus={menus} submitLabel="Save changes" />
       </ActionForm>
     </div>
   );

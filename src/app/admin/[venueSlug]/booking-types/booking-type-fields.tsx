@@ -23,11 +23,14 @@ type BookingTypeDefaults = BookingType & {
 export function BookingTypeFields({
   defaults,
   areas,
+  menus,
   submitLabel,
 }: {
   defaults?: BookingTypeDefaults;
   /** Every active area for this venue, for the area-priority picker below, see Andy's spec on BookingTypeArea. */
   areas: { id: string; name: string }[];
+  /** The venue's pre-order menus, to attach one to this booking type (menus are shared, see BookingType.preOrderMenuId). */
+  menus: { id: string; name: string }[];
   submitLabel: string;
 }) {
   const selectedAreaPriority = new Map((defaults?.areaPriorities ?? []).map((p) => [p.areaId, p.priority]));
@@ -385,6 +388,25 @@ export function BookingTypeFields({
             className="h-4 w-4 rounded border-zinc-300"
           />
           <span className="text-sm font-medium text-zinc-700">Requires a pre-order menu selection</span>
+        </label>
+        <label className="ml-6 flex flex-col gap-1">
+          <span className="text-sm text-zinc-700">Pre-order menu</span>
+          <select
+            name="preOrderMenuId"
+            defaultValue={defaults?.preOrderMenuId ?? ""}
+            className="w-72 rounded-md border border-zinc-300 px-3 py-2"
+          >
+            <option value="">No menu attached</option>
+            {menus.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-zinc-500">
+            The menu customers pick from for this type. Menus are shared, so several booking types can use the same
+            one. Build menus under Menus.
+          </span>
         </label>
         <label className="ml-6 flex items-center gap-2">
           <input

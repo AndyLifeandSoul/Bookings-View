@@ -17,7 +17,7 @@ export default async function MenuDetailPage({
   const { venueSlug, id } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
 
-  const [menu, bookingTypes, categories, venueItems] = await Promise.all([
+  const [menu, categories, venueItems] = await Promise.all([
     prisma.menu.findFirst({
       where: { id, venueId: venue.id },
       include: {
@@ -49,11 +49,6 @@ export default async function MenuDetailPage({
         },
         availableCategories: { select: { categoryId: true } },
       },
-    }),
-    prisma.bookingType.findMany({
-      where: { venueId: venue.id },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
     }),
     prisma.menuCategory.findMany({
       where: { venueId: venue.id },
@@ -113,9 +108,7 @@ export default async function MenuDetailPage({
             name={menu.name}
             description={menu.description}
             active={menu.active}
-            bookingTypeId={menu.bookingTypeId}
             maxItemsPerPerson={menu.maxItemsPerPerson}
-            bookingTypes={bookingTypes}
             categories={categories}
             availableCategoryIds={[...availableCategoryIds]}
             items={previewItems}

@@ -9,14 +9,17 @@ export const dynamic = "force-dynamic";
 export default async function NewBookingTypePage({ params }: { params: Promise<{ venueSlug: string }> }) {
   const { venueSlug } = await params;
   const { venue } = await requireAdminVenue(venueSlug);
-  const areas = await prisma.area.findMany({ where: { venueId: venue.id }, orderBy: { priority: "asc" }, select: { id: true, name: true } });
+  const [areas, menus] = await Promise.all([
+    prisma.area.findMany({ where: { venueId: venue.id }, orderBy: { priority: "asc" }, select: { id: true, name: true } }),
+    prisma.menu.findMany({ where: { venueId: venue.id, active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
 
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-base font-semibold tracking-tight text-zinc-900">New booking type</h2>
       <ActionForm action={createBookingType}>
         <input type="hidden" name="venueId" value={venue.id} />
-        <BookingTypeFields areas={areas} submitLabel="Create booking type" />
+        <BookingTypeFields areas={areas} menus={menus} submitLabel="Create booking type" />
       </ActionForm>
     </div>
   );

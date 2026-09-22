@@ -54,6 +54,7 @@ interface ParsedFields {
   depositAmount: number | null;
   requiresPreOrder: boolean;
   preOrderPaymentRequired: boolean;
+  preOrderMenuId: string | null;
   enquiryThresholdPartySize: number | null;
   autoConfirmMinLeadMinutes: number | null;
   color: string | null;
@@ -140,6 +141,7 @@ function parseFields(formData: FormData): ParseResult {
 
   const requiresPreOrder = formData.get("requiresPreOrder") === "on";
   const preOrderPaymentRequired = formData.get("preOrderPaymentRequired") === "on";
+  const preOrderMenuId = String(formData.get("preOrderMenuId") ?? "").trim() || null;
 
   const enquiryThresholdRaw = String(formData.get("enquiryThresholdPartySize") ?? "").trim();
   let enquiryThresholdPartySize: number | null = null;
@@ -220,6 +222,7 @@ function parseFields(formData: FormData): ParseResult {
       depositAmount,
       requiresPreOrder,
       preOrderPaymentRequired,
+      preOrderMenuId,
       enquiryThresholdPartySize,
       autoConfirmMinLeadMinutes,
       color,
