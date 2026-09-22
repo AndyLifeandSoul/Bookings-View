@@ -9,7 +9,7 @@ import { sendVenueMail } from "@/lib/email/send";
 import type { ActionResult } from "@/components/action-form";
 import type { BookingStatus, PaymentPurpose } from "@/generated/prisma";
 import { getPaymentProviderForAccount } from "@/lib/payments/get-provider";
-import type { PaymentAccountCode } from "@/lib/payments/types";
+import { PAYMENT_ACCOUNT_CODES, type PaymentAccountCode } from "@/lib/payments/types";
 import { getCustomerAppUrl } from "@/lib/pre-order/links";
 import { validateAndPricePreOrder, InvalidPreOrderError, type PreOrderLineInput, type PreOrderModifierInput } from "@/lib/pre-order/validate";
 import { toMinutes, formatMinutes } from "@/lib/bookings/time";
@@ -17,9 +17,6 @@ import { customerIdentity, setStaffNotes } from "@/lib/admin/customer-record";
 
 
 const STATUSES: BookingStatus[] = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
-
-/** The two real-world Dojo merchant accounts currently wired up, see PaymentAccountCode in lib/payments/types.ts. */
-const PAYMENT_ACCOUNT_CODES: PaymentAccountCode[] = ["DV8", "LIFE_AND_SOUL"];
 
 const PAYMENT_PURPOSES: PaymentPurpose[] = ["DEPOSIT", "BALANCE", "FULL"];
 

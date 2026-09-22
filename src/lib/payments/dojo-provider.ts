@@ -21,11 +21,15 @@ const STATUS_MAP: Record<DojoPaymentIntent["status"], ProviderPaymentStatus> = {
   Canceled: "CANCELLED",
 };
 
+// Dojo doesn't return a checkout URL; the hosted payment page for an intent
+// is simply this base plus the intent id (see docs.dojo.tech).
+const DOJO_HOSTED_CHECKOUT_BASE = "https://pay.dojo.tech/checkout/";
+
 function toResult(intent: DojoPaymentIntent): PaymentIntentResult {
   return {
     providerPaymentIntentId: intent.id,
     status: STATUS_MAP[intent.status] ?? "FAILED",
-    checkoutUrl: intent.checkoutUrl,
+    checkoutUrl: `${DOJO_HOSTED_CHECKOUT_BASE}${intent.id}`,
   };
 }
 
@@ -92,10 +96,15 @@ export class DojoPaymentProvider implements PaymentProvider {
     if (!signatureHeader) {
       throw new Error("Missing Dojo-Signature header on webhook request");
     }
-    const expected = `sha256=${createHmac("sha256", this.webhookSecret).update(rawBody).digest("hex")}`;
+    // Dojo sends "sha256=" then the HMAC-SHA256 digest as hex bytes joined
+    // by hyphens, e.g. "sha256=4B-49-F8-...". Normalise both sides to
+    // continuous lowercase hex so the hyphens and casing can't cause a false
+    // mismatch.
+    const provided = signatureHeader.replace(/^sha256=/i, "").replace(/-/g, "").toLowerCase();
+    const expected = createHmac("sha256", this.webhookSecret).update(rawBody).digest("hex").toLowerCase();
 
     const a = Buffer.from(expected);
-    const b = Buffer.from(signatureHeader);
+    const b = Buffer.from(provided);
     if (a.length !== b.length || !timingSafeEqual(a, b)) {
       throw new Error("Dojo webhook signature verification failed");
     }

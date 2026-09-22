@@ -74,5 +74,29 @@ export interface PaymentProvider {
   verifyWebhookSignature(rawBody: string, signatureHeader: string | null): void;
 }
 
-/** The two real-world Dojo merchant accounts. Matches PaymentAccount.code in the DB. */
-export type PaymentAccountCode = "DV8" | "LIFE_AND_SOUL";
+/**
+ * The Dojo payment account codes, one per venue. Each venue has its own Dojo
+ * MID, so its own API key and webhook, and a PaymentAccount.code that matches
+ * the DOJO_API_KEY_<code> / DOJO_WEBHOOK_SECRET_<code> env vars. See
+ * get-provider.ts.
+ */
+export type PaymentAccountCode =
+  | "DV8"
+  | "BLACK_BEAR_LODGE"
+  | "RUMBA_CONGLETON"
+  | "RUMBA_NANTWICH"
+  | "RUMBA_MACCLESFIELD"
+  | "CRAZY_MOOSE_CONGLETON"
+  | "CRAZY_MOOSE_NANTWICH"
+  | "ARRIBA";
+
+export const PAYMENT_ACCOUNT_CODES: PaymentAccountCode[] = [
+  "DV8",
+  "BLACK_BEAR_LODGE",
+  "RUMBA_CONGLETON",
+  "RUMBA_NANTWICH",
+  "RUMBA_MACCLESFIELD",
+  "CRAZY_MOOSE_CONGLETON",
+  "CRAZY_MOOSE_NANTWICH",
+  "ARRIBA",
+];

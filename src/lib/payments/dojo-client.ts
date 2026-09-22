@@ -55,9 +55,10 @@ export interface DojoPaymentIntent {
   id: string;
   status: "Created" | "Authorized" | "Captured" | "Reversed" | "Refunded" | "Canceled";
   captureMode: "Auto" | "Manual";
-  amount: number;
-  currency: string;
-  checkoutUrl?: string;
+  // Dojo returns amount as an { value, currencyCode } object, not a flat
+  // number. Dojo does NOT return a hosted-checkout URL; the provider builds
+  // it from the intent id (see dojo-provider.ts).
+  amount: { value: number; currencyCode: string };
 }
 
 export class DojoClient {
@@ -121,15 +122,19 @@ export class DojoClient {
     returnUrl: string;
     cancelUrl: string;
   }): Promise<DojoPaymentIntent> {
+    // Dojo's create body: amount is an { value, currencyCode } object, and
+    // the hosted-checkout redirect/cancel URLs live under `config`, not at
+    // the top level. Only fields confirmed against docs.dojo.tech are sent;
+    // description/customerEmail are held back until confirmed against a real
+    // sandbox call, so an unknown field can't 400 the request.
     return this.request<DojoPaymentIntent>("POST", "/payment-intents", {
-      amount: params.amount,
-      currency: params.currency,
+      amount: { value: params.amount, currencyCode: params.currency },
       captureMode: params.captureMode,
       reference: params.reference,
-      description: params.description,
-      customerEmail: params.customerEmail,
-      returnUrl: params.returnUrl,
-      cancelUrl: params.cancelUrl,
+      config: {
+        redirectUrl: params.returnUrl,
+        cancelUrl: params.cancelUrl,
+      },
     });
   }
 
