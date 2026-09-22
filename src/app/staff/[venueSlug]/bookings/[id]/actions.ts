@@ -416,10 +416,10 @@ export async function requestPayment(formData: FormData): Promise<ActionResult> 
 
   const description = String(formData.get("description") ?? "").trim() || null;
 
-  const provider = getPaymentProviderForAccount(booking.venue.paymentAccount.code as PaymentAccountCode);
   const customerAppUrl = getCustomerAppUrl();
 
   try {
+    const provider = getPaymentProviderForAccount(booking.venue.paymentAccount.code as PaymentAccountCode);
     const intent = await provider.createPaymentIntent({
       amountInPence,
       currency: "GBP",
@@ -594,11 +594,11 @@ export async function addPreOrderItems(formData: FormData): Promise<ActionResult
     };
   }
 
-  const provider = getPaymentProviderForAccount(booking.venue.paymentAccount.code as PaymentAccountCode);
   const customerAppUrl = getCustomerAppUrl();
   const description = `Pre-order top-up${guestLabel ? ` for ${guestLabel}` : ""}`;
 
   try {
+    const provider = getPaymentProviderForAccount(booking.venue.paymentAccount.code as PaymentAccountCode);
     const intent = await provider.createPaymentIntent({
       amountInPence: addedAmountInPence,
       currency: "GBP",
