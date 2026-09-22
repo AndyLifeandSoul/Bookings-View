@@ -106,16 +106,29 @@ export interface InboundMessage {
   receivedDateTime: string;
 }
 
-/** Messages received after `sinceIso` (exclusive) in `mailbox`'s inbox, oldest first - used by the poll-inbox route. Returns [] rather than throwing when email isn't configured. */
+/**
+ * On the very first poll for a mailbox there is no cursor yet, so we bound
+ * the look-back to this window rather than ingesting the whole inbox
+ * history. After the first run, lastInboxSyncAt is the bound.
+ */
+const FIRST_POLL_LOOKBACK_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
+
+/** Messages received after `sinceIso` (exclusive) in `mailbox`'s inbox, returned oldest-first - used by the poll-inbox route. Returns [] rather than throwing when email isn't configured. */
 export async function listRecentInbox(mailbox: string, sinceIso: string | null): Promise<InboundMessage[]> {
   const config = getConfig();
   if (!config) return [];
 
   const token = await getAccessToken(config);
-  const filter = sinceIso ? `&$filter=${encodeURIComponent(`receivedDateTime gt ${sinceIso}`)}` : "";
+  // Always bound by time: the cursor when we have one, otherwise a short
+  // first-run window (never unbounded, or an old inbox floods in). Ask
+  // newest-first with a small page so a busy inbox surfaces the latest mail
+  // rather than its oldest, then reverse to oldest-first for stable Message
+  // ordering and a correct cursor advance.
+  const since = sinceIso ?? new Date(Date.now() - FIRST_POLL_LOOKBACK_MS).toISOString();
+  const filter = `&$filter=${encodeURIComponent(`receivedDateTime gt ${since}`)}`;
   const url =
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages` +
-    `?$top=50&$orderby=receivedDateTime asc&$select=id,from,subject,body,receivedDateTime${filter}`;
+    `?$top=50&$orderby=receivedDateTime desc&$select=id,from,subject,body,receivedDateTime${filter}`;
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Graph list inbox failed for ${mailbox}: ${res.status} ${await res.text()}`);
@@ -124,13 +137,15 @@ export async function listRecentInbox(mailbox: string, sinceIso: string | null):
     value: { id: string; from?: { emailAddress?: { address?: string } }; subject?: string; body?: { content?: string }; receivedDateTime: string }[];
   };
 
-  return body.value.map((m) => ({
-    graphId: m.id,
-    from: m.from?.emailAddress?.address ?? "",
-    subject: m.subject ?? "",
-    bodyText: stripHtml(m.body?.content ?? ""),
-    receivedDateTime: m.receivedDateTime,
-  }));
+  return body.value
+    .map((m) => ({
+      graphId: m.id,
+      from: m.from?.emailAddress?.address ?? "",
+      subject: m.subject ?? "",
+      bodyText: stripHtml(m.body?.content ?? ""),
+      receivedDateTime: m.receivedDateTime,
+    }))
+    .reverse();
 }
 
 function stripHtml(html: string): string {

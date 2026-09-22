@@ -16,6 +16,11 @@ import { isInboxConfigured, listRecentInbox } from "@/lib/email/inbox";
  * (not an error) when email isn't configured yet, so an unconfigured
  * deploy's scheduler doesn't sit there erroring every run.
  */
+function yesterdayUtc(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
+}
+
 export async function POST(request: NextRequest) {
   const expected = process.env.CRON_SECRET;
   if (!expected) {
@@ -55,10 +60,19 @@ export async function POST(request: NextRequest) {
         const matchedByRef = bookingsWithRef.find((b) => b.bookingRef && message.subject.includes(b.bookingRef));
 
         let bookingId = matchedByRef?.id ?? null;
+        // Fallback for replies whose subject lost the booking reference:
+        // match on the sender's address, but only to a current or upcoming
+        // booking (date from yesterday on), so an old thread from someone
+        // who happens to be a past customer can't attach to their booking.
         if (!bookingId && message.from) {
           const byEmail = await prisma.booking.findFirst({
-            where: { venueId: venue.id, customerEmail: { equals: message.from, mode: "insensitive" }, status: { not: "CANCELLED" } },
-            orderBy: { createdAt: "desc" },
+            where: {
+              venueId: venue.id,
+              customerEmail: { equals: message.from, mode: "insensitive" },
+              status: { not: "CANCELLED" },
+              date: { gte: yesterdayUtc() },
+            },
+            orderBy: { date: "asc" },
             select: { id: true },
           });
           bookingId = byEmail?.id ?? null;
