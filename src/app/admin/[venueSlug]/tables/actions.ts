@@ -461,3 +461,53 @@ export async function removeTable(venueId: string, id: string): Promise<ActionRe
   await prisma.table.deleteMany({ where: { id, venueId: venue.id } });
   revalidatePath(`/admin/${venue.slug}/tables`);
 }
+
+// Table combinations (explicit, overlapping sets of tables booked together)
+
+/**
+ * Creates a table combination from 2+ selected tables. Combinations may
+ * overlap (T1+T2 and T1+T2+T3 can both exist); only an exact-duplicate set
+ * is refused. The seating engine seats a party needing more than one table
+ * only on a combination defined here.
+ */
+export async function createTableCombination(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+
+  const ids = [...new Set(formData.getAll("tableIds").map((v) => String(v).trim()).filter(Boolean))];
+  if (ids.length < 2) return { error: "Pick at least two tables for a combination." };
+
+  const count = await prisma.table.count({ where: { id: { in: ids }, venueId: venue.id } });
+  if (count !== ids.length) return { error: "All tables must belong to this venue." };
+
+  const existing = await prisma.tableCombination.findMany({
+    where: { venueId: venue.id },
+    select: { entries: { select: { tableId: true } } },
+  });
+  const wanted = [...ids].sort().join("|");
+  if (existing.some((c) => c.entries.map((e) => e.tableId).sort().join("|") === wanted)) {
+    return { error: "That exact combination already exists." };
+  }
+
+  await prisma.tableCombination.create({
+    data: { venueId: venue.id, entries: { create: ids.map((tableId) => ({ tableId })) } },
+  });
+  revalidatePath(`/admin/${venue.slug}/tables`);
+}
+
+export async function deleteTableCombination(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const venue = await resolveVenue(formData);
+  if ("error" in venue) return venue;
+  const id = String(formData.get("id") ?? "");
+
+  const combination = await prisma.tableCombination.findFirst({
+    where: { id, venueId: venue.id },
+    select: { id: true },
+  });
+  if (!combination) return { error: "Combination not found for this venue." };
+
+  await prisma.tableCombination.delete({ where: { id } });
+  revalidatePath(`/admin/${venue.slug}/tables`);
+}

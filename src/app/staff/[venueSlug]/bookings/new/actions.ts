@@ -150,9 +150,8 @@ export interface TableAvailabilityInfo {
    * Best-fit available table(s) for this booking type/party size/time, if
    * any combination exists. A single id when one table fits on its own;
    * more than one only when the party doesn't fit any single table and a
-   * *physically linked* combination (TableLink) does - see
-   * findTableCombo's doc comment for why "linked" matters, e.g. never
-   * Table 1 + Table 8 with nothing joining them. Staff still pick tables
+   * defined TableCombination does (only tables the venue actually set up as
+   * a combination together, see findCombination). Staff still pick tables
    * themselves; this only flags a suggestion.
    */
   recommendedTableIds: string[];
@@ -179,8 +178,8 @@ interface CandidateTable {
  * Tries a single table first (tightest fit - smallest maxCovers that
  * still fits partySize), within the booking type's allowed areas if
  * restricted via areaPriorities, in area-priority order. Only when no
- * single table fits does it fall back to a combination - see
- * findTableCombo - since Andy's spec is "multiple tables if needed", not
+ * single table fits does it fall back to a defined combination - see
+ * findCombination - since Andy's spec is "multiple tables if needed", not
  * as a general alternative to a single table that would've done the job.
  */
 export async function getTableAvailability(params: {
@@ -246,89 +245,57 @@ export async function getTableAvailability(params: {
     return { unavailableTableIds, recommendedTableIds: [singleFit[0].id] };
   }
 
-  const links = await prisma.tableLink.findMany({
-    where: { tableAId: { in: tableIds }, tableBId: { in: tableIds } },
-    select: { tableAId: true, tableBId: true },
+  const combinationRows = await prisma.tableCombination.findMany({
+    where: { venueId },
+    select: { entries: { select: { tableId: true } } },
   });
-  const adjacency = new Map<string, Set<string>>();
-  for (const link of links) {
-    if (!adjacency.has(link.tableAId)) adjacency.set(link.tableAId, new Set());
-    if (!adjacency.has(link.tableBId)) adjacency.set(link.tableBId, new Set());
-    adjacency.get(link.tableAId)!.add(link.tableBId);
-    adjacency.get(link.tableBId)!.add(link.tableAId);
-  }
+  const combinations = combinationRows.map((c) => c.entries.map((e) => e.tableId));
 
-  const combo = findTableCombo(available, adjacency, partySize, priorityOf);
+  const combo = findCombination(available, combinations, partySize, priorityOf);
   return { unavailableTableIds, recommendedTableIds: combo.map((t) => t.id) };
 }
 
 /**
- * Finds the smallest set of *physically linked* tables (TableLink -
- * "neighbouring tables that can be combined onto one booking together",
- * see that model's doc comment) whose combined maxCovers covers
- * partySize - i.e. only tables actually pushed together in real life, so
- * this can never suggest Table 1 + Table 8 with nothing joining them.
- * Requires the whole combination to be connected (every table reachable
- * from every other through link edges within the combination), not just
- * each pair independently linked to some third table, since that's what
- * "push these tables together" means physically.
- *
- * Bounded depth-first search from every candidate table, extending a
- * connected path one linked neighbour at a time; a path stops growing the
- * moment it covers partySize (adding more tables to an already-sufficient
- * combo is never a better answer) or hits maxComboSize. Table counts and
- * per-table link counts are small in practice (a handful of physically
- * adjacent tables per area), so the exponential worst case never
- * materialises - visitedCombos bounds it defensively regardless. Prefers
- * fewer tables, then the least spare capacity over partySize, then lower
- * area priority.
+ * The defined table combination that best seats partySize using only tables
+ * in `candidates` (already free-and-eligible). A combination is usable only
+ * when every one of its tables is available. Prefers fewest tables, then the
+ * least spare capacity over partySize, then lower area priority - the same
+ * tie-breaks the old adjacency search used. Returns [] when no defined
+ * combination fits, so the picker simply shows no recommendation.
  */
-function findTableCombo(
+function findCombination(
   candidates: CandidateTable[],
-  adjacency: Map<string, Set<string>>,
+  combinations: string[][],
   partySize: number,
   priorityOf: (t: CandidateTable) => number,
-  maxComboSize = 5,
 ): CandidateTable[] {
   const byId = new Map(candidates.map((t) => [t.id, t]));
   let best: CandidateTable[] | null = null;
-  let visitedCombos = 0;
 
-  function isBetter(path: CandidateTable[]): boolean {
+  const over = (p: CandidateTable[]) => p.reduce((s, t) => s + t.maxCovers, 0) - partySize;
+  const prio = (p: CandidateTable[]) => p.reduce((s, t) => s + priorityOf(t), 0);
+  const isBetter = (rows: CandidateTable[]): boolean => {
     if (!best) return true;
-    if (path.length !== best.length) return path.length < best.length;
-    const over = (p: CandidateTable[]) => p.reduce((s, t) => s + t.maxCovers, 0) - partySize;
-    const pathOver = over(path);
-    const bestOver = over(best);
-    if (pathOver !== bestOver) return pathOver < bestOver;
-    const prio = (p: CandidateTable[]) => p.reduce((s, t) => s + priorityOf(t), 0);
-    return prio(path) < prio(best);
-  }
+    if (rows.length !== best.length) return rows.length < best.length;
+    if (over(rows) !== over(best)) return over(rows) < over(best);
+    return prio(rows) < prio(best);
+  };
 
-  function dfs(path: CandidateTable[], visited: Set<string>) {
-    if (++visitedCombos > 5000) return;
-    const totalMax = path.reduce((s, t) => s + t.maxCovers, 0);
-    if (totalMax >= partySize) {
-      if (isBetter(path)) best = [...path];
-      return;
-    }
-    if (path.length >= maxComboSize) return;
-
-    const frontier = new Set<string>();
-    for (const t of path) {
-      for (const n of adjacency.get(t.id) ?? []) {
-        if (!visited.has(n) && byId.has(n)) frontier.add(n);
+  for (const tableIds of combinations) {
+    if (tableIds.length < 2) continue;
+    const rows: CandidateTable[] = [];
+    let allAvailable = true;
+    for (const id of tableIds) {
+      const table = byId.get(id);
+      if (!table) {
+        allAvailable = false;
+        break;
       }
+      rows.push(table);
     }
-    for (const n of frontier) {
-      visited.add(n);
-      dfs([...path, byId.get(n)!], visited);
-      visited.delete(n);
-    }
-  }
-
-  for (const start of candidates) {
-    dfs([start], new Set([start.id]));
+    if (!allAvailable) continue;
+    if (rows.reduce((sum, t) => sum + t.maxCovers, 0) < partySize) continue;
+    if (isBetter(rows)) best = rows;
   }
 
   return best ?? [];

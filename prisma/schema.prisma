@@ -137,6 +137,7 @@ model Venue {
   bookingTypes          BookingType[]
   tables                Table[]
   areas                 Area[]
+  tableCombinations     TableCombination[]
   openingHours          OpeningHours[]
   openingHoursOverrides OpeningHoursOverride[]
   bookings              Booking[]
@@ -607,6 +608,12 @@ model Table {
   tableLinksAsA TableLink[] @relation("TableLinkA")
   tableLinksAsB TableLink[] @relation("TableLinkB")
 
+  /// Explicit table combinations this table belongs to (Andy: "sometimes
+  /// T1+T2 for 6, sometimes T1+T2+T3 for 10"). A table can be in several
+  /// overlapping combinations. Replaces the inferred-from-adjacency combos
+  /// the pairwise TableLink model produced. See TableCombination.
+  combinationEntries TableCombinationEntry[]
+
   @@unique([venueId, label])
 }
 
@@ -624,6 +631,33 @@ model TableLink {
   tableB   Table  @relation("TableLinkB", fields: [tableBId], references: [id], onDelete: Cascade)
 
   @@unique([tableAId, tableBId])
+}
+
+/// An admin-defined set of tables that can be booked together as one, e.g.
+/// "T1 + T2" (seats 6) and, separately, "T1 + T2 + T3" (seats 10). Unlike
+/// the old pairwise TableLink adjacency, combinations are explicit and may
+/// overlap, so the seating engine only ever combines tables into groups the
+/// venue has actually defined, rather than inferring every connected subset.
+/// Total capacity is the sum of the member tables' maxCovers.
+model TableCombination {
+  id        String                  @id @default(cuid())
+  venueId   String
+  venue     Venue                   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  entries   TableCombinationEntry[]
+  createdAt DateTime                @default(now())
+
+  @@index([venueId])
+}
+
+/// Join row: one table's membership in one TableCombination.
+model TableCombinationEntry {
+  combinationId String
+  combination   TableCombination @relation(fields: [combinationId], references: [id], onDelete: Cascade)
+  tableId       String
+  table         Table            @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@id([combinationId, tableId])
+  @@index([tableId])
 }
 
 // ---------------------------------------------------------------------------
