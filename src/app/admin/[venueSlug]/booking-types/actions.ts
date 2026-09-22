@@ -322,6 +322,28 @@ function parseDateOverrides(formData: FormData):
   return { ok: true, rows };
 }
 
+/**
+ * Parses the optional per-day booking windows (see BookingType.dayWindows).
+ * One earliest/latest time pair per weekday; a day with both blank is
+ * skipped (that day falls back to the type-level window).
+ */
+function parseDayWindows(formData: FormData):
+  | { ok: true; rows: { dayOfWeek: number; earliestBookingTime: string; latestBookingTime: string }[] }
+  | { ok: false; error: string } {
+  const rows: { dayOfWeek: number; earliestBookingTime: string; latestBookingTime: string }[] = [];
+  for (let dow = 0; dow <= 6; dow++) {
+    const e = String(formData.get(`dayWindow_${dow}_earliest`) ?? "").trim();
+    const l = String(formData.get(`dayWindow_${dow}_latest`) ?? "").trim();
+    if (!e && !l) continue;
+    if (!e || !l) return { ok: false, error: "Set both an earliest and latest time for a per-day window, or leave both blank." };
+    const timeRe = /^\d{1,2}:\d{2}$/;
+    if (!timeRe.test(e) || !timeRe.test(l)) return { ok: false, error: "Per-day window times must be valid times." };
+    if (e > l) return { ok: false, error: "A per-day window's earliest time must be before its latest." };
+    rows.push({ dayOfWeek: dow, earliestBookingTime: e, latestBookingTime: l });
+  }
+  return { ok: true, rows };
+}
+
 export async function createBookingType(formData: FormData): Promise<ActionResult> {
   await requireAdminSession();
   const venue = await resolveVenue(formData);
@@ -333,6 +355,8 @@ export async function createBookingType(formData: FormData): Promise<ActionResul
   if (!areaPriorities.ok) return { error: areaPriorities.error };
   const dateOverrides = parseDateOverrides(formData);
   if (!dateOverrides.ok) return { error: dateOverrides.error };
+  const dayWindows = parseDayWindows(formData);
+  if (!dayWindows.ok) return { error: dayWindows.error };
 
   const slug = await uniqueSlug(venue.id, slugify(fields.name));
 
@@ -343,6 +367,7 @@ export async function createBookingType(formData: FormData): Promise<ActionResul
       ...fields,
       areaPriorities: { createMany: { data: areaPriorities.rows } },
       dateOverrides: { createMany: { data: dateOverrides.rows } },
+      dayWindows: { createMany: { data: dayWindows.rows } },
     },
   });
   revalidatePath(`/admin/${venue.slug}/booking-types`);
@@ -361,6 +386,8 @@ export async function updateBookingType(formData: FormData): Promise<ActionResul
   if (!areaPriorities.ok) return { error: areaPriorities.error };
   const dateOverrides = parseDateOverrides(formData);
   if (!dateOverrides.ok) return { error: dateOverrides.error };
+  const dayWindows = parseDayWindows(formData);
+  if (!dayWindows.ok) return { error: dayWindows.error };
 
   const owned = await prisma.bookingType.findFirst({ where: { id, venueId: venue.id }, select: { id: true } });
   if (!owned) return { error: "Booking type not found for this venue." };
@@ -382,6 +409,10 @@ export async function updateBookingType(formData: FormData): Promise<ActionResul
             data: dateOverrides.rows.map((r) => ({ ...r, bookingTypeId: id })),
           }),
         ]
+      : []),
+    prisma.bookingTypeDayWindow.deleteMany({ where: { bookingTypeId: id } }),
+    ...(dayWindows.rows.length > 0
+      ? [prisma.bookingTypeDayWindow.createMany({ data: dayWindows.rows.map((r) => ({ ...r, bookingTypeId: id })) })]
       : []),
   ]);
 

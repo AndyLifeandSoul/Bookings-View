@@ -429,6 +429,13 @@ model BookingType {
   /// no override, ordinary availableDaysOfWeek/opening-hours rules apply.
   dateOverrides BookingTypeDateOverride[]
 
+  /// Per-weekday booking windows (start-time band, and optional duration /
+  /// party overrides) for this type. When a weekday has a row here, the
+  /// availability engine uses it for that day instead of the type-level
+  /// earliest/latest and duration/party values. Empty = the type-level
+  /// values apply on every available day, the pre-existing behaviour.
+  dayWindows BookingTypeDayWindow[]
+
   /// Hex colour (e.g. "#7c3aed") shown as a banner/strip on this booking
   /// type's blocks in the staff table diary, so "Bottomless Brunch" and
   /// "Standard Dining" are visually distinguishable at a glance. Nullable,
@@ -1403,4 +1410,36 @@ enum AmendmentStatus {
   PENDING
   APPLIED
   CANCELLED
+}
+
+
+/// A per-weekday booking window for a booking type (see BookingType.dayWindows).
+/// DesignMyNight-style venues run the same booking type with a different
+/// start-time band on different days (e.g. bottomless brunch Fri 17:00-19:30,
+/// Sat 13:00-16:00, Sun 12:00-16:00). The availability engine, for a given
+/// date, uses the matching weekday's window in place of the type-level
+/// earliest/latest booking time; the optional duration/party fields override
+/// the type-level ones for that day too when set. Which days the type runs on
+/// is still BookingType.availableDaysOfWeek (kept in sync with these rows).
+model BookingTypeDayWindow {
+  id            String      @id @default(cuid())
+  bookingTypeId String
+  bookingType   BookingType @relation(fields: [bookingTypeId], references: [id], onDelete: Cascade)
+
+  /// 0 = Sunday ... 6 = Saturday (matches JS Date#getUTCDay()).
+  dayOfWeek Int
+
+  /// "HH:mm", the earliest and latest a booking of this type may START on
+  /// this weekday. latestBookingTime bounds the start, not the end.
+  earliestBookingTime String
+  latestBookingTime   String
+
+  /// Optional per-day overrides of the type-level values; null = use the
+  /// booking type's own value on this day.
+  minDurationMinutes Int?
+  maxDurationMinutes Int?
+  minPartySize       Int?
+  maxPartySize       Int?
+
+  @@unique([bookingTypeId, dayOfWeek])
 }

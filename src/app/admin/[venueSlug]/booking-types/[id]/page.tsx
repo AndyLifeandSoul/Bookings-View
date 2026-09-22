@@ -18,7 +18,7 @@ export default async function EditBookingTypePage({
   const [bookingType, areas, menus] = await Promise.all([
     prisma.bookingType.findFirst({
       where: { id, venueId: venue.id },
-      include: { dateOverrides: true, areaPriorities: true },
+      include: { dateOverrides: true, areaPriorities: true, dayWindows: true },
     }),
     prisma.area.findMany({ where: { venueId: venue.id }, orderBy: { priority: "asc" }, select: { id: true, name: true } }),
     prisma.menu.findMany({ where: { venueId: venue.id, active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),

@@ -17,6 +17,7 @@ const DAYS_OF_WEEK = [
 type BookingTypeDefaults = BookingType & {
   dateOverrides?: { dateFrom: Date; dateTo: Date; startTime: string | null; endTime: string | null; allow: boolean; note: string | null }[];
   areaPriorities?: { areaId: string; priority: number }[];
+  dayWindows?: { dayOfWeek: number; earliestBookingTime: string; latestBookingTime: string }[];
 };
 
 /** Shared field markup for the create and edit forms, kept as one component so the two forms can't drift apart. */
@@ -35,6 +36,7 @@ export function BookingTypeFields({
 }) {
   const selectedAreaPriority = new Map((defaults?.areaPriorities ?? []).map((p) => [p.areaId, p.priority]));
   const selectedDays = new Set(defaults?.availableDaysOfWeek ?? []);
+  const dayWindowByDow = new Map((defaults?.dayWindows ?? []).map((w) => [w.dayOfWeek, w]));
   return (
     <div className="flex flex-col gap-5 rounded-2xl border border-zinc-200/80 bg-white p-5 [box-shadow:var(--shadow-sm)]">
       {defaults && <input type="hidden" name="id" value={defaults.id} />}
@@ -239,6 +241,39 @@ export function BookingTypeFields({
               className="rounded-md border border-zinc-300 px-3 py-2"
             />
           </label>
+        </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
+        <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Per-day booking windows</legend>
+        <p className="text-xs text-zinc-500">
+          Optional. Set a start-time window for individual days when they differ (e.g. brunch runs a different time on
+          Saturday than Sunday). A day left blank uses the single booking window above. A window only applies on days
+          ticked in &quot;Available days&quot; below.
+        </p>
+        <div className="flex flex-col gap-2">
+          {DAYS_OF_WEEK.map((d) => {
+            const w = dayWindowByDow.get(d.value);
+            return (
+              <div key={d.value} className="grid grid-cols-[3rem_1fr_1fr] items-center gap-2">
+                <span className="text-sm text-zinc-600">{d.label}</span>
+                <input
+                  type="time"
+                  name={`dayWindow_${d.value}_earliest`}
+                  defaultValue={w?.earliestBookingTime ?? ""}
+                  aria-label={`${d.label} earliest`}
+                  className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+                />
+                <input
+                  type="time"
+                  name={`dayWindow_${d.value}_latest`}
+                  defaultValue={w?.latestBookingTime ?? ""}
+                  aria-label={`${d.label} latest`}
+                  className="rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+                />
+              </div>
+            );
+          })}
         </div>
       </fieldset>
 
