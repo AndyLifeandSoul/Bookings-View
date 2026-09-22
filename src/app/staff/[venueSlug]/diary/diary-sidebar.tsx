@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MessageSquare, UtensilsCrossed, BadgePoundSterling, StickyNote } from "lucide-react";
 import type { DiaryBooking, DiaryTable } from "./diary-grid";
 
 /**
@@ -96,7 +97,7 @@ export function DiarySidebar({
                       <span>x{b.partySize}</span>
                       <span className="text-zinc-300">·</span>
                       <span className="truncate">{tableLabels(b, tablesById)}</span>
-                      {b.hasPreOrder && <span className="text-zinc-300">· pre-order</span>}
+                      <BookingIcons booking={b} />
                     </span>
                   </span>
                 </Link>
@@ -106,5 +107,49 @@ export function DiarySidebar({
         </details>
       ))}
     </div>
+  );
+}
+
+
+/**
+ * The status icons shown on a sidebar booking row: an unread customer
+ * message, a submitted pre-order, a received payment, and a booking note.
+ * Only the ones that apply are rendered. The note icon reveals the note
+ * text on hover (and carries it as a title for touch / screen readers).
+ */
+function BookingIcons({ booking }: { booking: DiaryBooking }) {
+  const hasAny = booking.hasUnreadMessage || booking.hasPreOrder || booking.hasPayment || !!booking.notes;
+  if (!hasAny) return null;
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-1.5">
+      {booking.hasUnreadMessage && (
+        <MessageSquare className="h-3.5 w-3.5 text-[var(--accent)]" strokeWidth={2.25} aria-label="Unread message">
+          <title>Unread message</title>
+        </MessageSquare>
+      )}
+      {booking.hasPreOrder && (
+        <UtensilsCrossed className="h-3.5 w-3.5 text-zinc-400" strokeWidth={2.25} aria-label="Pre-order received">
+          <title>Pre-order received</title>
+        </UtensilsCrossed>
+      )}
+      {booking.hasPayment && (
+        <BadgePoundSterling className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2.25} aria-label="Payment received">
+          <title>Payment received</title>
+        </BadgePoundSterling>
+      )}
+      {booking.notes && (
+        <span className="group/note relative flex items-center">
+          <StickyNote className="h-3.5 w-3.5 text-amber-500" strokeWidth={2.25} aria-label="Booking note">
+            <title>Booking note</title>
+          </StickyNote>
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute right-0 bottom-full z-20 mb-1 hidden w-52 rounded-md border border-zinc-200 bg-white p-2 text-left text-xs font-normal text-zinc-700 normal-case [box-shadow:var(--shadow-md)] group-hover/note:block"
+          >
+            {booking.notes}
+          </span>
+        </span>
+      )}
+    </span>
   );
 }

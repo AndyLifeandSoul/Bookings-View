@@ -47,6 +47,10 @@ export default async function DiaryPage({
         bookingType: { select: { name: true, color: true } },
         bookingTables: { select: { tableId: true } },
         preOrder: { select: { id: true } },
+        // Any unread inbound reply, and any captured payment - surfaced as
+        // icons on the sidebar row so staff don't have to open each booking.
+        messages: { where: { direction: "INBOUND", read: false }, select: { id: true }, take: 1 },
+        payments: { where: { status: "CAPTURED" }, select: { id: true }, take: 1 },
       },
       orderBy: { startTime: "asc" },
     }),
@@ -77,6 +81,8 @@ export default async function DiaryPage({
     checkedOutAt: b.checkedOutAt ? b.checkedOutAt.toISOString() : null,
     notes: b.notes,
     hasPreOrder: Boolean(b.preOrder),
+    hasUnreadMessage: b.messages.length > 0,
+    hasPayment: b.payments.length > 0,
   }));
 
   // A day with no weekly hours and no exception is "closed" per getDayWindow,

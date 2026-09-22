@@ -35,6 +35,10 @@ export interface DiaryBooking {
   notes: string | null;
   /** True once a customer has submitted a pre-order for this booking (Booking.preOrder), see the booking details page's Pre-order section. Same "surface it on the block, don't make staff open the booking to find out" reasoning as notes. */
   hasPreOrder: boolean;
+  /** True when this booking has an unread INBOUND message (a customer reply staff haven't marked read). Drives the message icon on the sidebar row. */
+  hasUnreadMessage: boolean;
+  /** True when this booking has at least one captured (received) payment. Drives the payment icon on the sidebar row. */
+  hasPayment: boolean;
 }
 
 /**
