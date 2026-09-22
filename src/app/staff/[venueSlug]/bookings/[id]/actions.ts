@@ -6,6 +6,8 @@ import { prisma } from "@/lib/db/client";
 import { getCurrentStaffSession } from "@/lib/auth/session";
 import { findTableConflicts } from "@/lib/staff/table-conflicts";
 import { sendVenueMail } from "@/lib/email/send";
+import { renderVenueEmail, type VenueBrand } from "@/lib/email/templates";
+import { logOutboundEmail } from "@/lib/email/log-message";
 import type { ActionResult } from "@/components/action-form";
 import type { BookingStatus, PaymentPurpose } from "@/generated/prisma";
 import { createPaymentIntentViaCustomerApp } from "@/lib/payments/remote-intent";
@@ -392,8 +394,20 @@ export async function requestPayment(formData: FormData): Promise<ActionResult> 
       id: true,
       venueId: true,
       date: true,
+      bookingRef: true,
+      customerName: true,
       customerEmail: true,
-      venue: { select: { name: true, paymentAccount: { select: { id: true, code: true } } } },
+      venue: {
+        select: {
+          name: true,
+          logoUrl: true,
+          brandColorHex: true,
+          address: true,
+          phone: true,
+          email: true,
+          paymentAccount: { select: { id: true, code: true } },
+        },
+      },
     },
   });
   if (!booking) return { error: "Booking not found for this venue." };
@@ -445,6 +459,40 @@ export async function requestPayment(formData: FormData): Promise<ActionResult> 
         description,
       },
     });
+
+    // Email the customer the payment link. Best-effort: sendVenueMail never
+    // throws (returns ok:false), so a mail hiccup never fails the request,
+    // which is already saved. The checkout URL is the whole point, so skip
+    // the email if the provider didn't hand one back.
+    if (booking.customerEmail && intent.checkoutUrl) {
+      const brand: VenueBrand = {
+        name: booking.venue.name,
+        logoUrl: booking.venue.logoUrl,
+        brandColorHex: booking.venue.brandColorHex,
+        address: booking.venue.address,
+        phone: booking.venue.phone,
+        email: booking.venue.email,
+      };
+      const amountDisplay = `£${(amountInPence / 100).toFixed(2)}`;
+      const rendered = renderVenueEmail(brand, {
+        heading: "A payment for your booking",
+        intro: [
+          `Hi ${booking.customerName},`,
+          `${booking.venue.name} has requested a payment of ${amountDisplay}${
+            description ? ` for ${description}` : ""
+          }. You can pay securely using the button below.`,
+        ],
+        button: { label: `Pay ${amountDisplay} now`, url: intent.checkoutUrl },
+        outro: ["If you've already paid or have any questions, just reply to this email."],
+      });
+      const subject = `Payment requested for your ${booking.venue.name} booking${
+        booking.bookingRef ? ` (${booking.bookingRef})` : ""
+      }`;
+      const emailResult = booking.venue.email
+        ? await sendVenueMail({ mailbox: booking.venue.email, to: booking.customerEmail, subject, text: rendered.text, html: rendered.html })
+        : { ok: false as const };
+      if (emailResult.ok) await logOutboundEmail(booking.id, subject, rendered.text);
+    }
   } catch (err) {
     return { error: `Could not create the payment request: ${err instanceof Error ? err.message : String(err)}` };
   }
