@@ -1,11 +1,11 @@
 /**
  * Microsoft Graph client for the venue-mailbox email flow Andy described:
  * each venue's confirmation emails send from (and replies land in) that
- * venue's real Microsoft 365 mailbox — see Venue.email in schema.prisma.
+ * venue's real Microsoft 365 mailbox - see Venue.email in schema.prisma.
  *
  * App-only (client-credentials) auth against ONE Azure AD app registration
  * shared by every venue, using application permissions (Mail.Send,
- * Mail.Read, admin-consented) rather than a per-venue OAuth flow — Graph
+ * Mail.Read, admin-consented) rather than a per-venue OAuth flow - Graph
  * lets an app-permission call act "as" any mailbox in the tenant by
  * addressing /users/{mailbox}, so one client id/secret covers all 8 venues.
  * This is deliberately NOT IMAP/SMTP: Microsoft has been disabling basic
@@ -14,7 +14,7 @@
  *
  * Everything here no-ops safely (returns a clear "not configured" result,
  * never throws) when GRAPH_TENANT_ID/GRAPH_CLIENT_ID/GRAPH_CLIENT_SECRET
- * aren't set — same pattern as this codebase's Dojo payment provider
+ * aren't set - same pattern as this codebase's Dojo payment provider
  * abstraction before real credentials existed. Setup steps for Andy: see
  * docs/email-setup.md.
  */
@@ -37,7 +37,7 @@ export function isEmailConfigured(): boolean {
   return getConfig() !== null;
 }
 
-// Module-scope cache — fine for a single Node process; a fresh deploy just
+// Module-scope cache - fine for a single Node process; a fresh deploy just
 // re-fetches once. Tokens are ~1hr, refreshed a minute early.
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
@@ -66,8 +66,14 @@ export interface SendMailResult {
   error?: string;
 }
 
-/** Sends as `mailbox` (a venue's real M365 address, e.g. "bookings@dv8venue.co.uk") via Graph's application-permission sendMail. Never throws — booking creation/replying must not fail just because email is unreachable. */
-export async function sendMailAs(mailbox: string, to: string, subject: string, bodyText: string): Promise<SendMailResult> {
+/** Sends as `mailbox` (a venue's real M365 address, e.g. "bookings@dv8venue.co.uk") via Graph's application-permission sendMail. Never throws - booking creation/replying must not fail just because email is unreachable. */
+export async function sendMailAs(
+  mailbox: string,
+  to: string,
+  subject: string,
+  bodyText: string,
+  html?: string,
+): Promise<SendMailResult> {
   const config = getConfig();
   if (!config) return { ok: false, error: "Email isn't configured yet." };
 
@@ -79,7 +85,7 @@ export async function sendMailAs(mailbox: string, to: string, subject: string, b
       body: JSON.stringify({
         message: {
           subject,
-          body: { contentType: "Text", content: bodyText },
+          body: html ? { contentType: "HTML", content: html } : { contentType: "Text", content: bodyText },
           toRecipients: [{ emailAddress: { address: to } }],
         },
         saveToSentItems: true,
@@ -100,7 +106,7 @@ export interface InboundMessage {
   receivedDateTime: string;
 }
 
-/** Messages received after `sinceIso` (exclusive) in `mailbox`'s inbox, oldest first — used by the poll-inbox route. Returns [] rather than throwing when email isn't configured. */
+/** Messages received after `sinceIso` (exclusive) in `mailbox`'s inbox, oldest first - used by the poll-inbox route. Returns [] rather than throwing when email isn't configured. */
 export async function listRecentInbox(mailbox: string, sinceIso: string | null): Promise<InboundMessage[]> {
   const config = getConfig();
   if (!config) return [];

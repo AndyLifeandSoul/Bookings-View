@@ -26,11 +26,16 @@ export interface SendVenueMailResult {
 }
 
 export async function sendVenueMail(params: SendVenueMailParams): Promise<SendVenueMailResult> {
+  // Prefer Graph whenever the app registration is configured. Microsoft is
+  // disabling basic auth on these mailboxes (IMAP already, SMTP AUTH
+  // following), so Graph over modern OAuth is the transport that keeps
+  // working, and it now carries the branded HTML too (see graph-client.ts).
+  // SMTP stays only as a fallback for a Graph-less setup.
+  if (process.env.GRAPH_TENANT_ID && process.env.GRAPH_CLIENT_ID && process.env.GRAPH_CLIENT_SECRET) {
+    return sendMailViaGraph(params.mailbox, params.to, params.subject, params.text, params.html);
+  }
   if (isMailboxCredentialsConfigured()) {
     return sendMailViaSmtp(params);
-  }
-  if (process.env.GRAPH_TENANT_ID && process.env.GRAPH_CLIENT_ID && process.env.GRAPH_CLIENT_SECRET) {
-    return sendMailViaGraph(params.mailbox, params.to, params.subject, params.text);
   }
   return { ok: false, error: "Email isn't configured yet." };
 }
