@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/client";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { getDayWindow } from "@/lib/staff/get-day-window";
 import { DiaryGrid, type DiaryBooking, type DiaryTable } from "./diary-grid";
+import { DiarySidebar } from "./diary-sidebar";
 import { AddWalkInButton } from "./add-walk-in-button";
 import { RefreshButton } from "./refresh-button";
 import { DateJump } from "./date-jump";
@@ -86,7 +87,7 @@ export default async function DiaryPage({
 
   return (
     <div className="flex flex-1 flex-col px-4 py-8 sm:py-12">
-      <div className="animate-in mx-auto w-full max-w-5xl">
+      <div className="animate-in mx-auto w-full max-w-7xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">{venue.name} Table diary</h1>
@@ -151,15 +152,22 @@ export default async function DiaryPage({
               </p>
             </Card>
           ) : (
-            <DiaryGrid
-              venueId={venue.id}
-              venueSlug={venue.slug}
-              tables={diaryTables}
-              bookings={diaryBookings}
-              startMinutes={effectiveWindow.startMinutes}
-              endMinutes={effectiveWindow.endMinutes}
-              isToday={isToday}
-            />
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+              <aside className="w-full lg:w-64 lg:shrink-0">
+                <DiarySidebar venueSlug={venue.slug} bookings={diaryBookings} tables={diaryTables} />
+              </aside>
+              <div className="min-w-0 flex-1">
+                <DiaryGrid
+                  venueId={venue.id}
+                  venueSlug={venue.slug}
+                  tables={diaryTables}
+                  bookings={diaryBookings}
+                  startMinutes={effectiveWindow.startMinutes}
+                  endMinutes={effectiveWindow.endMinutes}
+                  isToday={isToday}
+                />
+              </div>
+            </div>
           )}
         </div>
       </div>
