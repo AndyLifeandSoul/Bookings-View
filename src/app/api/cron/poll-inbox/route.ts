@@ -109,6 +109,24 @@ export async function POST(request: NextRequest) {
       });
 
       for (const message of messages) {
+        // The venue notifies its own inbox about new bookings and changes
+        // (see notifyBookingChange), so mail sent from the venue's own
+        // address is our own notification, not a customer reply. Never
+        // ingest it as an inbound message.
+        if (message.from && venue.email && message.from.toLowerCase() === venue.email.toLowerCase()) {
+          continue;
+        }
+
+        // Idempotency: the time watermark alone can re-surface a message
+        // (Graph reports receivedDateTime to the second but filters "gt"
+        // against the full-precision value), so dedupe on the source
+        // mailbox's own message id and never create the same row twice.
+        const already = await prisma.message.findUnique({
+          where: { sourceMessageId: message.graphId },
+          select: { id: true },
+        });
+        if (already) continue;
+
         const matchedByRef = bookingsWithRef.find((b) => b.bookingRef && message.subject.includes(b.bookingRef));
 
         let bookingId = matchedByRef?.id ?? null;
@@ -142,6 +160,7 @@ export async function POST(request: NextRequest) {
             subject: message.subject || null,
             body: cleanInboundBody(message.bodyText),
             read: false,
+            sourceMessageId: message.graphId,
           },
         });
         messagesCreated += 1;

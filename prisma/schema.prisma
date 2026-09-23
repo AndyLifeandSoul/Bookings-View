@@ -1302,6 +1302,14 @@ model Message {
   /// staff mark it back to true from the booking details page.
   read Boolean @default(true)
 
+  /// Idempotency key for imported inbound mail: the source mailbox's own
+  /// message id (Microsoft Graph message id, or "imap-<uid>"). Unique so a
+  /// re-poll cannot store the same customer reply twice even when the time
+  /// watermark is imprecise: Graph returns receivedDateTime truncated to the
+  /// second but filters "gt" against the full-precision value, so a naive
+  /// time cursor re-imports the newest message on every poll.
+  sourceMessageId String? @unique
+
   createdAt DateTime @default(now())
 
   @@index([bookingId])
