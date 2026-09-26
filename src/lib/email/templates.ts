@@ -17,6 +17,15 @@
 /** Neutral accent used when a venue hasn't set brandColorHex - see Venue.brandColorHex. */
 export const EMAIL_DEFAULT_ACCENT = "#4f46e5";
 
+/**
+ * Fixed on-screen height (px) for an uploaded venue logo in emails. A fixed
+ * height (not a max) guarantees every venue's logo renders at the same
+ * height regardless of the image's own dimensions; width scales to keep the
+ * aspect ratio, capped to the email width. Bump this one number to resize
+ * every venue's logo.
+ */
+export const EMAIL_LOGO_HEIGHT_PX = 200;
+
 export interface VenueBrand {
   name: string;
   logoUrl: string | null;
@@ -68,7 +77,7 @@ function accentOf(brand: VenueBrand): string {
 function headerHtml(brand: VenueBrand): string {
   const logo = brand.logoUrl ? safeUrl(brand.logoUrl) : null;
   if (logo) {
-    return `<img src="${esc(logo)}" alt="${esc(brand.name)}" style="max-height:56px;max-width:260px;display:block;margin:0 auto;" />`;
+    return `<img src="${esc(logo)}" alt="${esc(brand.name)}" height="${EMAIL_LOGO_HEIGHT_PX}" style="height:${EMAIL_LOGO_HEIGHT_PX}px;width:auto;max-width:100%;display:block;margin:0 auto;" />`;
   }
   return `<div style="font-size:22px;font-weight:700;color:#18181b;text-align:center;">${esc(brand.name)}</div>`;
 }
