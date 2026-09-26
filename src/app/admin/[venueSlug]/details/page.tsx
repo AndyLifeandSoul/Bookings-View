@@ -24,14 +24,16 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
       bookingCode: true,
       maxArrivalsPer30Min: true,
       logoUrl: true,
+      logoImageType: true,
       brandColorHex: true,
+      updatedAt: true,
     },
   });
 
   return (
     <Section title="Venue details">
       <Card>
-        <ActionForm action={updateVenueDetails} className="flex flex-col gap-4">
+        <ActionForm action={updateVenueDetails} className="flex flex-col gap-4" encType="multipart/form-data">
           <input type="hidden" name="venueId" value={venue.id} />
 
           <label className="flex flex-col gap-1">
@@ -106,20 +108,33 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
               Shown on this venue&apos;s customer emails (confirmations, reminders and so on). Both optional: with no
               logo the venue name is used as text, and with no colour a neutral default is applied.
             </p>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Logo URL (optional)</span>
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-zinc-700">Logo (optional)</span>
+              {(venue.logoImageType || venue.logoUrl) && (
+                <div className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={venue.logoImageType ? `/api/venue-logo/${venue.slug}?v=${venue.updatedAt.getTime()}` : (venue.logoUrl ?? "")}
+                    alt={`${venue.name} logo`}
+                    className="h-12 w-auto rounded border border-zinc-200 bg-white p-1"
+                  />
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-600">
+                    <input type="checkbox" name="removeLogo" className="h-4 w-4 rounded border-zinc-300" />
+                    Remove current logo
+                  </label>
+                </div>
+              )}
               <input
-                type="url"
-                name="logoUrl"
-                defaultValue={venue.logoUrl ?? ""}
-                placeholder="https://yourvenue.co.uk/logo.png"
-                className="rounded-md border border-zinc-300 px-3 py-2"
+                type="file"
+                name="logo"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                className="rounded-md border border-zinc-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm"
               />
               <span className="text-xs text-zinc-400">
-                A full https:// link to a hosted image. Email clients can&apos;t load a file from your computer, so it
-                has to be online (your website&apos;s logo works well).
+                Upload a PNG, JPG, WEBP, GIF or SVG (up to 2MB). It shows on this venue&apos;s booking page and its
+                customer emails. Leave blank to keep the current logo.
               </span>
-            </label>
+            </div>
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium text-zinc-700">Brand colour (optional)</span>
               <input

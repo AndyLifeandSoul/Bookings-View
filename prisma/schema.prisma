@@ -94,6 +94,14 @@ model Venue {
 
   logoUrl String?
 
+  /// Uploaded logo image bytes and their MIME type. When set, this is the
+  /// venue logo (served by the customer app at /api/venue-logo/[slug] and
+  /// shown on the booking page and in branded emails), taking precedence
+  /// over logoUrl, which stays as a legacy fallback for a hosted URL.
+  logoImage     Bytes?
+  logoImageType String?
+
+
   /// Brand accent colour as a "#rrggbb" hex string, used for headings and
   /// the button in this venue's branded emails. Null falls back to a
   /// neutral default (see EMAIL_DEFAULT_ACCENT in lib/email/templates.ts),

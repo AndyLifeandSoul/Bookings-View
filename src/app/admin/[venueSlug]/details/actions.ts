@@ -52,12 +52,27 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
     maxArrivalsPer30Min = Math.trunc(parsed);
   }
 
-  // Email branding, see Venue.logoUrl / Venue.brandColorHex. Both optional.
-  const logoUrlRaw = String(formData.get("logoUrl") ?? "").trim();
-  if (logoUrlRaw && !/^https?:\/\//i.test(logoUrlRaw)) {
-    return { error: "Logo URL must be a full web address starting with https:// (email clients can't load anything else)." };
+  // Logo: an uploaded image file, stored as bytes in the DB and served by the
+  // customer app at /api/venue-logo/[slug]. "removeLogo" clears it; an empty
+  // file input leaves the current logo untouched. logoUrl is left as-is (a
+  // legacy hosted-URL fallback), so it is deliberately not written here.
+  const removeLogo = formData.get("removeLogo") === "on";
+  const logoEntry = formData.get("logo");
+  const hasUpload = logoEntry != null && typeof logoEntry !== "string" && logoEntry.size > 0;
+  let logoData: { logoImage?: Uint8Array<ArrayBuffer> | null; logoImageType?: string | null } = {};
+  if (removeLogo) {
+    logoData = { logoImage: null, logoImageType: null };
+  } else if (hasUpload) {
+    const file = logoEntry as File;
+    const allowed = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"];
+    if (!allowed.includes(file.type)) {
+      return { error: "Logo must be a PNG, JPG, WEBP, GIF or SVG image." };
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      return { error: "Logo image must be 2MB or smaller." };
+    }
+    logoData = { logoImage: new Uint8Array(await file.arrayBuffer()), logoImageType: file.type };
   }
-  const logoUrl = logoUrlRaw || null;
 
   const brandColorRaw = String(formData.get("brandColorHex") ?? "").trim();
   if (brandColorRaw && !/^#[0-9a-fA-F]{6}$/.test(brandColorRaw)) {
@@ -67,7 +82,7 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
 
   await prisma.venue.update({
     where: { id: venue.id },
-    data: { name, address, phone, email, bookingCode, maxArrivalsPer30Min, logoUrl, brandColorHex },
+    data: { name, address, phone, email, bookingCode, maxArrivalsPer30Min, brandColorHex, ...logoData },
   });
 
   revalidatePath(`/admin/${venue.slug}/details`);

@@ -9,16 +9,16 @@ export type ActionResult = { error?: string } | void;
  * Wraps a Server Action form so validation errors are actually visible.
  * Next.js redacts a thrown Error's message by default when it crosses from
  * a Server Action back to the client (all the browser gets is a generic
- * digest) — so every admin action returns `{ error: string }` on failure
+ * digest) - so every admin action returns `{ error: string }` on failure
  * instead of throwing, and this component is what surfaces that string.
  * Success paths call redirect()/revalidatePath() inside the action itself
  * and return nothing.
  *
- * children is plain ReactNode, not a render-prop function — a function
+ * children is plain ReactNode, not a render-prop function - a function
  * can't cross the server/client boundary as a prop (caught this in local
  * testing: "Functions cannot be passed directly to Client Components").
  * Anything inside the form that needs pending state (a submit button)
- * reads it itself via useFormStatus() — see SubmitButton — rather than
+ * reads it itself via useFormStatus() - see SubmitButton - rather than
  * having it threaded down as a prop.
  *
  * On a successful (non-redirecting, non-error) submit, we explicitly call
@@ -26,11 +26,11 @@ export type ActionResult = { error?: string } | void;
  * revalidatePath() to keep the page in sync. Without this, forms on this
  * page (e.g. the booking status <select>) would visibly show the value the
  * user just saved for a few hundred ms, then snap back to the pre-edit
- * value — the client Router Cache entry for this route (populated when the
+ * value - the client Router Cache entry for this route (populated when the
  * page first loaded) wins a race against the fresh data revalidatePath()
  * marked stale, even though the database write itself is already
  * committed (a plain reload always shows the correct saved value). Actions
- * that redirect() on success — the manual add-booking/add-enquiry flows —
+ * that redirect() on success - the manual add-booking/add-enquiry flows -
  * throw internally before reaching the refresh() call, so this doesn't
  * interfere with those.
  */
@@ -38,10 +38,12 @@ export function ActionForm({
   action,
   className,
   children,
+  encType,
 }: {
   action: (formData: FormData) => Promise<ActionResult>;
   className?: string;
   children: React.ReactNode;
+  encType?: string;
 }) {
   const router = useRouter();
   const [state, formAction] = useActionState<ActionResult, FormData>(
@@ -56,7 +58,7 @@ export function ActionForm({
   );
 
   return (
-    <form action={formAction} className={className}>
+    <form action={formAction} className={className} encType={encType}>
       {state?.error && (
         <p className="animate-in mb-3 rounded-lg border border-red-100 bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-soft-text)]">
           {state.error}
