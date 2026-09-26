@@ -199,20 +199,10 @@ function parseFields(formData: FormData): ParseResult {
 
   const runsUntilClose = formData.get("runsUntilClose") === "on";
 
-  const TIME_RE = /^\d{1,2}:\d{2}$/;
-  const earliestBookingTimeRaw = String(formData.get("earliestBookingTime") ?? "").trim();
-  if (earliestBookingTimeRaw && !TIME_RE.test(earliestBookingTimeRaw)) {
-    return { ok: false, error: "Earliest booking time isn't a valid time." };
-  }
-  const earliestBookingTime = earliestBookingTimeRaw || null;
-  const latestBookingTimeRaw = String(formData.get("latestBookingTime") ?? "").trim();
-  if (latestBookingTimeRaw && !TIME_RE.test(latestBookingTimeRaw)) {
-    return { ok: false, error: "Latest booking time isn't a valid time." };
-  }
-  const latestBookingTime = latestBookingTimeRaw || null;
-  if (earliestBookingTime && latestBookingTime && earliestBookingTime > latestBookingTime) {
-    return { ok: false, error: "Earliest booking time must be before latest booking time." };
-  }
+  // The single type-level booking window has been removed from the form:
+  // per-day windows (BookingType.dayWindows) are the only windowing control
+  // now, so the type-level window is always cleared here. A day with no
+  // per-day window falls back to the venue's opening hours.
 
   const availableDaysOfWeek = formData
     .getAll("availableDaysOfWeek")
@@ -251,8 +241,8 @@ function parseFields(formData: FormData): ParseResult {
       autoConfirmMinLeadMinutes,
       color,
       runsUntilClose,
-      earliestBookingTime,
-      latestBookingTime,
+      earliestBookingTime: null,
+      latestBookingTime: null,
       availableDaysOfWeek,
       tableFillMode,
     },

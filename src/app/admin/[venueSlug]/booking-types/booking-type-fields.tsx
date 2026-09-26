@@ -221,34 +221,10 @@ export function BookingTypeFields({
       </label>
 
       <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
-        <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Booking window</legend>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1">
-            <span className="text-sm text-zinc-700">Earliest booking time (optional)</span>
-            <input
-              type="time"
-              name="earliestBookingTime"
-              defaultValue={defaults?.earliestBookingTime ?? ""}
-              className="rounded-md border border-zinc-300 px-3 py-2"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm text-zinc-700">Latest booking time (optional)</span>
-            <input
-              type="time"
-              name="latestBookingTime"
-              defaultValue={defaults?.latestBookingTime ?? ""}
-              className="rounded-md border border-zinc-300 px-3 py-2"
-            />
-          </label>
-        </div>
-      </fieldset>
-
-      <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
         <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Per-day booking windows</legend>
         <p className="text-xs text-zinc-500">
           Optional. Set a start-time window for individual days when they differ (e.g. brunch runs a different time on
-          Saturday than Sunday). A day left blank uses the single booking window above. A window only applies on days
+          Saturday than Sunday). A day left blank uses the venue&apos;s opening hours for that day. A window only applies on days
           ticked in &quot;Available days&quot; below.
         </p>
         <div className="flex flex-col gap-2">
