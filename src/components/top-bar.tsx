@@ -87,12 +87,12 @@ export function TopBar({
 
   return (
     <div className="sticky top-0 z-20 border-b border-zinc-800/80 bg-zinc-900/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-900/85 print:hidden">
-      <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3 sm:px-8">
+      <div className="mx-auto flex max-w-6xl items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-8">
         <Link href="/" className="flex shrink-0 items-center">
           <Image src="/brand/life-and-soul-wordmark.png" alt="Life & Soul" width={945} height={174} className="h-6 w-auto" priority />
         </Link>
 
-        <nav className="flex flex-1 items-center gap-1 overflow-x-auto">
+        <nav className="flex flex-1 flex-wrap items-center gap-1">
           {navItems.map((item) => {
             const Icon = item.icon ? ICONS[item.icon] : undefined;
             const isActive = item.href === activeHref;
@@ -100,7 +100,7 @@ export function TopBar({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-150 ${
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-all duration-150 ${
                   isActive
                     ? "bg-[var(--accent)] text-white shadow-sm"
                     : "text-zinc-300 hover:bg-zinc-800 hover:text-white"

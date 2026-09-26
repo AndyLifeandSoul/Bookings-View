@@ -34,7 +34,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           { href: "/admin/diary", label: "Diary", icon: "calendar" },
           { href: "/admin/enquiries", label: "Enquiries", icon: "inbox" },
           { href: "/admin/messages", label: unreadCount > 0 ? `Messages (${unreadCount})` : "Messages", icon: "messages" },
-          { href: "/admin/bookings", label: "All bookings", icon: "bookings" },
+          { href: "/admin/bookings", label: "Bookings", icon: "bookings" },
           { href: "/admin/settings", label: "Settings", fallback: true, icon: "settings" },
           { href: "/admin/customers", label: "Customers", icon: "customers" },
           // Standalone, not a per-venue concept, so it's not nested under
