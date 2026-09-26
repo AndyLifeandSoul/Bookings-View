@@ -2,6 +2,7 @@ import { sendVenueMail } from "./send";
 import { renderVenueEmail, type VenueBrand } from "./templates";
 import { buildManageBookingLink } from "@/lib/pre-order/links";
 import { logOutboundEmail } from "./log-message";
+import { resolveVenueLogoUrl } from "@/lib/venues/logo";
 
 /**
  * Sends the branded booking/enquiry confirmation for a staff-entered
@@ -20,9 +21,11 @@ import { logOutboundEmail } from "./log-message";
  * email to send to, so a booking is never held up or rolled back over email.
  */
 interface VenueForEmail {
+  slug: string;
   name: string;
   email: string | null;
   logoUrl: string | null;
+  logoImageType: string | null;
   brandColorHex: string | null;
   address: string | null;
   phone: string | null;
@@ -48,7 +51,7 @@ export async function sendBookingConfirmationEmail(params: {
 
   const brand: VenueBrand = {
     name: venue.name,
-    logoUrl: venue.logoUrl,
+    logoUrl: resolveVenueLogoUrl(venue),
     brandColorHex: venue.brandColorHex,
     address: venue.address,
     phone: venue.phone,

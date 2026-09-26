@@ -35,7 +35,7 @@ export async function createManualEnquiry(formData: FormData): Promise<ActionRes
 
   const venue = await prisma.venue.findUnique({
     where: { id: venueId },
-    select: { id: true, bookingCode: true, name: true, email: true, logoUrl: true, brandColorHex: true, address: true, phone: true },
+    select: { id: true, slug: true, bookingCode: true, name: true, email: true, logoUrl: true, logoImageType: true, brandColorHex: true, address: true, phone: true },
   });
   if (!venue) return { error: "Unknown venue." };
 

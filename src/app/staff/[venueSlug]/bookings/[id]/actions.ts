@@ -16,6 +16,7 @@ import { getCustomerAppUrl } from "@/lib/pre-order/links";
 import { validateAndPricePreOrder, InvalidPreOrderError, type PreOrderLineInput, type PreOrderModifierInput } from "@/lib/pre-order/validate";
 import { toMinutes, formatMinutes } from "@/lib/bookings/time";
 import { customerIdentity, setStaffNotes } from "@/lib/admin/customer-record";
+import { resolveVenueLogoUrl } from "@/lib/venues/logo";
 
 
 const STATUSES: BookingStatus[] = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
@@ -399,8 +400,10 @@ export async function requestPayment(formData: FormData): Promise<ActionResult> 
       customerEmail: true,
       venue: {
         select: {
+          slug: true,
           name: true,
           logoUrl: true,
+          logoImageType: true,
           brandColorHex: true,
           address: true,
           phone: true,
@@ -467,7 +470,7 @@ export async function requestPayment(formData: FormData): Promise<ActionResult> 
     if (booking.customerEmail && intent.checkoutUrl) {
       const brand: VenueBrand = {
         name: booking.venue.name,
-        logoUrl: booking.venue.logoUrl,
+        logoUrl: resolveVenueLogoUrl(booking.venue),
         brandColorHex: booking.venue.brandColorHex,
         address: booking.venue.address,
         phone: booking.venue.phone,
