@@ -328,7 +328,9 @@ function parseDayWindows(formData: FormData):
     if (!e || !l) return { ok: false, error: "Set both an earliest and latest time for a per-day window, or leave both blank." };
     const timeRe = /^\d{1,2}:\d{2}$/;
     if (!timeRe.test(e) || !timeRe.test(l)) return { ok: false, error: "Per-day window times must be valid times." };
-    if (e > l) return { ok: false, error: "A per-day window's earliest time must be before its latest." };
+    // e > l is allowed: it means the window crosses midnight (e.g. 18:00 to
+    // 02:00). Only an identical earliest and latest is rejected.
+    if (e === l) return { ok: false, error: "A per-day window's earliest and latest time can't be the same." };
     rows.push({ dayOfWeek: dow, earliestBookingTime: e, latestBookingTime: l });
   }
   return { ok: true, rows };

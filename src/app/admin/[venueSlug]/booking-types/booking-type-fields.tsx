@@ -224,7 +224,7 @@ export function BookingTypeFields({
         <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Per-day booking windows</legend>
         <p className="text-xs text-zinc-500">
           Optional. Set a start-time window for individual days when they differ (e.g. brunch runs a different time on
-          Saturday than Sunday). A day left blank uses the venue&apos;s opening hours for that day. A window only applies on days
+          Saturday than Sunday). A day left blank uses the venue&apos;s opening hours for that day. A window can cross midnight (e.g. 18:00 to 02:00). A window only applies on days
           ticked in &quot;Available days&quot; below.
         </p>
         <div className="flex flex-col gap-2">
