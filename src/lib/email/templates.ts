@@ -24,7 +24,7 @@ export const EMAIL_DEFAULT_ACCENT = "#4f46e5";
  * aspect ratio, capped to the email width. Bump this one number to resize
  * every venue's logo.
  */
-export const EMAIL_LOGO_HEIGHT_PX = 200;
+export const EMAIL_LOGO_HEIGHT_PX = 133;
 
 export interface VenueBrand {
   name: string;
