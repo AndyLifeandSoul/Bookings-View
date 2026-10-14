@@ -31,18 +31,17 @@
    * ink you'd find on a good cocktail menu, not a SaaS gradient. Shows up
    * everywhere: nav chrome, primary buttons, active tab states, links,
    * focus rings. */
-  --accent: #1f3d3a;
-  --accent-hover: #17302d;
-  --accent-active: #122523;
-  --accent-soft: #eaf2f0;
-  --accent-soft-text: #17302d;
-  /* Secondary accent: the actual gold from the real Life & Soul logo
-   * (sampled from the brand mark, not invented), for variety (stat tiles,
-   * the background wash, decorative dots, the wordmark itself) - never
-   * for text-on-white body copy, its contrast against white is too low
-   * for that. Paired with the ink-teal primary the way brass fittings
-   * pair with a dark bar top. */
-  --accent-2: #f1b300;
+  --accent: #0d7366;
+  --accent-hover: #0a5f54;
+  --accent-active: #08493f;
+  --accent-soft: #e6f4f1;
+  --accent-soft-text: #0a5f54;
+  /* Secondary accent: a brighter aqua-teal from the Book Me In palette,
+   * for variety (stat tiles, the background wash, decorative dots) - a
+   * lighter sibling of the primary rather than a contrasting hue, so the
+   * product reads as one teal brand matching the pin logo. Not for
+   * text-on-white body copy, its contrast against white is too low. */
+  --accent-2: #2fa38f;
 
   /* Semantic surface tints for status colour-coding (badges, banners,
    * empty states). Each pairs a soft background with a readable-on-it

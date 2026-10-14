@@ -15,7 +15,7 @@
  */
 
 /** Neutral accent used when a venue hasn't set brandColorHex - see Venue.brandColorHex. */
-export const EMAIL_DEFAULT_ACCENT = "#4f46e5";
+export const EMAIL_DEFAULT_ACCENT = "#0f8c7b";
 
 /**
  * Fixed on-screen height (px) for an uploaded venue logo in emails. A fixed
@@ -85,7 +85,7 @@ function headerHtml(brand: VenueBrand): string {
 function footerHtml(brand: VenueBrand): string {
   const parts = [brand.address, brand.phone, brand.email].filter((p): p is string => !!p).map((p) => esc(p));
   const contact = parts.length > 0 ? `<div style="margin-bottom:6px;">${parts.join("&nbsp;&nbsp;·&nbsp;&nbsp;")}</div>` : "";
-  return `${contact}<div>${esc(brand.name)}</div>`;
+  return `${contact}<div>${esc(brand.name)}</div><div style="margin-top:10px;font-size:11px;color:#b8b8bf;">Powered by Book Me In</div>`;
 }
 
 export interface RenderedEmail {
@@ -153,6 +153,7 @@ export function renderVenueEmail(brand: VenueBrand, content: EmailContent): Rend
   }
   const footerText = [brand.address, brand.phone, brand.email].filter(Boolean).join("  ·  ");
   textParts.push("", footerText || brand.name);
+  textParts.push("Powered by Book Me In");
 
   return { html, text: textParts.join("\n") };
 }

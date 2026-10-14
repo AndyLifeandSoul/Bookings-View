@@ -27,8 +27,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Life & Soul Staff",
-  description: "Staff and admin portal for Life & Soul venues.",
+  title: "Book Me In",
+  description: "Staff and admin portal for Book Me In.",
   robots: { index: false, follow: false },
 };
 

@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { BrandLogo } from "@/components/brand-logo";
 import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(50rem_28rem_at_50%_-10%,color-mix(in_srgb,var(--accent)_10%,transparent),transparent)]" />
       <div className="animate-in relative w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-4 text-center">
-          <Image src="/brand/life-and-soul-wordmark.png" alt="Life & Soul" width={945} height={174} className="h-9 w-auto" priority />
+          <BrandLogo markSize={34} textClassName="text-2xl" />
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Staff sign in</h1>
         </div>
         <div className="rounded-2xl border border-zinc-200/80 bg-white p-6 [box-shadow:var(--shadow-lg)]">

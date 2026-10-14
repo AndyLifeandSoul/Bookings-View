@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { BrandLogo } from "@/components/brand-logo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -48,7 +48,7 @@ export interface TopBarNavItem {
 
 /**
  * Shared chrome for both the /admin and /staff/[venueSlug] apps, one dark
- * bar with the Life & Soul mark, this app's top-level tabs (Home/Settings/
+ * bar with the Book Me In mark, this app's top-level tabs (Home/Settings/
  * Customers for admin, Diary/Enquiries/Messages for staff, see each
  * layout.tsx for how the tab list is built), and the signed-in user plus
  * sign out on the right. Rendered once per layout, above whatever that
@@ -88,8 +88,8 @@ export function TopBar({
   return (
     <div className="sticky top-0 z-20 border-b border-zinc-800/80 bg-zinc-900/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-900/85 print:hidden">
       <div className="mx-auto flex max-w-6xl items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-8">
-        <Link href="/" className="flex shrink-0 items-center">
-          <Image src="/brand/life-and-soul-wordmark.png" alt="Life & Soul" width={945} height={174} className="h-6 w-auto" priority />
+        <Link href="/" className="flex shrink-0 items-center text-white">
+          <BrandLogo markSize={24} textClassName="text-[15px]" />
         </Link>
 
         <nav className="flex flex-1 flex-wrap items-center gap-1">
