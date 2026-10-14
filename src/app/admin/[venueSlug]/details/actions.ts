@@ -53,16 +53,16 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
   }
 
   // Logo: an uploaded image file, stored as bytes in the DB and served by the
-  // customer app at /api/venue-logo/[slug]. "removeLogo" clears it; an empty
-  // file input leaves the current logo untouched. logoUrl is left as-is (a
-  // legacy hosted-URL fallback), so it is deliberately not written here.
+  // customer app at /api/venue-logo/[slug]. A newly chosen file replaces the
+  // current logo and takes precedence over the remove checkbox (choosing a
+  // file means "use this one", whatever the box is set to); "removeLogo" with
+  // no new file clears it; neither leaves the current logo untouched. logoUrl
+  // is left as-is (a legacy hosted-URL fallback), so it is not written here.
   const removeLogo = formData.get("removeLogo") === "on";
   const logoEntry = formData.get("logo");
   const hasUpload = logoEntry != null && typeof logoEntry !== "string" && logoEntry.size > 0;
   let logoData: { logoImage?: Uint8Array<ArrayBuffer> | null; logoImageType?: string | null } = {};
-  if (removeLogo) {
-    logoData = { logoImage: null, logoImageType: null };
-  } else if (hasUpload) {
+  if (hasUpload) {
     const file = logoEntry as File;
     const allowed = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"];
     if (!allowed.includes(file.type)) {
@@ -72,6 +72,8 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
       return { error: "Logo image must be 2MB or smaller." };
     }
     logoData = { logoImage: new Uint8Array(await file.arrayBuffer()), logoImageType: file.type };
+  } else if (removeLogo) {
+    logoData = { logoImage: null, logoImageType: null };
   }
 
   const brandColorRaw = String(formData.get("brandColorHex") ?? "").trim();

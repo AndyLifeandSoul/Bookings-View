@@ -20,6 +20,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
   const bytes = venue.logoImage as unknown as Uint8Array;
   return new NextResponse(Buffer.from(bytes), {
     status: 200,
-    headers: { "Content-Type": venue.logoImageType, "Cache-Control": "private, max-age=60" },
+    headers: { "Content-Type": venue.logoImageType, "Cache-Control": "no-store" },
   });
 }
