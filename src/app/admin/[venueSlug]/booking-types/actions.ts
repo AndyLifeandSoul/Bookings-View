@@ -59,6 +59,7 @@ interface ParsedFields {
   preOrderMaxItemsPerPerson: number | null;
   enquiryThresholdPartySize: number | null;
   autoConfirmMinLeadMinutes: number | null;
+  bookingCutoffDays: number | null;
   color: string | null;
   runsUntilClose: boolean;
   earliestBookingTime: string | null;
@@ -191,6 +192,16 @@ function parseFields(formData: FormData): ParseResult {
     autoConfirmMinLeadMinutes = parsed;
   }
 
+  const bookingCutoffRaw = String(formData.get("bookingCutoffDays") ?? "").trim();
+  let bookingCutoffDays: number | null = null;
+  if (bookingCutoffRaw !== "") {
+    const parsed = Number(bookingCutoffRaw);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      return { ok: false, error: "Booking cut-off must be a whole number of days (0 or more), or left blank." };
+    }
+    bookingCutoffDays = parsed;
+  }
+
   const colorRaw = String(formData.get("color") ?? "").trim();
   if (colorRaw && !/^#[0-9a-fA-F]{6}$/.test(colorRaw)) {
     return { ok: false, error: `"${colorRaw}" isn't a valid colour.` };
@@ -239,6 +250,7 @@ function parseFields(formData: FormData): ParseResult {
       preOrderMaxItemsPerPerson,
       enquiryThresholdPartySize,
       autoConfirmMinLeadMinutes,
+      bookingCutoffDays,
       color,
       runsUntilClose,
       earliestBookingTime: null,

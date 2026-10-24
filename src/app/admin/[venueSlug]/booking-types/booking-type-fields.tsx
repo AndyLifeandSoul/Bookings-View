@@ -304,6 +304,23 @@ export function BookingTypeFields({
         </span>
       </label>
 
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-zinc-700">Close bookings this many days before (optional)</span>
+        <input
+          type="number"
+          name="bookingCutoffDays"
+          min={0}
+          defaultValue={defaults?.bookingCutoffDays ?? ""}
+          placeholder="e.g. 2"
+          className="w-32 rounded-md border border-zinc-300 px-3 py-2"
+        />
+        <span className="text-xs text-zinc-500">
+          A hard cut-off: bookings for this type close this many days before each slot, to the minute (set 2 and a 3pm
+          Saturday slot closes at 3pm the Thursday before). Nothing is bookable past it, not just pre-orders. Only
+          applies to the customer widget; leave blank for no cut-off.
+        </span>
+      </label>
+
       <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
         <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Deposit</legend>
         <div className="grid gap-4 sm:grid-cols-2">

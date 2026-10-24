@@ -410,6 +410,14 @@ model BookingType {
   /// is confirmed at staff discretion regardless of notice).
   autoConfirmMinLeadMinutes Int?
 
+  /// Hard booking cut-off (mirrors lifeandsoul-bookings). Bookings for this
+  /// type close this many days before each slot's start, to the minute; a
+  /// value of 2 closes a 3pm Saturday slot at 3pm the preceding Thursday.
+  /// Unlike autoConfirmMinLeadMinutes (which only makes an enquiry), this
+  /// fully closes the slot. Null means no cut-off. Widget-facing; staff can
+  /// still enter a booking here regardless.
+  bookingCutoffDays Int?
+
   /// Legacy direct table restriction, never actually wired up in the admin
   /// UI (nothing sets this today), superseded by areaPriorities below for
   /// the "restrict by area, with an order" case the admin UI does support.
