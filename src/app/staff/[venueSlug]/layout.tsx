@@ -49,6 +49,7 @@ export default async function StaffVenueLayout({
             label: enquiryCount > 0 ? `Enquiries (${enquiryCount})` : "Enquiries",
             icon: "inbox",
           },
+          { href: `/staff/${venue.slug}/guest-list`, label: "Guest list", icon: "guestlist" },
           {
             href: `/staff/${venue.slug}/messages`,
             label: unreadCount > 0 ? `Messages (${unreadCount})` : "Messages",

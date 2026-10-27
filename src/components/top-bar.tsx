@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  ListChecks,
   LayoutDashboard,
   CalendarDays,
   Inbox,
@@ -34,6 +35,7 @@ const ICONS = {
   staff: UserCog,
   messages: MessageSquare,
   reports: BarChart3,
+  guestlist: ListChecks,
 } satisfies Record<string, LucideIcon>;
 
 export type TopBarIconName = keyof typeof ICONS;
