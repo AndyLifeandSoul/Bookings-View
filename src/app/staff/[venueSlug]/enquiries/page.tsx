@@ -54,7 +54,7 @@ export default async function EnquiriesPage({
     },
   });
 
-  const monthAgo = new Date(Date.now() - 30 * 86_400_000);
+  const monthAgo = new Date(today.getTime() - 30 * 86_400_000);
   const recent = await prisma.booking.findMany({
     where: { venueId: venue.id, enquiryStage: { in: ["WON", "LOST"] }, updatedAt: { gte: monthAgo } },
     orderBy: { updatedAt: "desc" },
