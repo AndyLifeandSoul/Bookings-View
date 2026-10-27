@@ -4,6 +4,7 @@ import { BrandLogo } from "@/components/brand-logo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
   LayoutDashboard,
   CalendarDays,
   Inbox,
@@ -32,6 +33,7 @@ const ICONS = {
   customers: Users,
   staff: UserCog,
   messages: MessageSquare,
+  reports: BarChart3,
 } satisfies Record<string, LucideIcon>;
 
 export type TopBarIconName = keyof typeof ICONS;
@@ -87,7 +89,7 @@ export function TopBar({
 
   return (
     <div className="sticky top-0 z-20 border-b border-zinc-800/80 bg-zinc-900/95 backdrop-blur supports-[backdrop-filter]:bg-zinc-900/85 print:hidden">
-      <div className="mx-auto flex max-w-6xl items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-8">
+      <div className="mx-auto flex max-w-7xl items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
         <Link href="/" className="flex shrink-0 items-center text-white">
           <BrandLogo markSize={24} textClassName="text-[15px]" />
         </Link>
@@ -100,7 +102,7 @@ export function TopBar({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-all duration-150 ${
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1.5 text-sm font-medium transition-all duration-150 ${
                   isActive
                     ? "bg-[var(--accent)] text-white shadow-sm"
                     : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
@@ -115,7 +117,7 @@ export function TopBar({
 
         <div className="flex items-center gap-4">
           {rightExtra}
-          <div className="hidden text-right text-xs leading-tight sm:block">
+          <div className="hidden text-right text-xs leading-tight xl:block">
             <div className="font-medium text-zinc-200">{userName}</div>
             <div className="text-zinc-500">{roleLabel(userRole)}</div>
           </div>

@@ -37,6 +37,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           { href: "/admin/bookings", label: "Bookings", icon: "bookings" },
           { href: "/admin/settings", label: "Settings", fallback: true, icon: "settings" },
           { href: "/admin/customers", label: "Customers", icon: "customers" },
+          { href: "/admin/reports", label: "Reports", icon: "reports" },
           // Standalone, not a per-venue concept, so it's not nested under
           // Settings' venue-scoped sub-nav. OWNER-only, same restriction as
           // the page/actions themselves (defence in depth either way).
