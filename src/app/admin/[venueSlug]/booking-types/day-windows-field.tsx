@@ -1,25 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { TimeSelect } from "@/components/time-select";
+import { DAY_LONG, DAY_ORDER } from "./booking-type-summary";
 
-const DAYS_OF_WEEK = [
-  { value: 0, label: "Sun" },
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-];
+type Window = { earliest: string; latest: string };
 
 /**
- * Per-day booking windows + Available days, kept together as one client
- * component so the two stay in sync: a day that is not ticked in Available
- * days is greyed out in the window table and its time inputs are disabled.
- * Disabled inputs do not submit, which is correct because a window on a day
- * the booking type is not available never applies. Re-ticking a day restores
- * the times already typed (the inputs are uncontrolled, so their values
- * survive the disable).
+ * One row per day, Monday first: tick the day, then optionally set the
+ * first and last arrival time for it. Submits exactly what the actions
+ * already read: `availableDaysOfWeek` (one value per ticked day) and
+ * `dayWindow_<dow>_earliest` / `_latest` as single "HH:mm" values.
+ *
+ * Times on an unticked day are kept in state but disabled, so they don't
+ * submit (a window on a day that isn't bookable never applies) and come
+ * back if the day is ticked again.
  */
 export function DayWindowsField({
   selectedDays,
@@ -29,78 +24,115 @@ export function DayWindowsField({
   dayWindows: { dayOfWeek: number; earliestBookingTime: string; latestBookingTime: string }[];
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set(selectedDays));
-  const dayWindowByDow = new Map(dayWindows.map((w) => [w.dayOfWeek, w]));
+  const [windows, setWindows] = useState<Record<number, Window>>(() => {
+    const out: Record<number, Window> = {};
+    for (let d = 0; d <= 6; d++) out[d] = { earliest: "", latest: "" };
+    for (const w of dayWindows) out[w.dayOfWeek] = { earliest: w.earliestBookingTime, latest: w.latestBookingTime };
+    return out;
+  });
 
-  function toggle(value: number, on: boolean) {
+  function toggle(day: number, on: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (on) {
-        next.add(value);
-      } else {
-        next.delete(value);
-      }
+      if (on) next.add(day);
+      else next.delete(day);
       return next;
     });
   }
 
-  return (
-    <>
-      <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
-        <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Per-day booking windows</legend>
-        <p className="text-xs text-zinc-500">
-          Optional. Set a start-time window for individual days when they differ (e.g. brunch runs a different time on
-          Saturday than Sunday). A day left blank uses the venue&apos;s opening hours for that day. A window can cross midnight (e.g. 18:00 to 02:00). Days not ticked in &quot;Available days&quot; below are greyed out here and their windows are ignored.
-        </p>
-        <div className="flex flex-col gap-2">
-          {DAYS_OF_WEEK.map((d) => {
-            const w = dayWindowByDow.get(d.value);
-            const on = selected.has(d.value);
-            return (
-              <div
-                key={d.value}
-                className={`grid grid-cols-[3rem_1fr_1fr] items-center gap-2 ${on ? "" : "opacity-60"}`}
-              >
-                <span className={`text-sm ${on ? "text-zinc-600" : "text-zinc-400"}`}>{d.label}</span>
-                <input
-                  type="time"
-                  name={`dayWindow_${d.value}_earliest`}
-                  defaultValue={w?.earliestBookingTime ?? ""}
-                  aria-label={`${d.label} earliest`}
-                  disabled={!on}
-                  className={`rounded-md border px-2 py-1.5 text-sm ${on ? "border-zinc-300" : "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"}`}
-                />
-                <input
-                  type="time"
-                  name={`dayWindow_${d.value}_latest`}
-                  defaultValue={w?.latestBookingTime ?? ""}
-                  aria-label={`${d.label} latest`}
-                  disabled={!on}
-                  className={`rounded-md border px-2 py-1.5 text-sm ${on ? "border-zinc-300" : "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400"}`}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </fieldset>
+  function setTime(day: number, patch: Partial<Window>) {
+    setWindows((prev) => ({ ...prev, [day]: { ...prev[day], ...patch } }));
+  }
 
-      <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
-        <legend className="px-1 text-xs font-semibold uppercase text-zinc-500">Available days</legend>
-        <div className="flex flex-wrap gap-3">
-          {DAYS_OF_WEEK.map((d) => (
-            <label key={d.value} className="flex items-center gap-1.5 rounded-md border border-zinc-300 px-3 py-1.5 text-sm">
-              <input
-                type="checkbox"
-                name="availableDaysOfWeek"
-                value={d.value}
-                checked={selected.has(d.value)}
-                onChange={(e) => toggle(d.value, e.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300"
-              />
-              {d.label}
-            </label>
-          ))}
+  function copyToAll(from: number) {
+    setWindows((prev) => {
+      const next = { ...prev };
+      for (const d of selected) next[d] = { ...prev[from] };
+      return next;
+    });
+  }
+
+  const firstWithTimes = DAY_ORDER.find((d) => selected.has(d) && (windows[d].earliest || windows[d].latest));
+  const quick = "rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50";
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className={quick} onClick={() => setSelected(new Set([0, 1, 2, 3, 4, 5, 6]))}>
+          Every day
+        </button>
+        <button type="button" className={quick} onClick={() => setSelected(new Set([1, 2, 3, 4, 5]))}>
+          Weekdays
+        </button>
+        <button type="button" className={quick} onClick={() => setSelected(new Set([5, 6, 0]))}>
+          Fri to Sun
+        </button>
+        <button type="button" className={quick} onClick={() => setSelected(new Set())}>
+          Clear
+        </button>
+        {firstWithTimes !== undefined && selected.size > 1 && (
+          <button type="button" className={`${quick} ml-auto`} onClick={() => copyToAll(firstWithTimes)}>
+            Use {DAY_LONG[firstWithTimes]}&apos;s times on every ticked day
+          </button>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-zinc-200">
+        <div className="hidden grid-cols-[8rem_1fr_1fr] gap-3 border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-500 sm:grid">
+          <span>Day</span>
+          <span>First arrival</span>
+          <span>Last arrival</span>
         </div>
-      </fieldset>
-    </>
+        {DAY_ORDER.map((d) => {
+          const on = selected.has(d);
+          const w = windows[d];
+          const overnight = on && w.earliest && w.latest && w.latest < w.earliest;
+          return (
+            <div
+              key={d}
+              className={`grid grid-cols-1 items-center gap-2 border-b border-zinc-100 px-3 py-2 last:border-b-0 sm:grid-cols-[8rem_1fr_1fr] sm:gap-3 ${on ? "" : "bg-zinc-50/60"}`}
+            >
+              <label className="flex items-center gap-2 text-sm font-medium text-zinc-800">
+                <input
+                  type="checkbox"
+                  name="availableDaysOfWeek"
+                  value={d}
+                  checked={on}
+                  onChange={(e) => toggle(d, e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-300"
+                />
+                <span className={on ? "" : "text-zinc-400"}>{DAY_LONG[d]}</span>
+              </label>
+              <span className="flex items-center gap-2">
+                <span className="w-20 text-xs text-zinc-500 sm:hidden">First arrival</span>
+                <TimeSelect
+                  name={`dayWindow_${d}_earliest`}
+                  value={w.earliest}
+                  onChange={(v) => setTime(d, { earliest: v })}
+                  disabled={!on}
+                  label={`${DAY_LONG[d]} first arrival`}
+                />
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-20 text-xs text-zinc-500 sm:hidden">Last arrival</span>
+                <TimeSelect
+                  name={`dayWindow_${d}_latest`}
+                  value={w.latest}
+                  onChange={(v) => setTime(d, { latest: v })}
+                  disabled={!on}
+                  label={`${DAY_LONG[d]} last arrival`}
+                />
+                {overnight && <span className="text-xs text-zinc-500">next day</span>}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-xs text-zinc-500">
+        Leave the times blank to take bookings across that day&apos;s opening hours. Set them when this type only runs
+        part of the day, for example brunch arrivals 12:00 to 14:30. A last arrival earlier than the first means it
+        runs past midnight.
+      </p>
+    </div>
   );
 }
