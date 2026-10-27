@@ -6,6 +6,8 @@ import { getCurrentStaffSession } from "@/lib/auth/session";
 import { formatBookingRef } from "@/lib/bookings/booking-reference";
 import type { ActionResult } from "@/components/action-form";
 import { sendBookingConfirmationEmail } from "@/lib/email/send-booking-confirmation";
+import { logBookingEvent } from "@/lib/bookings/events";
+import { isOccasion } from "@/lib/bookings/occasions";
 
 async function requireVenueAccess(venueId: string): Promise<{ ok: true } | { error: string }> {
   const session = await getCurrentStaffSession();
@@ -61,6 +63,11 @@ export async function createManualEnquiry(formData: FormData): Promise<ActionRes
   const notes = String(formData.get("notes") ?? "").trim();
   if (!notes) return { error: "Add a note of what was discussed." };
 
+  const occasionRaw = String(formData.get("occasion") ?? "").trim();
+  const occasion = occasionRaw && isOccasion(occasionRaw) ? occasionRaw : null;
+  const budgetRaw = String(formData.get("budgetPounds") ?? "").trim();
+  const budgetPence = budgetRaw && Number(budgetRaw) > 0 ? Math.round(Number(budgetRaw) * 100) : null;
+
   const partySizeRaw = Number(formData.get("partySize"));
   if (!Number.isFinite(partySizeRaw) || partySizeRaw < 1) return { error: "Party size must be at least 1." };
   const partySize = Math.trunc(partySizeRaw);
@@ -71,7 +78,7 @@ export async function createManualEnquiry(formData: FormData): Promise<ActionRes
   // before a duration is actually chosen; it's revisable from the booking
   // details page once this is confirmed.
   const [sh, sm] = startTime.split(":").map(Number);
-  const endMinutes = sh * 60 + sm + bookingType.minDurationMinutes;
+  const endMinutes = (sh * 60 + sm + bookingType.minDurationMinutes) % (24 * 60);
   const endTime = `${String(Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
 
   const booking = await prisma.$transaction(async (tx) => {
@@ -101,9 +108,15 @@ export async function createManualEnquiry(formData: FormData): Promise<ActionRes
         customerPhone,
         notes,
         takenByStaffName,
+        occasion,
+        budgetPence,
+        enquiryStage: "NEW",
+        channel: "phone",
       },
     });
   });
+
+  await logBookingEvent({ bookingId: booking.id, actor: takenByStaffName, kind: "created", detail: `Enquiry taken for ${partySize} at ${startTime}` });
 
   // Send the branded "enquiry received" email and log it on the thread,
   // mirroring the customer widget. An enquiry always has an email (required

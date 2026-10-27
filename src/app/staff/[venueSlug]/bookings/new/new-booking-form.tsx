@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { createManualBooking, getTableAvailability } from "./actions";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createManualBooking, getTableAvailability, searchGuests, type GuestMatch } from "./actions";
 import { TimeFields, computeEndTime, type BookingTypeOption } from "./time-fields";
 import { Button } from "@/components/ui/button";
+import { DateSelect } from "@/components/date-select";
+import { OCCASIONS } from "@/lib/bookings/occasions";
 
 export interface TableOption {
   id: string;
@@ -14,39 +16,19 @@ export interface TableOption {
 }
 
 /**
- * The "Add booking" form, as one controlled client component rather than a
- * plain server-rendered <form> - three things needed that for:
+ * The "Add booking" form for phoned-in and in-person bookings.
  *
- * 1. Andy: "if there are any errors on the form when submitting a new
- *    booking it will clear the entire form rather than just flagging the
- *    issue and keeping the data." That was the old ActionForm-wrapped
- *    version's `<form action={formAction}>` (via useActionState) resetting
- *    every uncontrolled field once the action finished, success or error.
- *    Every field here is React state instead, so a failed submit changes
- *    nothing but the error message - nothing to reset.
- * 2. Live table availability/recommendation (below) needs the current
- *    date/booking type/time/party size on every change, which means
- *    controlled state for those regardless.
- * 3. The action is called directly (not wired to the form's `action` prop)
- *    so point 1 holds even if a future Next/React version changes exactly
- *    when the auto-reset fires - this form was never relying on that
- *    subtlety in the first place.
+ * Every field is React state, so a failed save shows the error and keeps
+ * everything typed. The action is called directly rather than through the
+ * form's action prop for the same reason.
  *
- * Table availability: debounced ~250ms after date/time/type/partySize
- * settle, calls getTableAvailability and greys out (disables) any table
- * already booked for that window, tagging the best-fit available table
- * "Recommended". For a party too big for any single table, that can be
- * more than one table - always a physically linked combination (see
- * getTableAvailability/findTableCombo's doc comments for why - never a
- * pair of tables with nothing joining them), shown with a summary line
- * above the grid as well as the per-table tag, since "these two together"
- * needs to read as one suggestion, not two independent ones. If a table
- * the user had already picked becomes unavailable because they changed
- * the time/date afterwards, it's dropped from the selection automatically
- * and flagged in a small notice rather than left silently
- * checked-but-disabled (a disabled checkbox doesn't get submitted with
- * the form at all, which would otherwise lose that table from the
- * booking without telling anyone).
+ * As the date, times, type and party size change, the table list below is
+ * refreshed (debounced) from getTableAvailability: booked tables are greyed
+ * out, the best fit is marked, and a picked table that becomes booked is
+ * dropped with a notice. Tables are grouped by area.
+ *
+ * Typing a name, email or phone looks up past guests, so a regular's
+ * details, tags and allergies can be filled in with one tap.
  */
 export function NewBookingForm({
   venueId,
@@ -54,32 +36,48 @@ export function NewBookingForm({
   defaultDate,
   bookingTypes,
   tables,
+  areas,
+  staffName,
 }: {
   venueId: string;
   venueSlug: string;
   defaultDate: string;
   bookingTypes: BookingTypeOption[];
   tables: TableOption[];
+  areas: { id: string; name: string }[];
+  staffName: string;
 }) {
   const [date, setDate] = useState(defaultDate);
   const [bookingTypeId, setBookingTypeId] = useState(bookingTypes[0]?.id ?? "");
   const [startTime, setStartTime] = useState("18:00");
   const [endTime, setEndTime] = useState(() => computeEndTime("18:00", bookingTypes[0]?.minDurationMinutes));
   const [partySize, setPartySize] = useState("2");
-  const [takenByStaffName, setTakenByStaffName] = useState("");
+  const [takenByStaffName, setTakenByStaffName] = useState(staffName);
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [occasion, setOccasion] = useState("");
+  const [dietaryNotes, setDietaryNotes] = useState("");
+  const [notes, setNotes] = useState("");
+  const [staffNotes, setStaffNotes] = useState("");
+  const [sendEmail, setSendEmail] = useState(true);
   const [tableIds, setTableIds] = useState<Set<string>>(new Set());
 
   const [unavailableTableIds, setUnavailableTableIds] = useState<Set<string>>(new Set());
   const [recommendedTableIds, setRecommendedTableIds] = useState<string[]>([]);
   const [removedNotice, setRemovedNotice] = useState<string | null>(null);
 
+  const [matches, setMatches] = useState<GuestMatch[]>([]);
+  const [pickedGuest, setPickedGuest] = useState<GuestMatch | null>(null);
+
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
   const requestId = useRef(0);
+  const searchId = useRef(0);
+
+  const [today] = useState(() => new Date().toISOString().slice(0, 10));
+  const isToday = date === today;
+  const hasEmail = customerEmail.includes("@");
 
   function handleBookingTypeChange(id: string) {
     setBookingTypeId(id);
@@ -102,9 +100,7 @@ export function NewBookingForm({
     });
   }
 
-  // Live availability lookup, debounced so switching booking type then
-  // adjusting start time doesn't fire two overlapping requests. requestId
-  // guards against an older, slower response landing after a newer one.
+  // Live table availability, debounced; requestId drops stale responses.
   useEffect(() => {
     const partySizeNum = Number(partySize);
     if (
@@ -118,38 +114,71 @@ export function NewBookingForm({
     ) {
       return;
     }
-
     const thisRequest = ++requestId.current;
     const timer = setTimeout(() => {
-      getTableAvailability({ venueId, date, startTime, endTime, bookingTypeId, partySize: partySizeNum }).then(
-        (result) => {
-          if (thisRequest !== requestId.current) return; // a newer request has already landed
-          setUnavailableTableIds(new Set(result.unavailableTableIds));
-          setRecommendedTableIds(result.recommendedTableIds);
-
-          setTableIds((prev) => {
-            const stillUnavailable = [...prev].filter((id) => result.unavailableTableIds.includes(id));
-            if (stillUnavailable.length === 0) return prev;
-            const labels = stillUnavailable
-              .map((id) => tables.find((t) => t.id === id)?.label)
-              .filter(Boolean)
-              .join(", ");
-            setRemovedNotice(`${labels} no longer available for this time, removed from your selection.`);
-            const next = new Set(prev);
-            for (const id of stillUnavailable) next.delete(id);
-            return next;
-          });
-        },
-      );
+      getTableAvailability({ venueId, date, startTime, endTime, bookingTypeId, partySize: partySizeNum }).then((result) => {
+        if (thisRequest !== requestId.current) return;
+        setUnavailableTableIds(new Set(result.unavailableTableIds));
+        setRecommendedTableIds(result.recommendedTableIds);
+        setTableIds((prev) => {
+          const nowBooked = [...prev].filter((id) => result.unavailableTableIds.includes(id));
+          if (nowBooked.length === 0) return prev;
+          const labels = nowBooked
+            .map((id) => tables.find((t) => t.id === id)?.label)
+            .filter(Boolean)
+            .join(", ");
+          setRemovedNotice(`${labels} ${nowBooked.length === 1 ? "is" : "are"} booked at this time, so we took ${nowBooked.length === 1 ? "it" : "them"} off.`);
+          const next = new Set(prev);
+          for (const id of nowBooked) next.delete(id);
+          return next;
+        });
+      });
     }, 250);
-
     return () => clearTimeout(timer);
   }, [venueId, date, startTime, endTime, bookingTypeId, partySize, tables]);
+
+  // Returning guest lookup on whichever contact field was typed in last.
+  function lookup(q: string) {
+    const query = q.trim();
+    const thisSearch = ++searchId.current;
+    if (query.length < 3) {
+      setMatches([]);
+      return;
+    }
+    setTimeout(() => {
+      if (thisSearch !== searchId.current) return;
+      searchGuests(venueId, query).then((found) => {
+        if (thisSearch === searchId.current) setMatches(found);
+      });
+    }, 250);
+  }
+
+  function pickGuest(g: GuestMatch) {
+    searchId.current++;
+    setPickedGuest(g);
+    setMatches([]);
+    setCustomerName(g.name);
+    setCustomerEmail(g.email ?? "");
+    setCustomerPhone(g.phone ?? "");
+    if (g.allergies && !dietaryNotes) setDietaryNotes(g.allergies);
+  }
+
+  const tablesByArea = useMemo(() => {
+    const groups = new Map<string, TableOption[]>();
+    for (const t of tables) {
+      const key = t.areaId ?? "";
+      groups.set(key, [...(groups.get(key) ?? []), t]);
+    }
+    const ordered = areas.filter((a) => groups.has(a.id)).map((a) => ({ name: a.name, tables: groups.get(a.id)! }));
+    if (groups.has("")) ordered.push({ name: areas.length > 0 ? "No area" : "Tables", tables: groups.get("")! });
+    return ordered;
+  }, [tables, areas]);
+
+  const pickedSeats = [...tableIds].reduce((sum, id) => sum + (tables.find((t) => t.id === id)?.maxCovers ?? 0), 0);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-
     const fd = new FormData();
     fd.set("venueId", venueId);
     fd.set("venueSlug", venueSlug);
@@ -162,157 +191,273 @@ export function NewBookingForm({
     fd.set("customerName", customerName);
     fd.set("customerEmail", customerEmail);
     fd.set("customerPhone", customerPhone);
+    fd.set("occasion", occasion);
+    fd.set("dietaryNotes", dietaryNotes);
+    fd.set("notes", notes);
+    fd.set("staffNotes", staffNotes);
+    fd.set("sendEmail", sendEmail && hasEmail ? "on" : "off");
     for (const id of tableIds) fd.append("tableIds", id);
-
     startTransition(async () => {
       const result = await createManualBooking(fd);
-      // A successful submit calls redirect() inside the action, which
-      // throws and never returns here - only a validation failure does.
-      if (result?.error) setError(result.error);
+      // Success redirects inside the action, so only an error comes back.
+      if (result?.error) {
+        setError(result.error);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     });
   }
 
+  const input = "rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm";
+  const sectionTitle = "text-xs font-semibold uppercase tracking-wide text-zinc-500";
+
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4">
+    <form onSubmit={submit} className="flex flex-col gap-6">
       {error && (
-        <p className="animate-in rounded-lg border border-red-100 bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-soft-text)]">
+        <p role="alert" className="animate-in rounded-lg border border-red-100 bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-soft-text)]">
           {error}
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-zinc-700">Date</span>
-          <input
-            type="date"
-            required
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="rounded-md border border-zinc-300 px-3 py-2"
+      <section className="flex flex-col gap-3">
+        <h2 className={sectionTitle}>When</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Date</span>
+            <DateSelect name="_date" defaultValue={date} onChange={(v) => v && setDate(v)} label="Booking date" />
+          </div>
+          <TimeFields
+            bookingTypes={bookingTypes}
+            bookingTypeId={bookingTypeId}
+            onBookingTypeChange={handleBookingTypeChange}
+            startTime={startTime}
+            onStartTimeChange={handleStartTimeChange}
+            endTime={endTime}
+            onEndTimeChange={setEndTime}
           />
-        </label>
-        <TimeFields
-          bookingTypes={bookingTypes}
-          bookingTypeId={bookingTypeId}
-          onBookingTypeChange={handleBookingTypeChange}
-          startTime={startTime}
-          onStartTimeChange={handleStartTimeChange}
-          endTime={endTime}
-          onEndTimeChange={setEndTime}
-        />
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Guests</span>
+            <input
+              type="number"
+              min={1}
+              required
+              inputMode="numeric"
+              value={partySize}
+              onChange={(e) => setPartySize(e.target.value)}
+              className={`${input} w-28`}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className={sectionTitle}>Guest</h2>
         <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-zinc-700">Party size</span>
-          <input
-            type="number"
-            min={1}
-            required
-            value={partySize}
-            onChange={(e) => setPartySize(e.target.value)}
-            className="rounded-md border border-zinc-300 px-3 py-2"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-zinc-700">Taken by</span>
+          <span className="text-sm font-medium text-zinc-700">Name</span>
           <input
             type="text"
-            placeholder="Your name"
-            value={takenByStaffName}
-            onChange={(e) => setTakenByStaffName(e.target.value)}
-            className="rounded-md border border-zinc-300 px-3 py-2"
+            required
+            autoComplete="off"
+            value={customerName}
+            onChange={(e) => {
+              setCustomerName(e.target.value);
+              setPickedGuest(null);
+              lookup(e.target.value);
+            }}
+            className={input}
           />
         </label>
-      </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Phone</span>
+            <input
+              type="tel"
+              autoComplete="off"
+              value={customerPhone}
+              onChange={(e) => {
+                setCustomerPhone(e.target.value);
+                setPickedGuest(null);
+                lookup(e.target.value);
+              }}
+              className={input}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Email</span>
+            <input
+              type="email"
+              autoComplete="off"
+              value={customerEmail}
+              onChange={(e) => {
+                setCustomerEmail(e.target.value);
+                setPickedGuest(null);
+                lookup(e.target.value);
+              }}
+              className={input}
+            />
+          </label>
+        </div>
+        <p className="-mt-1 text-xs text-zinc-500">
+          {isToday ? "Contact details are optional for tonight." : "For a future date, add a phone number or email."}
+        </p>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-zinc-700">Customer name</span>
-        <input
-          type="text"
-          required
-          value={customerName}
-          onChange={(e) => setCustomerName(e.target.value)}
-          className="rounded-md border border-zinc-300 px-3 py-2"
-        />
-      </label>
+        {matches.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 bg-white p-1 shadow-sm">
+            <p className="px-2 pt-1 text-xs font-medium text-zinc-500">Been in before?</p>
+            {matches.map((g) => (
+              <button
+                key={g.key}
+                type="button"
+                onClick={() => pickGuest(g)}
+                className="flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left hover:bg-zinc-50"
+              >
+                <span className="text-sm font-medium text-zinc-900">
+                  {g.name}
+                  {g.tags.map((t) => (
+                    <span key={t} className="ml-1.5 rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--accent-soft-text)]">
+                      {t}
+                    </span>
+                  ))}
+                </span>
+                <span className="text-xs text-zinc-500">
+                  {[g.phone, g.email, `${g.visits} ${g.visits === 1 ? "visit" : "visits"}`].filter(Boolean).join(" · ")}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+        {pickedGuest && (pickedGuest.allergies || pickedGuest.staffNotes || pickedGuest.noShows > 0) && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {pickedGuest.allergies && <p>Allergies on file: {pickedGuest.allergies}</p>}
+            {pickedGuest.staffNotes && <p>Note: {pickedGuest.staffNotes}</p>}
+            {pickedGuest.noShows > 0 && (
+              <p>
+                {pickedGuest.noShows} no-show{pickedGuest.noShows === 1 ? "" : "s"} before.
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Occasion</span>
+            <select value={occasion} onChange={(e) => setOccasion(e.target.value)} className={input}>
+              <option value="">None</option>
+              {OCCASIONS.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Allergies or dietary needs</span>
+            <input type="text" value={dietaryNotes} onChange={(e) => setDietaryNotes(e.target.value)} placeholder="e.g. nut allergy, 2 vegan" className={input} />
+          </label>
+        </div>
         <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-zinc-700">Email</span>
-          <input
-            type="email"
-            value={customerEmail}
-            onChange={(e) => setCustomerEmail(e.target.value)}
-            className="rounded-md border border-zinc-300 px-3 py-2"
-          />
+          <span className="text-sm font-medium text-zinc-700">Guest&apos;s requests</span>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Anything they asked for" className={input} />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-zinc-700">Phone</span>
-          <input
-            type="tel"
-            value={customerPhone}
-            onChange={(e) => setCustomerPhone(e.target.value)}
-            className="rounded-md border border-zinc-300 px-3 py-2"
-          />
+          <span className="text-sm font-medium text-zinc-700">Staff note</span>
+          <textarea value={staffNotes} onChange={(e) => setStaffNotes(e.target.value)} rows={2} placeholder="Only staff see this" className={input} />
         </label>
-      </div>
-      <p className="-mt-2 text-xs text-zinc-500">
-        Not required for a same-day booking. For a future date, at least one of email or phone is required.
-      </p>
+      </section>
 
-      <fieldset className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3">
-        <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Table(s)</legend>
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className={sectionTitle}>Tables</h2>
+          {tableIds.size > 0 && (
+            <span className="text-xs text-zinc-600">
+              {tableIds.size} picked, seats up to {pickedSeats}
+            </span>
+          )}
+        </div>
         {tables.length === 0 ? (
-          <p className="text-sm text-zinc-500">No tables set up for this venue yet.</p>
+          <p className="text-sm text-zinc-500">No tables set up yet. Add them in Settings, Tables and areas.</p>
         ) : (
           <>
             {removedNotice && <p className="text-xs text-[var(--danger-soft-text)]">{removedNotice}</p>}
-            {recommendedTableIds.length > 1 && (
-              <p className="text-xs font-medium text-[var(--success-soft-text)]">
-                Recommended combination: {recommendedLabel(recommendedTableIds, tables)}
-              </p>
+            {recommendedTableIds.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-medium text-[var(--success-soft-text)]">Best fit: {recommendedLabel(recommendedTableIds, tables)}</span>
+                <button
+                  type="button"
+                  onClick={() => setTableIds(new Set(recommendedTableIds))}
+                  className="rounded-md border border-zinc-300 px-2 py-0.5 font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  Use this
+                </button>
+              </div>
             )}
-            <div className="flex flex-wrap gap-2">
-              {tables.map((table) => {
-                const unavailable = unavailableTableIds.has(table.id);
-                const recommended = recommendedTableIds.includes(table.id);
-                const selected = tableIds.has(table.id);
-                return (
-                  <label
-                    key={table.id}
-                    className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                      unavailable
-                        ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400"
-                        : selected
-                          ? "cursor-pointer border-[var(--accent)] bg-[var(--accent-soft)]"
-                          : recommended
-                            ? "cursor-pointer border-[var(--success-soft-text)]/40 bg-[var(--success-soft)] hover:border-[var(--success-soft-text)]/60"
-                            : "cursor-pointer border-zinc-300 hover:border-zinc-400 hover:bg-zinc-50"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      disabled={unavailable}
-                      onChange={() => toggleTable(table.id)}
-                      className="h-4 w-4 rounded border-zinc-300"
-                    />
-                    {table.label}
-                    {unavailable && <span className="text-xs">(booked)</span>}
-                    {!unavailable && recommended && (
-                      <span className="text-xs font-medium text-[var(--success-soft-text)]">Recommended</span>
-                    )}
-                  </label>
-                );
-              })}
+            <div className="flex flex-col gap-3">
+              {tablesByArea.map((group) => (
+                <div key={group.name} className="flex flex-col gap-1.5">
+                  {tablesByArea.length > 1 && <span className="text-xs font-medium text-zinc-500">{group.name}</span>}
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.tables.map((table) => {
+                      const unavailable = unavailableTableIds.has(table.id);
+                      const recommended = recommendedTableIds.includes(table.id);
+                      const selected = tableIds.has(table.id);
+                      return (
+                        <label
+                          key={table.id}
+                          title={`Seats ${table.minCovers} to ${table.maxCovers}`}
+                          className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--accent)] ${
+                            unavailable
+                              ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400 line-through"
+                              : selected
+                                ? "cursor-pointer border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-soft-text)]"
+                                : recommended
+                                  ? "cursor-pointer border-[var(--success-soft-text)]/40 bg-[var(--success-soft)]"
+                                  : "cursor-pointer border-zinc-300 bg-white hover:border-zinc-400"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={unavailable}
+                            onChange={() => toggleTable(table.id)}
+                            className="sr-only"
+                          />
+                          <span className="font-medium">{table.label}</span>
+                          <span className="text-xs opacity-70">{table.maxCovers}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
+            <p className="text-xs text-zinc-500">Crossed out tables are already booked at this time. The number is how many each seats.</p>
           </>
         )}
-      </fieldset>
+      </section>
 
-      <div>
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Adding…" : "Add booking"}
-        </Button>
-      </div>
+      <section className="flex flex-col gap-3 border-t border-zinc-100 pt-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-zinc-700">Taken by</span>
+            <input type="text" value={takenByStaffName} onChange={(e) => setTakenByStaffName(e.target.value)} className={input} />
+          </label>
+          <label className={`flex items-center gap-2 self-end pb-2 text-sm ${hasEmail ? "text-zinc-700" : "text-zinc-400"}`}>
+            <input
+              type="checkbox"
+              checked={sendEmail && hasEmail}
+              disabled={!hasEmail}
+              onChange={(e) => setSendEmail(e.target.checked)}
+              className="h-4 w-4 rounded border-zinc-300"
+            />
+            Email the guest a confirmation
+          </label>
+        </div>
+        <div>
+          <Button type="submit" disabled={isPending}>
+            {isPending ? "Adding..." : "Add booking"}
+          </Button>
+        </div>
+      </section>
     </form>
   );
 }
@@ -320,5 +465,5 @@ export function NewBookingForm({
 function recommendedLabel(ids: string[], tables: TableOption[]): string {
   const picked = ids.map((id) => tables.find((t) => t.id === id)).filter((t): t is TableOption => Boolean(t));
   const seats = picked.reduce((s, t) => s + t.maxCovers, 0);
-  return `${picked.map((t) => t.label).join(" + ")} (seats up to ${seats})`;
+  return `${picked.map((t) => t.label).join(" + ")} (seats ${seats})`;
 }

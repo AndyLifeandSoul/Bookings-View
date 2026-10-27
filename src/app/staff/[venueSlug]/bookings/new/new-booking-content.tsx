@@ -29,13 +29,14 @@ export async function NewBookingBody({
   /** "page": standalone page. "modal": rendered inside the diary overlay, adds a close button. */
   mode?: "page" | "modal";
 }) {
-  const { venue } = await requireStaffVenue(venueSlug);
+  const { venue, session } = await requireStaffVenue(venueSlug);
   const date = defaultDate && /^\d{4}-\d{2}-\d{2}$/.test(defaultDate) ? defaultDate : todayStr();
 
-  const [bookingTypes, tablesRaw] = await Promise.all([
+  const [bookingTypes, tablesRaw, areas] = await Promise.all([
     prisma.bookingType.findMany({ where: { venueId: venue.id, active: true }, orderBy: { sortOrder: "asc" } }),
     // No orderBy, see naturalSortTables' doc comment.
     prisma.table.findMany({ where: { venueId: venue.id, active: true } }),
+    prisma.area.findMany({ where: { venueId: venue.id }, orderBy: { priority: "asc" }, select: { id: true, name: true } }),
   ]);
   const tables = naturalSortTables(tablesRaw);
 
@@ -57,6 +58,8 @@ export async function NewBookingBody({
           defaultDate={date}
           bookingTypes={bookingTypes.map((t) => ({ id: t.id, name: t.name, minDurationMinutes: t.minDurationMinutes }))}
           tables={tables.map((t) => ({ id: t.id, label: t.label, minCovers: t.minCovers, maxCovers: t.maxCovers, areaId: t.areaId }))}
+          areas={areas}
+          staffName={session.name}
         />
       </Card>
     </>
