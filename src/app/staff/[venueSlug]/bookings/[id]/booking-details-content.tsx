@@ -21,7 +21,7 @@ import {
   addPreOrderItems,
   markNoShow,
   shiftBookingRunningLate,
-  updateCustomerNotes,
+  updateGuestProfile,
   refundBookingAction,
   chargeNoShowFeeAction,
   cancelBookingAction,
@@ -31,7 +31,8 @@ import { EnquiryPanel } from "./enquiry-panel";
 import { TimeSelect } from "@/components/time-select";
 import { OCCASIONS, occasionLabel } from "@/lib/bookings/occasions";
 import { buildPreOrderLink } from "@/lib/pre-order/links";
-import { customerIdentity, getStaffNotes } from "@/lib/admin/customer-record";
+import { customerIdentity, getCustomerProfile, guestHistory } from "@/lib/admin/customer-record";
+import { GuestPanel } from "@/components/guest-panel";
 import { groupPreOrderItems, preOrderLineUnitPricePence } from "@/lib/pre-order/group-items";
 import { TableSelectionFields } from "./table-selection-fields";
 import { naturalSortTables } from "@/lib/tables/natural-sort";
@@ -135,7 +136,9 @@ export async function BookingDetailsBody({
   // on the booking's email/phone identity - shown and edited below when the
   // booking has an identity to hang them on. See customer-record.ts.
   const customerIdentityKey = customerIdentity(booking.customerEmail, booking.customerPhone);
-  const customerStaffNotes = customerIdentityKey ? await getStaffNotes(customerIdentityKey) : null;
+  const [guestProfile, guestVisits] = customerIdentityKey
+    ? await Promise.all([getCustomerProfile(customerIdentityKey), guestHistory(customerIdentityKey)])
+    : [null, []];
 
   // Every active item on the booking's pre-order menu, with its full
   // modifier customisation wizard if it has one - fetched only once we
@@ -495,34 +498,23 @@ export async function BookingDetailsBody({
             </Card>
           </section>
 
-          {customerIdentityKey && (
+          {customerIdentityKey && guestProfile && (
             <section>
               <h2 className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-zinc-900">
                 <StickyNote className="h-4 w-4 text-zinc-400" strokeWidth={2.25} />
-                Customer notes
+                Guest
               </h2>
-              <Card className="mt-3">
-                <ActionForm key={customerStaffNotes ?? ""} action={updateCustomerNotes} className="flex flex-col gap-3">
-                  <input type="hidden" name="id" value={booking.id} />
-                  <input type="hidden" name="venueId" value={venue.id} />
-                  <input type="hidden" name="venueSlug" value={venue.slug} />
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm text-zinc-500">
-                      Private notes about this customer, kept across all their bookings. Not shown to the customer.
-                    </span>
-                    <textarea
-                      name="staffNotes"
-                      rows={3}
-                      defaultValue={customerStaffNotes ?? ""}
-                      placeholder="e.g. Regular, prefers the window table. Requested a high chair last time."
-                      className="rounded-md border border-zinc-300 px-3 py-2"
-                    />
-                  </label>
-                  <div>
-                    <SubmitButton label="Save customer notes" pendingLabel="Saving…" className={buttonStyles("primary", "md")} />
-                  </div>
-                </ActionForm>
-              </Card>
+              <div className="mt-3">
+                <GuestPanel
+                  key={`${guestProfile.tags.join("|")}:${guestProfile.allergies}:${guestProfile.staffNotes}`}
+                  profile={guestProfile}
+                  visits={guestVisits}
+                  currentBookingId={booking.id}
+                  action={updateGuestProfile}
+                  hidden={{ id: booking.id, venueId: venue.id, venueSlug: venue.slug }}
+                  visitHref={(v) => `/staff/${v.venueSlug}/bookings/${v.id}`}
+                />
+              </div>
             </section>
           )}
 

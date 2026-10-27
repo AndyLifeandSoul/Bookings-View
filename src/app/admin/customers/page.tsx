@@ -6,6 +6,7 @@ import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EraseCustomerButton } from "./erase-customer-button";
+import { DateSelect } from "@/components/date-select";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ interface SearchParams {
   dateFrom?: string;
   dateTo?: string;
   birthdayMonth?: string; // "" | "1".."12"
+  q?: string;
 }
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -34,7 +36,15 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     birthdayMonth: params.birthdayMonth ? Number(params.birthdayMonth) : undefined,
   };
 
-  const customers = await getCustomers(filters);
+  const search = (params.q ?? "").trim().toLowerCase();
+  const digits = search.replace(/\D/g, "");
+  const customers = (await getCustomers(filters)).filter(
+    (c) =>
+      !search ||
+      c.name.toLowerCase().includes(search) ||
+      (c.email ?? "").toLowerCase().includes(search) ||
+      (digits.length >= 4 && (c.phone ?? "").replace(/\D/g, "").includes(digits)),
+  );
   const exportQuery = new URLSearchParams(
     Object.entries(params).filter(([, v]) => v) as [string, string][],
   ).toString();
@@ -57,6 +67,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
 
       <Card className="mt-6">
         <form method="get" className="flex flex-wrap items-end gap-3">
+          <label className="flex min-w-[14rem] flex-1 flex-col gap-1">
+            <span className="text-xs font-medium text-zinc-600">Search</span>
+            <input type="search" name="q" defaultValue={params.q ?? ""} placeholder="Name, email or phone" className="rounded-md border border-zinc-300 px-3 py-2 text-sm" />
+          </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-zinc-600">Venue</span>
             <select name="venueId" defaultValue={params.venueId ?? ""} className="rounded-md border border-zinc-300 px-3 py-2 text-sm">
@@ -78,11 +92,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-zinc-600">Booking from</span>
-            <input type="date" name="dateFrom" defaultValue={params.dateFrom ?? ""} className="rounded-md border border-zinc-300 px-3 py-2 text-sm" />
+            <DateSelect name="dateFrom" label="Booking from" defaultValue={params.dateFrom ?? ""} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-zinc-600">Booking to</span>
-            <input type="date" name="dateTo" defaultValue={params.dateTo ?? ""} className="rounded-md border border-zinc-300 px-3 py-2 text-sm" />
+            <DateSelect name="dateTo" label="Booking to" defaultValue={params.dateTo ?? ""} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-zinc-600">Birthday month</span>
@@ -134,7 +148,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                     key={c.email ?? c.phone ?? `${c.name}-${i}`}
                     className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40"
                   >
-                    <td className="px-4 py-3 font-medium text-zinc-900">{c.name}</td>
+                    <td className="px-4 py-3 font-medium text-zinc-900">
+                      <Link href={`/admin/customers/b/${c.latestBookingId}`} className="hover:text-[var(--accent)] hover:underline">
+                        {c.name}
+                      </Link>
+                    </td>
                     <td className="px-4 py-3 text-zinc-600">
                       <div>{c.email ?? "-"}</div>
                       {c.phone && <div className="text-xs text-zinc-400">{c.phone}</div>}

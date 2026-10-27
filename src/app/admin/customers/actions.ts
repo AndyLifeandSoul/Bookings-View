@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "@/lib/admin/require-admin-session";
-import { customerIdentity, eraseCustomerData } from "@/lib/admin/customer-record";
+import { customerIdentity, eraseCustomerData, setCustomerProfile } from "@/lib/admin/customer-record";
+import { prisma } from "@/lib/db/client";
+import { tagsFromForm } from "@/lib/admin/guest-tags";
 import type { ActionResult } from "@/components/action-form";
 
 /**
@@ -33,4 +35,23 @@ export async function eraseCustomer(formData: FormData): Promise<ActionResult> {
   // confirmation - the shared ActionResult has no success-message channel,
   // so return nothing and let the refreshed list show the result.
   revalidatePath("/admin/customers");
+}
+
+/** Tags, allergies and private notes from the customer profile page, keyed by one of the guest's bookings. */
+export async function updateCustomerProfile(formData: FormData): Promise<ActionResult> {
+  await requireAdminSession();
+  const bookingId = String(formData.get("bookingId") ?? "");
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId }, select: { customerName: true, customerEmail: true, customerPhone: true, date: true } });
+  if (!booking) return { error: "That guest's booking no longer exists." };
+  const identity = customerIdentity(booking.customerEmail, booking.customerPhone);
+  if (!identity) return { error: "No email or phone to keep a guest record against." };
+  await setCustomerProfile({
+    identity,
+    name: booking.customerName,
+    seedBookingDate: booking.date,
+    tags: tagsFromForm(formData),
+    allergies: String(formData.get("allergies") ?? "").slice(0, 300),
+    notes: String(formData.get("staffNotes") ?? "").slice(0, 2000),
+  });
+  revalidatePath(`/admin/customers/b/${bookingId}`);
 }

@@ -134,3 +134,101 @@ export async function eraseCustomerData(identity: CustomerIdentity): Promise<{ b
   ]);
   return { bookingsScrubbed: updated.count };
 }
+
+export interface CustomerProfile {
+  tags: string[];
+  allergies: string;
+  staffNotes: string;
+}
+
+/** Tags, allergies and notes for this identity (empty when there's no Customer row yet). */
+export async function getCustomerProfile(identity: CustomerIdentity): Promise<CustomerProfile> {
+  const row = await findCustomerRow(identity);
+  return { tags: row?.tags ?? [], allergies: row?.allergies ?? "", staffNotes: row?.staffNotes ?? "" };
+}
+
+/** Saves tags, allergies and notes, creating the Customer row if needed (same rules as setStaffNotes). */
+export async function setCustomerProfile(params: {
+  identity: CustomerIdentity;
+  name: string;
+  seedBookingDate: Date;
+  tags: string[];
+  allergies: string;
+  notes: string;
+}): Promise<void> {
+  const data = {
+    tags: [...new Set(params.tags.map((t) => t.trim()).filter(Boolean))].slice(0, 12),
+    allergies: params.allergies.trim() || null,
+    staffNotes: params.notes.trim() || null,
+  };
+  const existing = await findCustomerRow(params.identity);
+  if (existing) {
+    await prisma.customer.update({ where: { id: existing.id }, data });
+    return;
+  }
+  await prisma.customer.create({
+    data: { email: params.identity.email, phone: params.identity.phone, name: params.name, lastBookingDate: params.seedBookingDate, ...data },
+  });
+}
+
+export interface GuestVisit {
+  id: string;
+  date: Date;
+  startTime: string;
+  partySize: number;
+  status: string;
+  venueName: string;
+  venueSlug: string;
+  typeName: string;
+  paidPence: number;
+}
+
+/** Every booking this person has made, at any venue, newest first. */
+export async function guestHistory(identity: CustomerIdentity): Promise<GuestVisit[]> {
+  const select = {
+    id: true,
+    date: true,
+    startTime: true,
+    partySize: true,
+    status: true,
+    customerPhone: true,
+    venue: { select: { name: true, slug: true } },
+    bookingType: { select: { name: true } },
+    payments: { where: { status: { in: ["CAPTURED", "REFUNDED"] as ("CAPTURED" | "REFUNDED")[] } }, select: { amountInPence: true, refundedAmountInPence: true } },
+  } as const;
+  const rows = identity.email
+    ? await prisma.booking.findMany({ where: { customerEmail: { equals: identity.email, mode: "insensitive" } }, orderBy: [{ date: "desc" }, { startTime: "desc" }], select })
+    : (
+        await prisma.booking.findMany({
+          where: { customerEmail: null, customerPhone: { not: null } },
+          orderBy: [{ date: "desc" }, { startTime: "desc" }],
+          select,
+        })
+      ).filter((b) => b.customerPhone!.replace(/\s+/g, "") === identity.phone);
+  return rows.map((b) => ({
+    id: b.id,
+    date: b.date,
+    startTime: b.startTime,
+    partySize: b.partySize,
+    status: b.status,
+    venueName: b.venue.name,
+    venueSlug: b.venue.slug,
+    typeName: b.bookingType.name,
+    paidPence: b.payments.reduce((s, p) => s + p.amountInPence - p.refundedAmountInPence, 0),
+  }));
+}
+
+/** The headline numbers for a guest: visits so far, no-shows, cancellations, spend online. */
+export function guestStats(visits: GuestVisit[], today = new Date()) {
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const past = visits.filter((v) => v.date.getTime() < todayUtc);
+  const came = past.filter((v) => v.status === "COMPLETED" || v.status === "CONFIRMED");
+  return {
+    visits: came.length,
+    noShows: visits.filter((v) => v.status === "NO_SHOW").length,
+    cancellations: visits.filter((v) => v.status === "CANCELLED").length,
+    upcoming: visits.filter((v) => v.date.getTime() >= todayUtc && (v.status === "CONFIRMED" || v.status === "PENDING_PAYMENT" || v.status === "ENQUIRY")).length,
+    spentPence: visits.reduce((s, v) => s + v.paidPence, 0),
+    lastVisit: came[0]?.date ?? null,
+  };
+}

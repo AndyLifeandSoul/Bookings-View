@@ -15,7 +15,8 @@ import { PAYMENT_ACCOUNT_CODES, type PaymentAccountCode } from "@/lib/payments/t
 import { getCustomerAppUrl } from "@/lib/pre-order/links";
 import { validateAndPricePreOrder, InvalidPreOrderError, type PreOrderLineInput, type PreOrderModifierInput } from "@/lib/pre-order/validate";
 import { toMinutes, formatMinutes } from "@/lib/bookings/time";
-import { customerIdentity, setStaffNotes } from "@/lib/admin/customer-record";
+import { customerIdentity, setCustomerProfile, setStaffNotes } from "@/lib/admin/customer-record";
+import { tagsFromForm } from "@/lib/admin/guest-tags";
 import { resolveVenueLogoUrl } from "@/lib/venues/logo";
 import { logBookingEvent } from "@/lib/bookings/events";
 import { isOccasion, occasionLabel } from "@/lib/bookings/occasions";
@@ -286,6 +287,28 @@ export async function updateCustomerNotes(formData: FormData): Promise<ActionRes
   const notes = String(formData.get("staffNotes") ?? "");
   await setStaffNotes({ identity, name: booking.customerName, seedBookingDate: booking.date, notes });
 
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+}
+
+/** Tags, allergies and private notes for the guest, kept across all their bookings (Customer row). */
+export async function updateGuestProfile(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+  const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { customerName: true, customerEmail: true, customerPhone: true, date: true } });
+  if (!booking) return { error: "Booking not found for this venue." };
+  const identity = customerIdentity(booking.customerEmail, booking.customerPhone);
+  if (!identity) return { error: "This booking has no email or phone, so there's no guest record to save to." };
+  await setCustomerProfile({
+    identity,
+    name: booking.customerName,
+    seedBookingDate: booking.date,
+    tags: tagsFromForm(formData),
+    allergies: String(formData.get("allergies") ?? "").slice(0, 300),
+    notes: String(formData.get("staffNotes") ?? "").slice(0, 2000),
+  });
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
 }
 

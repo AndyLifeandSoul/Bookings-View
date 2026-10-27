@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users2, LogIn, LogOut, ArrowRight, X, StickyNote, UtensilsCrossed, AlertTriangle, Cake } from "lucide-react";
+import { Users2, LogIn, LogOut, ArrowRight, X, StickyNote, UtensilsCrossed, AlertTriangle, Cake, Star } from "lucide-react";
 import { moveBookingTable } from "./actions";
 import { checkInBooking, checkOutBooking, undoCheckOut } from "../bookings/[id]/actions";
 import { buttonStyles } from "@/components/ui/button";
@@ -37,6 +37,8 @@ export interface DiaryBooking {
   allergy: string | null;
   /** Occasion key (BIRTHDAY etc.), flagged on the block. */
   occasion: string | null;
+  /** Tags on the guest's record, e.g. VIP or Regular. */
+  tags?: string[];
   /** True once a customer has submitted a pre-order for this booking (Booking.preOrder), see the booking details page's Pre-order section. Same "surface it on the block, don't make staff open the booking to find out" reasoning as notes. */
   hasPreOrder: boolean;
   /** True when this booking has an unread INBOUND message (a customer reply staff haven't marked read). Drives the message icon on the sidebar row. */
@@ -293,6 +295,7 @@ export function DiaryGrid({
     const preOrderTitle = booking.hasPreOrder ? " · pre-order received" : "";
     const allergyTitle = booking.allergy ? ` · ALLERGY: ${booking.allergy}` : "";
     const occasionTitle = booking.occasion ? ` · ${booking.occasion.toLowerCase()}` : "";
+    const tagTitle = booking.tags?.length ? ` · ${booking.tags.join(", ")}` : "";
     return (
       <button
         type="button"
@@ -305,7 +308,7 @@ export function DiaryGrid({
           );
         }}
         onClick={(e) => openPopover(booking, e)}
-        title={`${booking.bookingTypeName} · ${booking.customerName} · ${booking.partySize} guests · ${booking.startTime}-${booking.endTime}${checkInOutTitle}${allergyTitle}${occasionTitle}${noteTitle}${preOrderTitle}`}
+        title={`${booking.bookingTypeName} · ${booking.customerName} · ${booking.partySize} guests · ${booking.startTime}-${booking.endTime}${checkInOutTitle}${tagTitle}${allergyTitle}${occasionTitle}${noteTitle}${preOrderTitle}`}
         className={`absolute top-1 bottom-1 flex cursor-pointer flex-col overflow-hidden rounded-md border text-left text-xs leading-tight shadow-sm transition-all duration-150 hover:z-10 hover:-translate-y-0.5 hover:shadow-md ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"} ${booking.checkedOutAt ? "opacity-50" : ""} ${!isPrimary ? "opacity-60 saturate-50" : ""}`}
         style={{ left: `${pctLeft(toMinutes(booking.startTime))}%`, width: `${pctWidth(toMinutes(booking.startTime), toMinutes(booking.endTime))}%` }}
       >
@@ -317,6 +320,7 @@ export function DiaryGrid({
           <span className="flex shrink-0 items-center gap-1">
             {booking.allergy && <AlertTriangle className="h-2.5 w-2.5" strokeWidth={2.75} aria-label="Allergy" />}
             {booking.occasion && <Cake className="h-2.5 w-2.5" strokeWidth={2.5} aria-label="Occasion" />}
+            {booking.tags?.includes("VIP") && <Star className="h-2.5 w-2.5" strokeWidth={2.75} aria-label="VIP" />}
             {booking.hasPreOrder && <UtensilsCrossed className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden="true" />}
             {booking.notes && <StickyNote className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden="true" />}
             {booking.checkedOutAt ? (

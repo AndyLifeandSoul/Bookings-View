@@ -20,6 +20,8 @@ export interface Customer {
   venueNames: string[];
   bookingCount: number;
   lastBookingDate: Date;
+  /** The newest booking, used to open the profile without putting contact details in the URL. */
+  latestBookingId: string;
 }
 
 /**
@@ -81,6 +83,7 @@ export async function getCustomers(filters: CustomerFilters): Promise<Customer[]
         venueNames: [b.venue.name],
         bookingCount: 1,
         lastBookingDate: b.date,
+        latestBookingId: b.id,
       });
     } else {
       existing.bookingCount += 1;

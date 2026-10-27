@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db/client";
+import { guestFlagsFor } from "@/lib/admin/guest-flags";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { occasionLabel } from "@/lib/bookings/occasions";
 import { PrintButton } from "../bookings/[id]/pre-order/print/print-button";
@@ -36,6 +37,7 @@ export default async function RunSheetPage({ params, searchParams }: { params: P
       status: true,
       customerName: true,
       customerPhone: true,
+      customerEmail: true,
       occasion: true,
       dietaryNotes: true,
       notes: true,
@@ -50,6 +52,12 @@ export default async function RunSheetPage({ params, searchParams }: { params: P
     },
   });
 
+  // Allergies and tags kept on the guest's record count too, not just this booking's.
+  const flags = await guestFlagsFor(bookings);
+  for (const b of bookings) {
+    const f = flags.get(b.id);
+    if (f?.allergies && !b.dietaryNotes) b.dietaryNotes = f.allergies;
+  }
   const live = bookings.filter((b) => b.status !== "ENQUIRY");
   const covers = live.reduce((s, b) => s + b.partySize, 0);
   const byType = new Map<string, { bookings: number; covers: number }>();
@@ -157,6 +165,7 @@ export default async function RunSheetPage({ params, searchParams }: { params: P
                 <td className="py-1.5 pr-2 font-semibold tabular-nums">{b.startTime}</td>
                 <td className="py-1.5 pr-2">
                   <span className="font-semibold">{b.customerName}</span>
+                  {flags.get(b.id)?.tags.length ? <span className="ml-1 text-xs font-semibold uppercase">[{flags.get(b.id)!.tags.join(", ")}]</span> : null}
                   {b.status === "ENQUIRY" && <span className="ml-1 text-xs">(enquiry)</span>}
                   {b.customerPhone && <div className="text-xs text-zinc-600">{b.customerPhone}</div>}
                 </td>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, MessageCirclePlus, ArrowLeft, ArrowRight, List, CalendarOff, CalendarDays, Printer } from "lucide-react";
 import { prisma } from "@/lib/db/client";
+import { guestFlagsFor } from "@/lib/admin/guest-flags";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { getDayWindow } from "@/lib/staff/get-day-window";
 import { DiaryGrid, type DiaryBooking, type DiaryTable } from "./diary-grid";
@@ -67,6 +68,7 @@ export default async function DiaryPage({
     label: t.label,
     areaName: t.area?.name ?? null,
   }));
+  const flags = await guestFlagsFor(bookingRows);
   const diaryBookings: DiaryBooking[] = bookingRows.map((b) => ({
     id: b.id,
     customerName: b.customerName,
@@ -80,7 +82,8 @@ export default async function DiaryPage({
     checkedInAt: b.checkedInAt ? b.checkedInAt.toISOString() : null,
     checkedOutAt: b.checkedOutAt ? b.checkedOutAt.toISOString() : null,
     notes: [b.notes, b.staffNotes].filter(Boolean).join(" / ") || null,
-    allergy: b.dietaryNotes,
+    allergy: b.dietaryNotes || flags.get(b.id)?.allergies || null,
+    tags: flags.get(b.id)?.tags ?? [],
     occasion: b.occasion,
     hasPreOrder: Boolean(b.preOrder),
     hasUnreadMessage: b.messages.length > 0,
