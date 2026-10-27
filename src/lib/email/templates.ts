@@ -49,6 +49,8 @@ export interface EmailContent {
   details?: { label: string; value: string }[];
   /** Optional call-to-action button. */
   button?: EmailButton;
+  /** Optional smaller links under the button, e.g. "Add to calendar". */
+  links?: EmailButton[];
   /** Optional closing paragraphs after the details/button. */
   outro?: string[];
 }
@@ -112,6 +114,13 @@ export function renderVenueEmail(brand: VenueBrand, content: EmailContent): Rend
       ? `<div style="margin:24px 0;text-align:center;"><a href="${esc(buttonHref)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;">${esc(content.button.label)}</a></div>`
       : "";
 
+  const linksHtml = (content.links ?? [])
+    .map((l) => ({ label: l.label, href: safeUrl(l.url) }))
+    .filter((l): l is { label: string; href: string } => Boolean(l.href))
+    .map((l) => `<a href="${esc(l.href)}" style="color:${accent};font-size:14px;font-weight:600;text-decoration:underline;">${esc(l.label)}</a>`)
+    .join('<span style="color:#d4d4d8;">&nbsp;&nbsp;|&nbsp;&nbsp;</span>');
+  const linksBlock = linksHtml ? `<div style="margin:-8px 0 20px;text-align:center;">${linksHtml}</div>` : "";
+
   const paragraph = (t: string) => `<p style="margin:0 0 14px;color:#3f3f46;font-size:15px;line-height:1.55;">${esc(t)}</p>`;
   const introHtml = content.intro.map(paragraph).join("");
   const outroHtml = (content.outro ?? []).map(paragraph).join("");
@@ -129,6 +138,7 @@ export function renderVenueEmail(brand: VenueBrand, content: EmailContent): Rend
           ${introHtml}
           ${detailsHtml}
           ${buttonHtml}
+          ${linksBlock}
           ${outroHtml}
         </td></tr>
         <tr><td style="padding:18px 32px;background:#fafafa;border-top:1px solid #e4e4e7;color:#a1a1aa;font-size:12px;line-height:1.5;">${footerHtml(brand)}</td></tr>
@@ -147,6 +157,10 @@ export function renderVenueEmail(brand: VenueBrand, content: EmailContent): Rend
   }
   if (content.button && buttonHref) {
     textParts.push("", `${content.button.label}: ${buttonHref}`);
+  }
+  for (const l of content.links ?? []) {
+    const href = safeUrl(l.url);
+    if (href) textParts.push(`${l.label}: ${href}`);
   }
   if (content.outro && content.outro.length > 0) {
     textParts.push("", ...content.outro);

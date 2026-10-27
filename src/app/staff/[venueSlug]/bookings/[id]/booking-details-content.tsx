@@ -27,6 +27,7 @@ import {
   cancelBookingAction,
 } from "./actions";
 import { DateSelect } from "@/components/date-select";
+import { EnquiryPanel } from "./enquiry-panel";
 import { TimeSelect } from "@/components/time-select";
 import { OCCASIONS, occasionLabel } from "@/lib/bookings/occasions";
 import { buildPreOrderLink } from "@/lib/pre-order/links";
@@ -90,6 +91,7 @@ export async function BookingDetailsBody({
         },
         preOrderInvite: { select: { token: true, menuId: true, categoryIds: true, submittedAt: true } },
         events: { orderBy: { at: "desc" }, take: 50 },
+        paymentStages: { orderBy: { sortOrder: "asc" }, select: { id: true, label: true, amountPence: true, dueDate: true, paidAt: true } },
         addOns: { select: { nameSnapshot: true, quantity: true, unitPricePence: true } },
       },
     }),
@@ -175,6 +177,10 @@ export async function BookingDetailsBody({
       })
     : [];
   const tables = naturalSortTables(tablesRaw);
+  const team =
+    booking.status === "ENQUIRY"
+      ? await prisma.staffUser.findMany({ where: { active: true, OR: [{ venueId: venue.id }, { venueId: null }] }, orderBy: { name: "asc" }, select: { id: true, name: true } })
+      : [];
   const refundable = payments.reduce((sum, p) => sum + (p.status === "CAPTURED" ? p.amountInPence - p.refundedAmountInPence : 0), 0);
 
   const assignedTableIds = new Set(booking.bookingTables.map((bt) => bt.tableId));
@@ -316,6 +322,7 @@ export async function BookingDetailsBody({
         )}
 
         <div className="mt-8 flex flex-col gap-8">
+          {booking.status === "ENQUIRY" && <EnquiryPanel booking={booking} venue={venue} team={team} />}
           {/*
            * Details and Tables merged into one compact card, per the
            * parity review (section 14/15): DesignMyNight's overlay is one
