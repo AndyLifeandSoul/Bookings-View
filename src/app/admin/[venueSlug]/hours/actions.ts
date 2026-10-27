@@ -87,7 +87,7 @@ export async function saveWeeklyHours(formData: FormData): Promise<ActionResult>
     const opensAt = composeTime(formData, `opensAt-${day}`);
     const closesAt = composeTime(formData, `closesAt-${day}`);
     if (!TIME_RE.test(opensAt) || !TIME_RE.test(closesAt)) {
-      return { error: `Invalid opening hours for ${DAY_NAME(day)}: "${opensAt}"–"${closesAt}". Use HH:mm, e.g. 09:00.` };
+      return { error: `Invalid opening hours for ${DAY_NAME(day)}: "${opensAt}" to "${closesAt}". Use HH:mm, e.g. 09:00.` };
     }
     openDays.push({ day, opensAt, closesAt, mode: state === "private_hire_only" ? "PRIVATE_HIRE_ONLY" : "OPEN" });
   }
@@ -134,7 +134,8 @@ export async function addOverride(formData: FormData): Promise<ActionResult> {
   if ("error" in venue) return venue;
 
   const dateFromStr = composeDate(formData, "dateFrom");
-  const dateToStr = composeDate(formData, "dateTo");
+  // A blank "until" means a single day.
+  const dateToStr = composeDate(formData, "dateTo") || composeDate(formData, "dateFrom");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFromStr) || !/^\d{4}-\d{2}-\d{2}$/.test(dateToStr)) {
     return { error: "Choose a full start date and end date (day, month and year)." };
   }
@@ -163,7 +164,7 @@ export async function addOverride(formData: FormData): Promise<ActionResult> {
     // Special/altered hours: times are how this row does anything at all,
     // so they're required, same as the old "Closed all day" unchecked case.
     if (!TIME_RE.test(startTimeRaw) || !TIME_RE.test(endTimeRaw)) {
-      return { error: `Special hours need both a start and end time. Got "${startTimeRaw}"–"${endTimeRaw}".` };
+      return { error: "Choose the opening and closing time for these dates." };
     }
     startTime = startTimeRaw;
     endTime = endTimeRaw;
@@ -172,7 +173,7 @@ export async function addOverride(formData: FormData): Promise<ActionResult> {
     // allowed to wrap past midnight, it's a carve-out *within* a day's
     // existing window, not a closing time.
     if (!TIME_RE.test(startTimeRaw) || !TIME_RE.test(endTimeRaw)) {
-      return { error: `A blocked window needs both a start and end time. Got "${startTimeRaw}"–"${endTimeRaw}".` };
+      return { error: "Choose when the blocked time starts and ends." };
     }
     if (endTimeRaw <= startTimeRaw) {
       return { error: "A blocked period's end time must be after its start time." };

@@ -3,6 +3,7 @@ import { Building2, ChevronRight } from "lucide-react";
 import { prisma } from "@/lib/db/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { venueReadiness } from "@/lib/admin/readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,15 @@ export default async function SettingsVenuePickerPage() {
     orderBy: { name: "asc" },
     select: { id: true, slug: true, name: true, active: true, address: true },
   });
+  const readiness = new Map(
+    await Promise.all(
+      venues.map(async (v) => {
+        const r = await venueReadiness(v.id);
+        const req = r.items.filter((i) => i.required);
+        return [v.id, { live: r.live, left: req.filter((i) => !i.done).length }] as const;
+      }),
+    ),
+  );
 
   return (
     // See admin/page.tsx's doc comment, every direct child of /admin
@@ -29,7 +39,7 @@ export default async function SettingsVenuePickerPage() {
       ) : (
         <div className="animate-in-stagger mt-6 grid gap-3 sm:grid-cols-2">
           {venues.map((venue) => (
-            <Link key={venue.id} href={`/admin/${venue.slug}/details`}>
+            <Link key={venue.id} href={`/admin/${venue.slug}/go-live`}>
               <Card interactive className={`flex items-center gap-3 ${!venue.active ? "opacity-60" : ""}`}>
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-soft-text)]">
                   <Building2 className="h-4.5 w-4.5" strokeWidth={2} />
@@ -37,7 +47,15 @@ export default async function SettingsVenuePickerPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-zinc-900">{venue.name}</span>
-                    {!venue.active && <Badge variant="neutral">Inactive</Badge>}
+                    {!venue.active ? (
+                      <Badge variant="neutral">Inactive</Badge>
+                    ) : readiness.get(venue.id)?.left ? (
+                      <Badge variant="warning">{readiness.get(venue.id)?.left} to set up</Badge>
+                    ) : readiness.get(venue.id)?.live ? (
+                      <Badge variant="success">Live</Badge>
+                    ) : (
+                      <Badge variant="neutral">Paused</Badge>
+                    )}
                   </div>
                   {venue.address && <p className="mt-0.5 truncate text-sm text-zinc-500">{venue.address}</p>}
                 </div>

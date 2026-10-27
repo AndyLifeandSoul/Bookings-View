@@ -11,12 +11,13 @@ import { buttonStyles } from "@/components/ui/button";
  * navigator.clipboard.writeText with a brief "Copied" confirmation, reset
  * after a couple of seconds rather than staying stuck on "Copied" forever.
  */
-export function CopyLinkButton({ link }: { link: string }) {
+export function CopyLinkButton({ link, url, label = "Copy link" }: { link?: string; url?: string; label?: string }) {
+  const text = link ?? url ?? "";
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -36,7 +37,7 @@ export function CopyLinkButton({ link }: { link: string }) {
       ) : (
         <>
           <Copy className="h-3.5 w-3.5" strokeWidth={2.25} />
-          Copy link
+          {label}
         </>
       )}
     </button>

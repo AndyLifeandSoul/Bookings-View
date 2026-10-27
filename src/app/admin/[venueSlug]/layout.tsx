@@ -22,6 +22,7 @@ export default async function AdminVenueLayout({
   // top-level tab in the outer admin/layout.tsx instead of living in this
   // venue-scoped sub-nav.
   const nav: React.ComponentProps<typeof PillNav>["items"] = [
+    { href: `/admin/${venue.slug}/go-live`, label: "Go Live", icon: "checklist" },
     { href: `/admin/${venue.slug}/details`, label: "Venue Details", icon: "store" },
     { href: `/admin/${venue.slug}/hours`, label: "Opening Hours", icon: "clock" },
     { href: `/admin/${venue.slug}/booking-types`, label: "Booking Types", icon: "tag" },

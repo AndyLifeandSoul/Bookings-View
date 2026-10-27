@@ -15,7 +15,7 @@ import { useState } from "react";
 type State = "open" | "closed" | "private_hire_only";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+const QUARTERS = ["00", "15", "30", "45"];
 
 export interface WeeklyDay {
   day: number;
@@ -73,7 +73,7 @@ function TimeSelects({
         onChange={(e) => onMinute(e.target.value)}
         className="rounded-md border border-zinc-300 px-1.5 py-1.5 text-sm"
       >
-        {MINUTES.map((m) => (
+        {(QUARTERS.includes(minute) ? QUARTERS : [...QUARTERS, minute].sort()).map((m) => (
           <option key={m} value={m}>
             {m}
           </option>
@@ -168,7 +168,7 @@ export function WeeklyHoursTable({ days }: { days: WeeklyDay[] }) {
                     />
                   </td>
                 ))}
-                <td className="px-4 py-3">
+                <td className={`px-4 py-3 ${row.state === "closed" ? "invisible" : ""}`}>
                   <TimeSelects
                     name={`opensAt-${d.day}`}
                     hour={row.opensHour}
@@ -177,14 +177,19 @@ export function WeeklyHoursTable({ days }: { days: WeeklyDay[] }) {
                     onMinute={(v) => patch(i, { opensMinute: v })}
                   />
                 </td>
-                <td className="px-4 py-3">
-                  <TimeSelects
-                    name={`closesAt-${d.day}`}
-                    hour={row.closesHour}
-                    minute={row.closesMinute}
-                    onHour={(v) => patch(i, { closesHour: v })}
-                    onMinute={(v) => patch(i, { closesMinute: v })}
-                  />
+                <td className={`px-4 py-3 ${row.state === "closed" ? "invisible" : ""}`}>
+                  <span className="inline-flex items-center gap-2">
+                    <TimeSelects
+                      name={`closesAt-${d.day}`}
+                      hour={row.closesHour}
+                      minute={row.closesMinute}
+                      onHour={(v) => patch(i, { closesHour: v })}
+                      onMinute={(v) => patch(i, { closesMinute: v })}
+                    />
+                    {`${row.closesHour}:${row.closesMinute}` <= `${row.opensHour}:${row.opensMinute}` && (
+                      <span className="text-xs font-medium text-zinc-500">next day</span>
+                    )}
+                  </span>
                 </td>
               </tr>
             );

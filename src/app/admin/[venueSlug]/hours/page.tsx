@@ -6,8 +6,7 @@ import { buttonStyles } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { addOverride, saveWeeklyHours } from "./actions";
-import { TimeFieldSelect } from "@/components/time-field-select";
-import { DateFieldSelect } from "@/components/date-field-select";
+import { OverrideFields } from "./override-form";
 import { DeleteOverrideButton } from "./delete-override-button";
 import { WeeklyHoursTable, type WeeklyDay } from "./weekly-hours-table";
 
@@ -55,7 +54,9 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
     return existing ? `${day}:${existing.mode}:${existing.opensAt}-${existing.closesAt}` : `${day}:closed`;
   }).join(",");
 
-  const weeklyDays: WeeklyDay[] = DAY_LABELS.map((label, day) => {
+  // Monday first, the way venues plan their week.
+  const weeklyDays: WeeklyDay[] = [1, 2, 3, 4, 5, 6, 0].map((day) => {
+    const label = DAY_LABELS[day];
     const existing = byDay.get(day);
     return {
       day,
@@ -88,10 +89,9 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
       </section>
 
       <section>
-        <h2 className="text-base font-semibold tracking-tight text-zinc-900">Special dates &amp; blocked periods</h2>
+        <h2 className="text-base font-semibold tracking-tight text-zinc-900">Special dates</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Override the weekly hours for a date range: special/altered hours, a full closure, or a private-event block
-          within an otherwise open day.
+          Closures, different hours on holidays, private hire days, or a few hours blocked for an event. These win over the weekly hours.
         </p>
 
         {upcomingOverrides.length > 0 && (
@@ -101,7 +101,7 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
                 <thead className="border-b border-zinc-100 text-xs uppercase tracking-wide text-zinc-500">
                   <tr>
                     <th className="px-4 py-2.5">Dates</th>
-                    <th className="px-4 py-2.5">Can book</th>
+                    <th className="px-4 py-2.5">What happens</th>
                     <th className="px-4 py-2.5">Hours</th>
                     <th className="px-4 py-2.5">Note</th>
                     <th className="px-4 py-2.5" />
@@ -112,7 +112,7 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
                     <tr key={override.id} className="border-b border-zinc-50 transition-colors last:border-0 hover:bg-[var(--accent-soft)]/40">
                       <td className="px-4 py-3 font-medium text-zinc-900">{formatDateRange(override.dateFrom, override.dateTo)}</td>
                       <td className="px-4 py-3">{overrideStatus(override)}</td>
-                      <td className="px-4 py-3">{override.startTime && override.endTime ? `${override.startTime}–${override.endTime}` : "-"}</td>
+                      <td className="px-4 py-3">{override.startTime && override.endTime ? `${override.startTime} to ${override.endTime}` : "-"}</td>
                       <td className="px-4 py-3 text-zinc-500">{override.note ?? "-"}</td>
                       <td className="px-4 py-3 text-right">
                         <DeleteOverrideButton id={override.id} venueId={venue.id} />
@@ -126,59 +126,20 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
         )}
 
         <Card className="mt-4">
-          <ActionForm action={addOverride} className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+          <h3 className="mb-4 text-sm font-semibold text-zinc-900">Add a special date</h3>
+          <ActionForm action={addOverride} className="flex flex-col gap-5">
             <input type="hidden" name="venueId" value={venue.id} />
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Start date</span>
-              <DateFieldSelect name="dateFrom" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">End date</span>
-              <DateFieldSelect name="dateTo" />
-            </label>
-            <label className="flex items-center gap-2 pb-2">
-              <input type="checkbox" name="canBook" className="h-4 w-4 rounded border-zinc-300" />
-              <span className="text-sm font-medium text-zinc-700">Can book</span>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Mode</span>
-              <select name="mode" defaultValue="OPEN" className="rounded-md border border-zinc-300 px-2 py-2 text-sm">
-                <option value="OPEN">Open</option>
-                <option value="PRIVATE_HIRE_ONLY">Private hire only</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Start time</span>
-              <TimeFieldSelect name="startTime" optional />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">End time</span>
-              <TimeFieldSelect name="endTime" optional />
-            </label>
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">Note (optional)</span>
-              <input
-                type="text"
-                name="note"
-                placeholder="e.g. Private hire"
-                className="rounded-md border border-zinc-300 px-3 py-2"
-              />
-            </label>
-            <SubmitButton label="Add override" pendingLabel="Adding…" className={buttonStyles("primary", "md")} />
+            <OverrideFields />
+            <div>
+              <SubmitButton label="Add special date" pendingLabel="Adding..." className={buttonStyles("primary", "md")} />
+            </div>
           </ActionForm>
-          <p className="mt-3 text-xs text-zinc-500">
-            Tick &quot;Can book&quot; for special or altered hours (start/end time required), this replaces the normal
-            weekly hours for these dates - use Mode to make that window private hire only, same as the weekly table.
-            Leave it unticked and both times blank to close the whole range. Leave it unticked and fill in times to
-            block out just that window (e.g. a private event) while the rest of the day stays open as normal (Mode is
-            ignored when &quot;Can book&quot; is off).
-          </p>
         </Card>
 
         {pastOverrides.length > 0 && (
           <details className="mt-4">
             <summary className="cursor-pointer text-sm text-zinc-500 transition-colors hover:text-zinc-700">
-              {pastOverrides.length} past override{pastOverrides.length === 1 ? "" : "s"}
+              {pastOverrides.length} past special date{pastOverrides.length === 1 ? "" : "s"}
             </summary>
             <Card padded={false} className="mt-2 overflow-hidden">
               <table className="w-full text-left text-sm">
@@ -188,7 +149,7 @@ export default async function HoursPage({ params }: { params: Promise<{ venueSlu
                       <td className="px-4 py-3 font-medium text-zinc-900">{formatDateRange(override.dateFrom, override.dateTo)}</td>
                       <td className="px-4 py-3 text-zinc-500">{overrideStatus(override)}</td>
                       <td className="px-4 py-3 text-zinc-500">
-                        {override.startTime && override.endTime ? `${override.startTime}–${override.endTime}` : "-"}
+                        {override.startTime && override.endTime ? `${override.startTime} to ${override.endTime}` : "-"}
                       </td>
                       <td className="px-4 py-3 text-zinc-500">{override.note ?? "-"}</td>
                       <td className="px-4 py-3 text-right">
@@ -211,16 +172,16 @@ function overrideStatus(override: OverrideRow) {
     return override.mode === "PRIVATE_HIRE_ONLY" ? (
       <Badge variant="warning">Private hire only</Badge>
     ) : (
-      <Badge variant="success">Open</Badge>
+      <Badge variant="success">Different hours</Badge>
     );
   }
-  if (override.startTime && override.endTime) return <Badge variant="danger">Blocked</Badge>;
+  if (override.startTime && override.endTime) return <Badge variant="danger">Blocked part of the day</Badge>;
   return <Badge variant="danger">Closed</Badge>;
 }
 
 function formatDateRange(from: Date, to: Date): string {
   if (from.getTime() === to.getTime()) return formatDate(from);
-  return `${formatDate(from)} – ${formatDate(to)}`;
+  return `${formatDate(from)} to ${formatDate(to)}`;
 }
 
 function formatDate(date: Date): string {
