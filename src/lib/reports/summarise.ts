@@ -70,6 +70,7 @@ const SOURCE_LABELS: Record<string, string> = {
   google: "Google",
   email: "Email newsletter",
   qr: "QR code",
+  bookmein: "bookmein.now",
   staff: "Staff",
   phone: "Phone",
 };
