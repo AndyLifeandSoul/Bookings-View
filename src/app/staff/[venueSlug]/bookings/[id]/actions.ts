@@ -17,6 +17,19 @@ import { validateAndPricePreOrder, InvalidPreOrderError, type PreOrderLineInput,
 import { toMinutes, formatMinutes } from "@/lib/bookings/time";
 import { customerIdentity, setStaffNotes } from "@/lib/admin/customer-record";
 import { resolveVenueLogoUrl } from "@/lib/venues/logo";
+import { logBookingEvent } from "@/lib/bookings/events";
+import { isOccasion, occasionLabel } from "@/lib/bookings/occasions";
+import { bookingMoneyAction } from "@/lib/payments/remote-money";
+
+/** Who to name in the booking history for this request. */
+async function actorName(): Promise<string> {
+  const session = await getCurrentStaffSession();
+  return session?.name ?? "Staff";
+}
+
+function poundsLabel(pence: number): string {
+  return `£${(pence / 100).toFixed(2).replace(/\.00$/, "")}`;
+}
 
 
 const STATUSES: BookingStatus[] = ["ENQUIRY", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
@@ -48,8 +61,22 @@ export async function updateBookingDetails(formData: FormData): Promise<ActionRe
   const access = await requireVenueAccess(venueId);
   if ("error" in access) return access;
 
-  const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { id: true } });
-  if (!booking) return { error: "Booking not found for this venue." };
+  const before = await prisma.booking.findFirst({
+    where: { id, venueId },
+    select: {
+      id: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      partySize: true,
+      status: true,
+      customerName: true,
+      occasion: true,
+      dietaryNotes: true,
+      bookingTables: { select: { tableId: true } },
+    },
+  });
+  if (!before) return { error: "Booking not found for this venue." };
 
   const customerName = String(formData.get("customerName") ?? "").trim();
   if (!customerName) return { error: "Customer name is required." };
@@ -59,6 +86,10 @@ export async function updateBookingDetails(formData: FormData): Promise<ActionRe
   const customerPhone = String(formData.get("customerPhone") ?? "").trim() || null;
   if (!customerEmail && !customerPhone) return { error: "Enter at least one of email or phone." };
   const notes = String(formData.get("notes") ?? "").trim() || null;
+  const staffNotes = String(formData.get("staffNotes") ?? "").trim() || null;
+  const dietaryNotes = String(formData.get("dietaryNotes") ?? "").trim() || null;
+  const occasionRaw = String(formData.get("occasion") ?? "").trim();
+  const occasion = occasionRaw && isOccasion(occasionRaw) ? occasionRaw : null;
 
   const partySizeRaw = Number(formData.get("partySize"));
   if (!Number.isFinite(partySizeRaw) || partySizeRaw < 1) {
@@ -70,13 +101,158 @@ export async function updateBookingDetails(formData: FormData): Promise<ActionRe
   if (!STATUSES.includes(statusRaw as BookingStatus)) return { error: `Invalid status: "${statusRaw}"` };
   const status = statusRaw as BookingStatus;
 
+  // Date and times are optional fields on the form (older pages don't send them).
+  const dateStr = String(formData.get("date") ?? "").trim();
+  const startTime = String(formData.get("startTime") ?? "").trim() || before.startTime;
+  const endTime = String(formData.get("endTime") ?? "").trim() || before.endTime;
+  if (!/^\d{1,2}:\d{2}$/.test(startTime) || !/^\d{1,2}:\d{2}$/.test(endTime)) return { error: "Pick a valid arrival and leaving time." };
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? new Date(`${dateStr}T00:00:00.000Z`) : before.date;
+  const moved = date.getTime() !== before.date.getTime() || startTime !== before.startTime || endTime !== before.endTime;
+
+  if (moved && before.bookingTables.length > 0 && status !== "CANCELLED") {
+    const conflicts = await findTableConflicts({
+      venueId,
+      date,
+      startTime,
+      endTime,
+      tableIds: before.bookingTables.map((t) => t.tableId),
+      excludeBookingId: id,
+    });
+    if (conflicts.length > 0) {
+      const names = [...new Set(conflicts.map((c) => `${c.tableLabel} (${c.customerName}, ${c.startTime}-${c.endTime})`))];
+      return { error: `Its table is taken at the new time: ${names.join(", ")}. Change the table first, or pick another time.` };
+    }
+  }
+
+  const actor = await actorName();
   await prisma.booking.update({
     where: { id },
-    data: { customerName, customerEmail, customerPhone, notes, partySize, status },
+    data: {
+      customerName,
+      customerEmail,
+      customerPhone,
+      notes,
+      staffNotes,
+      dietaryNotes,
+      occasion,
+      partySize,
+      status,
+      date,
+      startTime,
+      endTime,
+      ...(status === "CANCELLED" && before.status !== "CANCELLED" ? { cancelledAt: new Date(), cancelledBy: actor } : {}),
+    },
   });
+
+  const changes: string[] = [];
+  if (moved) changes.push(`moved to ${date.toISOString().slice(0, 10)} ${startTime} to ${endTime}`);
+  if (partySize !== before.partySize) changes.push(`guests ${before.partySize} to ${partySize}`);
+  if (status !== before.status) changes.push(`status ${before.status.toLowerCase().replace("_", " ")} to ${status.toLowerCase().replace("_", " ")}`);
+  if (occasion !== before.occasion) changes.push(occasion ? `occasion ${occasionLabel(occasion)}` : "occasion removed");
+  if (dietaryNotes !== before.dietaryNotes) changes.push("allergies updated");
+  if (customerName !== before.customerName) changes.push("name updated");
+  await logBookingEvent({ bookingId: id, actor, kind: "edited", detail: changes.length > 0 ? `Changed: ${changes.join(", ")}` : "Details saved" });
 
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   revalidatePath(`/staff/${venueSlug}`);
+}
+
+/**
+ * Refunds some or all of what a booking has paid, through the customer app
+ * (which holds the Dojo keys). amountPounds blank = refund everything left.
+ */
+export async function refundBookingAction(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+  const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { id: true } });
+  if (!booking) return { error: "Booking not found for this venue." };
+
+  const amountRaw = String(formData.get("amountPounds") ?? "").trim();
+  const amountPence = amountRaw ? Math.round(Number(amountRaw) * 100) : undefined;
+  if (amountRaw && !(amountPence! > 0)) return { error: "Enter an amount in pounds, or leave it blank to refund everything." };
+  const reason = String(formData.get("reason") ?? "").trim() || "Refunded by staff";
+
+  const result = await bookingMoneyAction(id, { action: "refund", actor: await actorName(), amountPence, reason });
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+  if ("error" in result) return { error: result.error };
+}
+
+/** Charges the card-guarantee fee to the guest's saved card (no-show or late cancel). Once only. */
+export async function chargeNoShowFeeAction(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+  const booking = await prisma.booking.findFirst({ where: { id, venueId }, select: { id: true } });
+  if (!booking) return { error: "Booking not found for this venue." };
+  const result = await bookingMoneyAction(id, { action: "charge_no_show", actor: await actorName() });
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+  if ("error" in result) return { error: result.error };
+}
+
+/**
+ * Cancels from the booking screen in one step: optional full refund,
+ * optional cancellation email to the guest, logged in the history.
+ */
+export async function cancelBookingAction(formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const venueId = String(formData.get("venueId") ?? "");
+  const venueSlug = String(formData.get("venueSlug") ?? "");
+  const access = await requireVenueAccess(venueId);
+  if ("error" in access) return access;
+  const booking = await prisma.booking.findFirst({
+    where: { id, venueId },
+    select: { id: true, status: true, customerName: true, customerEmail: true, bookingRef: true, date: true, startTime: true, partySize: true, cardHoldSetupIntentId: true, venue: { select: { name: true, email: true, logoUrl: true, logoImageType: true, brandColorHex: true, address: true, phone: true, slug: true } } },
+  });
+  if (!booking) return { error: "Booking not found for this venue." };
+  if (booking.status === "CANCELLED") return { error: "This booking is already cancelled." };
+
+  const actor = await actorName();
+  const reason = String(formData.get("reason") ?? "").trim() || null;
+  const refund = formData.get("refund") === "on";
+  const notify = formData.get("notify") === "on";
+
+  await prisma.booking.update({ where: { id }, data: { status: "CANCELLED", cancelledAt: new Date(), cancelledBy: actor, cancellationReason: reason } });
+  let refundNote = "";
+  if (refund) {
+    const result = await bookingMoneyAction(id, { action: "refund", actor, reason: reason ?? "Cancelled by the venue" });
+    if ("error" in result) refundNote = ` Refund failed: ${result.error}`;
+    else refundNote = result.refundedPence ? ` Refunded ${poundsLabel(result.refundedPence)}.` : "";
+  }
+  if (booking.cardHoldSetupIntentId) await bookingMoneyAction(id, { action: "release_hold", actor });
+  await logBookingEvent({ bookingId: id, actor, kind: "cancelled", detail: `Cancelled by staff${reason ? `: ${reason}` : ""}.${refundNote}`.trim() });
+
+  if (notify && booking.customerEmail && booking.venue.email) {
+    const brand: VenueBrand = {
+      name: booking.venue.name,
+      logoUrl: resolveVenueLogoUrl(booking.venue),
+      brandColorHex: booking.venue.brandColorHex,
+      address: booking.venue.address,
+      phone: booking.venue.phone,
+      email: booking.venue.email,
+    };
+    const dateLabel = booking.date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+    const rendered = renderVenueEmail(brand, {
+      heading: "Your booking has been cancelled",
+      intro: [
+        `Hi ${booking.customerName},`,
+        `We're sorry, your booking at ${booking.venue.name} on ${dateLabel} at ${booking.startTime} has been cancelled.${reason ? ` ${reason}` : ""}`,
+        ...(refund && !refundNote.includes("failed") ? ["Anything you paid has been refunded to your card and should arrive within 5 to 10 working days."] : []),
+      ],
+      outro: ["Reply to this email if you have any questions."],
+    });
+    const subject = `Your booking${booking.bookingRef ? ` ${booking.bookingRef}` : ""} at ${booking.venue.name} is cancelled`;
+    const res = await sendVenueMail({ mailbox: booking.venue.email, to: booking.customerEmail, subject, text: rendered.text, html: rendered.html });
+    if (res.ok) await logOutboundEmail(id, subject, rendered.text);
+  }
+
+  revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
+  revalidatePath(`/staff/${venueSlug}/diary`);
+  if (refundNote.includes("failed")) return { error: `Cancelled, but the refund didn't go through.${refundNote}` };
 }
 
 /**
@@ -151,6 +327,8 @@ export async function reassignTables(formData: FormData): Promise<ActionResult> 
       ? [prisma.bookingTable.createMany({ data: tableIds.map((tableId) => ({ bookingId: id, tableId })) })]
       : []),
   ]);
+  const labels = tableIds.length > 0 ? (await prisma.table.findMany({ where: { id: { in: tableIds } }, select: { label: true } })).map((t) => t.label) : [];
+  await logBookingEvent({ bookingId: id, actor: await actorName(), kind: "tables", detail: labels.length > 0 ? `Tables set to ${labels.join(" + ")}` : "Tables cleared" });
 
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
 }
@@ -202,6 +380,7 @@ export async function sendReply(formData: FormData): Promise<ActionResult> {
       staffUserId: session?.staffUserId,
     },
   });
+  await logBookingEvent({ bookingId: id, actor: session?.name ?? "Staff", kind: "message", detail: "Replied to the guest by email" });
 
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   if (sendError) return { error: sendError };
@@ -240,6 +419,7 @@ export async function checkInBooking(formData: FormData): Promise<ActionResult> 
   if (!booking) return { error: "Booking not found for this venue." };
 
   await prisma.booking.update({ where: { id }, data: { checkedInAt: new Date() } });
+  await logBookingEvent({ bookingId: id, actor: await actorName(), kind: "checked_in", detail: "Checked in" });
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   revalidatePath(`/staff/${venueSlug}/diary`);
 }
@@ -267,6 +447,7 @@ export async function checkOutBooking(formData: FormData): Promise<ActionResult>
   // as finished everywhere status is shown (list view, All Bookings), not
   // just on the diary via checkedOutAt.
   await prisma.booking.update({ where: { id }, data: { checkedOutAt: new Date(), status: "COMPLETED" } });
+  await logBookingEvent({ bookingId: id, actor: await actorName(), kind: "checked_out", detail: "Checked out, table freed" });
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   revalidatePath(`/staff/${venueSlug}/diary`);
   revalidatePath(`/staff/${venueSlug}/list`);
@@ -292,6 +473,7 @@ export async function undoCheckOut(formData: FormData): Promise<ActionResult> {
   if (!booking) return { error: "Booking not found for this venue." };
 
   await prisma.booking.update({ where: { id }, data: { checkedOutAt: null, status: "CONFIRMED" } });
+  await logBookingEvent({ bookingId: id, actor: await actorName(), kind: "checked_out_undo", detail: "Check-out undone" });
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   revalidatePath(`/staff/${venueSlug}/diary`);
   revalidatePath(`/staff/${venueSlug}/list`);
@@ -702,6 +884,7 @@ export async function markNoShow(formData: FormData): Promise<ActionResult> {
   if (!booking) return { error: "Booking not found for this venue." };
 
   await prisma.booking.update({ where: { id }, data: { status: "NO_SHOW" } });
+  await logBookingEvent({ bookingId: id, actor: await actorName(), kind: "no_show", detail: "Marked as a no-show" });
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   revalidatePath(`/staff/${venueSlug}/diary`);
   revalidatePath(`/staff/${venueSlug}/list`);
@@ -771,6 +954,7 @@ export async function shiftBookingRunningLate(formData: FormData): Promise<Actio
   }
 
   await prisma.booking.update({ where: { id }, data: { startTime: newStartTime, endTime: newEndTime } });
+  await logBookingEvent({ bookingId: id, actor: await actorName(), kind: "running_late", detail: `Running late: moved to ${newStartTime} to ${newEndTime}` });
   revalidatePath(`/staff/${venueSlug}/bookings/${id}`);
   revalidatePath(`/staff/${venueSlug}/diary`);
   revalidatePath(`/staff/${venueSlug}/list`);

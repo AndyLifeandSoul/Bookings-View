@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, LogIn, MessageSquare, Armchair, UtensilsCrossed, Printer, CreditCard, Clock, StickyNote } from "lucide-react";
+import { ArrowLeft, LogIn, MessageSquare, Armchair, UtensilsCrossed, Printer, CreditCard, Clock, StickyNote, History, Ban, AlertTriangle } from "lucide-react";
 import { prisma } from "@/lib/db/client";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { ActionForm } from "@/components/action-form";
@@ -22,7 +22,13 @@ import {
   markNoShow,
   shiftBookingRunningLate,
   updateCustomerNotes,
+  refundBookingAction,
+  chargeNoShowFeeAction,
+  cancelBookingAction,
 } from "./actions";
+import { DateSelect } from "@/components/date-select";
+import { TimeSelect } from "@/components/time-select";
+import { OCCASIONS, occasionLabel } from "@/lib/bookings/occasions";
 import { buildPreOrderLink } from "@/lib/pre-order/links";
 import { customerIdentity, getStaffNotes } from "@/lib/admin/customer-record";
 import { groupPreOrderItems, preOrderLineUnitPricePence } from "@/lib/pre-order/group-items";
@@ -83,6 +89,8 @@ export async function BookingDetailsBody({
           },
         },
         preOrderInvite: { select: { token: true, menuId: true, categoryIds: true, submittedAt: true } },
+        events: { orderBy: { at: "desc" }, take: 50 },
+        addOns: { select: { nameSnapshot: true, quantity: true, unitPricePence: true } },
       },
     }),
     // No orderBy, see naturalSortTables' doc comment.
@@ -109,6 +117,7 @@ export async function BookingDetailsBody({
         description: true,
         checkoutUrl: true,
         createdAt: true,
+        refundedAmountInPence: true,
       },
     }),
     // Whether this venue even has a Dojo account wired up - both the
@@ -166,6 +175,7 @@ export async function BookingDetailsBody({
       })
     : [];
   const tables = naturalSortTables(tablesRaw);
+  const refundable = payments.reduce((sum, p) => sum + (p.status === "CAPTURED" ? p.amountInPence - p.refundedAmountInPence : 0), 0);
 
   const assignedTableIds = new Set(booking.bookingTables.map((bt) => bt.tableId));
   const assignedTableLabels = tables.filter((t) => assignedTableIds.has(t.id)).map((t) => t.label);
@@ -200,9 +210,33 @@ export async function BookingDetailsBody({
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">{booking.customerName}</h1>
             <p className="text-sm text-zinc-500">
-              {booking.bookingRef ?? booking.id} · {booking.bookingType.name} ·{" "}
-              {formatDate(booking.date)}, {booking.startTime}–{booking.endTime}
+              {booking.bookingRef ?? booking.id} · {booking.bookingType.name} · {formatDate(booking.date)}, {booking.startTime} to {booking.endTime} ·{" "}
+              {booking.partySize} guests
             </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className={bookingStatusChip(booking.status)}>{booking.status.replace("_", " ").toLowerCase()}</span>
+              {booking.occasion && <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-800">{occasionLabel(booking.occasion)}</span>}
+              {booking.dietaryNotes && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-900">
+                  <AlertTriangle className="h-3 w-3" strokeWidth={2.5} />
+                  {booking.dietaryNotes}
+                </span>
+              )}
+              {booking.cardHoldSetupIntentId && (
+                <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700">
+                  Card held{booking.cardHoldAmountPence ? `, £${(booking.cardHoldAmountPence / 100).toFixed(2)} no-show fee` : ""}
+                  {booking.noShowFeeChargedAt ? ", fee charged" : ""}
+                </span>
+              )}
+              {booking.channel && <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">via {booking.channel}</span>}
+              {booking.ageConfirmedAt && <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600">18+ confirmed</span>}
+            </div>
+            {booking.addOns.length > 0 && (
+              <p className="mt-2 text-sm text-zinc-700">
+                Extras: {booking.addOns.map((a) => `${a.quantity > 1 ? `${a.quantity} x ` : ""}${a.nameSnapshot}`).join(", ")}
+              </p>
+            )}
+            {booking.staffNotes && <p className="mt-1 text-sm text-zinc-700">Staff note: {booking.staffNotes}</p>}
           </div>
         </div>
 
@@ -333,6 +367,20 @@ export async function BookingDetailsBody({
                     />
                   </label>
                   <p className="-mt-2 text-xs text-zinc-500 sm:col-span-2">At least one of email or phone is required.</p>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-zinc-700">Date</span>
+                    <DateSelect name="date" defaultValue={booking.date.toISOString().slice(0, 10)} label="Booking date" />
+                  </div>
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-zinc-700">Arrives</span>
+                      <TimeSelect name="startTime" defaultValue={booking.startTime} label="Arrival time" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-zinc-700">Leaves</span>
+                      <TimeSelect name="endTime" defaultValue={booking.endTime} label="Leaving time" />
+                    </div>
+                  </div>
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium text-zinc-700">Party size</span>
                     <input
@@ -361,14 +409,31 @@ export async function BookingDetailsBody({
                   </select>
                 </label>
 
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-zinc-700">Occasion</span>
+                    <select name="occasion" defaultValue={booking.occasion ?? ""} className="rounded-md border border-zinc-300 bg-white px-3 py-2">
+                      <option value="">None</option>
+                      {OCCASIONS.map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-zinc-700">Allergies or dietary needs</span>
+                    <input type="text" name="dietaryNotes" defaultValue={booking.dietaryNotes ?? ""} className="rounded-md border border-zinc-300 px-3 py-2" />
+                  </label>
+                </div>
+
                 <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-zinc-700">Notes (optional)</span>
-                  <textarea
-                    name="notes"
-                    rows={3}
-                    defaultValue={booking.notes ?? ""}
-                    className="rounded-md border border-zinc-300 px-3 py-2"
-                  />
+                  <span className="text-sm font-medium text-zinc-700">Guest&apos;s requests</span>
+                  <textarea name="notes" rows={2} defaultValue={booking.notes ?? ""} className="rounded-md border border-zinc-300 px-3 py-2" />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm font-medium text-zinc-700">Staff note (guest never sees this)</span>
+                  <textarea name="staffNotes" rows={2} defaultValue={booking.staffNotes ?? ""} className="rounded-md border border-zinc-300 px-3 py-2" />
                 </label>
 
                 <div className="text-xs text-zinc-400">
@@ -689,6 +754,9 @@ export async function BookingDetailsBody({
                       </span>
                       <span className={statusBadgeClassName(payment.status)}>{payment.status.replace("_", " ")}</span>
                     </div>
+                    {payment.refundedAmountInPence > 0 && (
+                      <p className="text-xs font-medium text-zinc-700">£{(payment.refundedAmountInPence / 100).toFixed(2)} refunded</p>
+                    )}
                     {payment.description && <p className="text-xs text-zinc-500">{payment.description}</p>}
                     <p className="text-xs text-zinc-400">
                       {payment.createdAt.toLocaleString("en-GB", { timeZone: venue.timezone })}
@@ -707,6 +775,42 @@ export async function BookingDetailsBody({
                   </Card>
                 ))}
               </div>
+            )}
+
+            {refundable > 0 && (
+              <Card className="mt-3">
+                <ActionForm action={refundBookingAction} className="flex flex-col gap-3">
+                  <input type="hidden" name="id" value={booking.id} />
+                  <input type="hidden" name="venueId" value={venue.id} />
+                  <input type="hidden" name="venueSlug" value={venue.slug} />
+                  <p className="text-sm font-medium text-zinc-900">Refund (up to £{(refundable / 100).toFixed(2)})</p>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-zinc-500">Amount (£), blank for all</span>
+                      <input type="number" name="amountPounds" min="0.01" step="0.01" max={(refundable / 100).toFixed(2)} className="w-32 rounded-md border border-zinc-300 px-3 py-2" />
+                    </label>
+                    <label className="flex min-w-48 flex-1 flex-col gap-1">
+                      <span className="text-xs text-zinc-500">Reason</span>
+                      <input type="text" name="reason" placeholder="e.g. Goodwill, venue closed early" className="rounded-md border border-zinc-300 px-3 py-2" />
+                    </label>
+                    <SubmitButton label="Refund" pendingLabel="Refunding..." className={buttonStyles("secondary", "md")} />
+                  </div>
+                </ActionForm>
+              </Card>
+            )}
+
+            {booking.cardHoldSetupIntentId && booking.cardHoldStatus === "AUTHORIZED" && !booking.noShowFeeChargedAt && (
+              <Card className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-zinc-700">
+                  Card saved as a guarantee. Charge the £{((booking.cardHoldAmountPence ?? 0) / 100).toFixed(2)} fee if they didn&apos;t show or cancelled late. This can only be done once.
+                </p>
+                <ActionForm action={chargeNoShowFeeAction}>
+                  <input type="hidden" name="id" value={booking.id} />
+                  <input type="hidden" name="venueId" value={venue.id} />
+                  <input type="hidden" name="venueSlug" value={venue.slug} />
+                  <SubmitButton label="Charge no-show fee" pendingLabel="Charging..." className={buttonStyles("danger", "sm")} />
+                </ActionForm>
+              </Card>
             )}
 
             <Card className="mt-3">
@@ -758,6 +862,64 @@ export async function BookingDetailsBody({
                   {venue.name} has no Dojo payment account assigned yet, see Admin, so payment requests can&apos;t be
                   raised from here.
                 </p>
+              )}
+            </Card>
+          </section>
+
+          {booking.status !== "CANCELLED" && (
+            <section>
+              <h2 className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-zinc-900">
+                <Ban className="h-4 w-4 text-zinc-400" strokeWidth={2.25} />
+                Cancel booking
+              </h2>
+              <Card className="mt-3">
+                <ActionForm action={cancelBookingAction} className="flex flex-col gap-3">
+                  <input type="hidden" name="id" value={booking.id} />
+                  <input type="hidden" name="venueId" value={venue.id} />
+                  <input type="hidden" name="venueSlug" value={venue.slug} />
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-zinc-700">Reason (included in the email)</span>
+                    <input type="text" name="reason" placeholder="e.g. Asked to cancel by phone" className="rounded-md border border-zinc-300 px-3 py-2" />
+                  </label>
+                  {refundable > 0 && (
+                    <label className="flex items-center gap-2 text-sm text-zinc-700">
+                      <input type="checkbox" name="refund" className="h-4 w-4 rounded border-zinc-300" />
+                      Refund the £{(refundable / 100).toFixed(2)} they paid
+                    </label>
+                  )}
+                  <label className="flex items-center gap-2 text-sm text-zinc-700">
+                    <input type="checkbox" name="notify" defaultChecked={Boolean(booking.customerEmail)} disabled={!booking.customerEmail} className="h-4 w-4 rounded border-zinc-300" />
+                    Email the guest to say it&apos;s cancelled
+                  </label>
+                  <div>
+                    <SubmitButton label="Cancel this booking" pendingLabel="Cancelling..." className={buttonStyles("danger", "md")} />
+                  </div>
+                </ActionForm>
+              </Card>
+            </section>
+          )}
+
+          <section>
+            <h2 className="flex items-center gap-1.5 text-base font-semibold tracking-tight text-zinc-900">
+              <History className="h-4 w-4 text-zinc-400" strokeWidth={2.25} />
+              History
+            </h2>
+            <Card className="mt-3">
+              {booking.events.length === 0 ? (
+                <p className="text-sm text-zinc-500">No changes recorded yet.</p>
+              ) : (
+                <ol className="flex flex-col gap-2.5">
+                  {booking.events.map((e) => (
+                    <li key={e.id} className="flex gap-3 text-sm">
+                      <span className="w-28 shrink-0 text-xs text-zinc-400 tabular-nums">
+                        {e.at.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: venue.timezone })}
+                      </span>
+                      <span className="text-zinc-800">
+                        <span className="font-medium">{e.actor}</span> {e.detail.charAt(0).toLowerCase() + e.detail.slice(1)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               )}
             </Card>
           </section>
@@ -826,6 +988,24 @@ function purposeLabel(purpose: PaymentPurpose): string {
       return "Balance / top-up";
     case "FULL":
       return "Full payment";
+    case "NO_SHOW_FEE":
+      return "No-show fee";
+  }
+}
+
+function bookingStatusChip(status: string): string {
+  const base = "rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize";
+  switch (status) {
+    case "CONFIRMED":
+      return `${base} bg-[var(--success-soft)] text-[var(--success-soft-text)]`;
+    case "ENQUIRY":
+      return `${base} bg-sky-50 text-sky-800`;
+    case "PENDING_PAYMENT":
+      return `${base} bg-amber-50 text-amber-800`;
+    case "NO_SHOW":
+      return `${base} bg-red-50 text-red-700`;
+    default:
+      return `${base} bg-zinc-100 text-zinc-600`;
   }
 }
 
