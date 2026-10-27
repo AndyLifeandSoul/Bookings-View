@@ -27,6 +27,7 @@ export default async function AdminVenueLayout({
     { href: `/admin/${venue.slug}/hours`, label: "Opening Hours", icon: "clock" },
     { href: `/admin/${venue.slug}/booking-types`, label: "Booking Types", icon: "tag" },
     { href: `/admin/${venue.slug}/tables`, label: "Tables & Areas", icon: "grid" },
+    { href: `/admin/${venue.slug}/floor-plan`, label: "Floor Plan", icon: "plan" },
     { href: `/admin/${venue.slug}/menus`, label: "Pre-order Menus", icon: "menu" },
     { href: `/admin/${venue.slug}/extras`, label: "Extras", icon: "gift" },
     { href: `/admin/${venue.slug}/offers`, label: "Offer Codes", icon: "offer" },
