@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Users2, LogIn, LogOut, ArrowRight, X, StickyNote, UtensilsCrossed } from "lucide-react";
+import { Users2, LogIn, LogOut, ArrowRight, X, StickyNote, UtensilsCrossed, AlertTriangle, Cake } from "lucide-react";
 import { moveBookingTable } from "./actions";
 import { checkInBooking, checkOutBooking, undoCheckOut } from "../bookings/[id]/actions";
 import { buttonStyles } from "@/components/ui/button";
@@ -33,6 +33,10 @@ export interface DiaryBooking {
   checkedOutAt: string | null;
   /** Free-text note from the customer or whoever took the booking (allergy, high chair, wheelchair access, birthday, ...). Surfaced as a small badge on the block itself, not just buried in the full booking page, since a note nobody notices until service is the whole reason this field exists. */
   notes: string | null;
+  /** Allergies or dietary needs, flagged on the block. */
+  allergy: string | null;
+  /** Occasion key (BIRTHDAY etc.), flagged on the block. */
+  occasion: string | null;
   /** True once a customer has submitted a pre-order for this booking (Booking.preOrder), see the booking details page's Pre-order section. Same "surface it on the block, don't make staff open the booking to find out" reasoning as notes. */
   hasPreOrder: boolean;
   /** True when this booking has an unread INBOUND message (a customer reply staff haven't marked read). Drives the message icon on the sidebar row. */
@@ -74,6 +78,9 @@ function toMinutes(hhmm: string): number {
 interface DragPayload {
   bookingId: string;
   fromTableId: string | null;
+  /** Where on the block it was grabbed (px from its left edge), so a sideways drop can move the time too. */
+  grabOffsetPx?: number;
+  startTime?: string;
 }
 
 export function DiaryGrid({
@@ -155,6 +162,20 @@ export function DiaryGrid({
     } catch {
       return;
     }
+    // Sideways drops move the time as well, snapped to 15 minutes.
+    let newStartTime: string | undefined;
+    const track = (e.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-track]");
+    if (track && payload.startTime && payload.grabOffsetPx != null) {
+      const rect = track.getBoundingClientRect();
+      const leftPx = e.clientX - rect.left - payload.grabOffsetPx;
+      const minutes = Math.round((startMinutes + (leftPx / rect.width) * span) / 15) * 15;
+      const current = toMinutes(payload.startTime);
+      if (Math.abs(minutes - current) >= 15 && minutes >= 0) {
+        const m = ((minutes % 1440) + 1440) % 1440;
+        newStartTime = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      }
+    }
+    if (payload.fromTableId === toTableId && !newStartTime) return;
     setError(null);
     startTransition(async () => {
       const result = await moveBookingTable({
@@ -163,6 +184,7 @@ export function DiaryGrid({
         toTableId,
         venueId,
         venueSlug,
+        newStartTime,
       });
       if (!result.ok) setError(result.error ?? "Couldn't move that booking.");
     });
@@ -269,15 +291,21 @@ export function DiaryGrid({
         : "";
     const noteTitle = booking.notes ? ` · note: ${booking.notes}` : "";
     const preOrderTitle = booking.hasPreOrder ? " · pre-order received" : "";
+    const allergyTitle = booking.allergy ? ` · ALLERGY: ${booking.allergy}` : "";
+    const occasionTitle = booking.occasion ? ` · ${booking.occasion.toLowerCase()}` : "";
     return (
       <button
         type="button"
         draggable
         onDragStart={(e) => {
-          e.dataTransfer.setData("text/plain", JSON.stringify({ bookingId: booking.id, fromTableId } satisfies DragPayload));
+          const grabOffsetPx = e.clientX - e.currentTarget.getBoundingClientRect().left;
+          e.dataTransfer.setData(
+            "text/plain",
+            JSON.stringify({ bookingId: booking.id, fromTableId, grabOffsetPx, startTime: booking.startTime } satisfies DragPayload),
+          );
         }}
         onClick={(e) => openPopover(booking, e)}
-        title={`${booking.bookingTypeName} · ${booking.customerName} · ${booking.partySize} guests · ${booking.startTime}-${booking.endTime}${checkInOutTitle}${noteTitle}${preOrderTitle}`}
+        title={`${booking.bookingTypeName} · ${booking.customerName} · ${booking.partySize} guests · ${booking.startTime}-${booking.endTime}${checkInOutTitle}${allergyTitle}${occasionTitle}${noteTitle}${preOrderTitle}`}
         className={`absolute top-1 bottom-1 flex cursor-pointer flex-col overflow-hidden rounded-md border text-left text-xs leading-tight shadow-sm transition-all duration-150 hover:z-10 hover:-translate-y-0.5 hover:shadow-md ${STATUS_COLORS[booking.status] ?? "bg-zinc-100 border-zinc-300 text-zinc-700"} ${booking.checkedOutAt ? "opacity-50" : ""} ${!isPrimary ? "opacity-60 saturate-50" : ""}`}
         style={{ left: `${pctLeft(toMinutes(booking.startTime))}%`, width: `${pctWidth(toMinutes(booking.startTime), toMinutes(booking.endTime))}%` }}
       >
@@ -287,6 +315,8 @@ export function DiaryGrid({
         >
           <span className="truncate">{!isPrimary ? `↳ ${booking.bookingTypeName}` : booking.bookingTypeName}</span>
           <span className="flex shrink-0 items-center gap-1">
+            {booking.allergy && <AlertTriangle className="h-2.5 w-2.5" strokeWidth={2.75} aria-label="Allergy" />}
+            {booking.occasion && <Cake className="h-2.5 w-2.5" strokeWidth={2.5} aria-label="Occasion" />}
             {booking.hasPreOrder && <UtensilsCrossed className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden="true" />}
             {booking.notes && <StickyNote className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden="true" />}
             {booking.checkedOutAt ? (
@@ -403,7 +433,7 @@ export function DiaryGrid({
                   <div className="font-medium text-zinc-900">{table.label}</div>
                   {table.areaName && <div className="text-xs text-zinc-400">{table.areaName}</div>}
                 </div>
-                <div className="relative h-16 flex-1">
+                <div data-track className="relative h-16 flex-1">
                   {hourMarks.map((m) => (
                     <div key={m} className="absolute top-0 bottom-0 w-px bg-zinc-100" style={{ left: `${pctLeft(m)}%` }} />
                   ))}
@@ -462,6 +492,12 @@ export function DiaryGrid({
                   {popover.booking.partySize} guests · {popover.booking.startTime}-{popover.booking.endTime} ·{" "}
                   {popover.booking.bookingTypeName}
                 </p>
+                {popover.booking.allergy && (
+                  <p className="mt-1.5 flex items-start gap-1 rounded bg-amber-50 px-1.5 py-1 text-xs font-medium text-amber-900">
+                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" strokeWidth={2.5} />
+                    <span className="line-clamp-2">{popover.booking.allergy}</span>
+                  </p>
+                )}
                 {popover.booking.hasPreOrder && (
                   <p className="mt-1 flex items-center gap-1 rounded-md bg-[var(--success-soft)] px-1.5 py-1 text-xs text-[var(--success-soft-text)]">
                     <UtensilsCrossed className="h-3 w-3 shrink-0" strokeWidth={2.25} />

@@ -7,6 +7,7 @@ import { findTableConflicts } from "@/lib/staff/table-conflicts";
 import { getDayWindow } from "@/lib/staff/get-day-window";
 import { toMinutes, formatMinutes } from "@/lib/bookings/time";
 import { formatBookingRef } from "@/lib/bookings/booking-reference";
+import { logBookingEvent } from "@/lib/bookings/events";
 
 export interface MoveResult {
   ok: boolean;
@@ -30,9 +31,11 @@ export async function moveBookingTable(params: {
   toTableId: string;
   venueId: string;
   venueSlug: string;
+  /** Set when the block was dragged sideways: the new arrival time, keeping the same length. */
+  newStartTime?: string;
 }): Promise<MoveResult> {
-  const { bookingId, fromTableId, toTableId, venueId, venueSlug } = params;
-  if (fromTableId === toTableId) return { ok: true };
+  const { bookingId, fromTableId, toTableId, venueId, venueSlug, newStartTime } = params;
+  if (fromTableId === toTableId && !newStartTime) return { ok: true };
 
   const session = await getCurrentStaffSession();
   if (!session) return { ok: false, error: "Not signed in." };
@@ -42,19 +45,28 @@ export async function moveBookingTable(params: {
 
   const booking = await prisma.booking.findFirst({
     where: { id: bookingId, venueId },
-    select: { date: true, startTime: true, endTime: true },
+    select: { date: true, startTime: true, endTime: true, bookingTables: { select: { tableId: true } } },
   });
   if (!booking) return { ok: false, error: "Booking not found for this venue." };
 
-  const toTable = await prisma.table.findFirst({ where: { id: toTableId, venueId }, select: { id: true } });
+  const toTable = await prisma.table.findFirst({ where: { id: toTableId, venueId }, select: { id: true, label: true } });
   if (!toTable) return { ok: false, error: "Target table doesn't belong to this venue." };
 
+  let startTime = booking.startTime;
+  let endTime = booking.endTime;
+  if (newStartTime && /^\d{2}:\d{2}$/.test(newStartTime)) {
+    const length = toMinutes(booking.endTime) - toMinutes(booking.startTime);
+    startTime = newStartTime;
+    endTime = formatMinutes(toMinutes(newStartTime) + (length > 0 ? length : length + 1440));
+  }
+  // Every table the booking will sit on after the move, checked at the (possibly new) time.
+  const tablesAfter = [...new Set([...booking.bookingTables.map((t) => t.tableId).filter((t) => t !== fromTableId), toTableId])];
   const conflicts = await findTableConflicts({
     venueId,
     date: booking.date,
-    startTime: booking.startTime,
-    endTime: booking.endTime,
-    tableIds: [toTableId],
+    startTime,
+    endTime,
+    tableIds: tablesAfter,
     excludeBookingId: bookingId,
   });
   if (conflicts.length > 0) {
@@ -63,9 +75,21 @@ export async function moveBookingTable(params: {
   }
 
   await prisma.$transaction([
-    ...(fromTableId ? [prisma.bookingTable.deleteMany({ where: { bookingId, tableId: fromTableId } })] : []),
-    prisma.bookingTable.create({ data: { bookingId, tableId: toTableId } }),
+    ...(fromTableId && fromTableId !== toTableId ? [prisma.bookingTable.deleteMany({ where: { bookingId, tableId: fromTableId } })] : []),
+    ...(fromTableId !== toTableId && !booking.bookingTables.some((t) => t.tableId === toTableId)
+      ? [prisma.bookingTable.create({ data: { bookingId, tableId: toTableId } })]
+      : []),
+    ...(startTime !== booking.startTime ? [prisma.booking.update({ where: { id: bookingId }, data: { startTime, endTime } })] : []),
   ]);
+  await logBookingEvent({
+    bookingId,
+    actor: session.name,
+    kind: "moved",
+    detail: [fromTableId !== toTableId ? `moved to ${toTable.label}` : null, startTime !== booking.startTime ? `time changed to ${startTime} to ${endTime}` : null]
+      .filter(Boolean)
+      .join(", ")
+      .replace(/^./, (c) => c.toUpperCase()),
+  });
 
   revalidatePath(`/staff/${venueSlug}/diary`);
   return { ok: true };

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, MessageCirclePlus, ArrowLeft, ArrowRight, List, CalendarOff, CalendarDays } from "lucide-react";
+import { Plus, MessageCirclePlus, ArrowLeft, ArrowRight, List, CalendarOff, CalendarDays, Printer } from "lucide-react";
 import { prisma } from "@/lib/db/client";
 import { requireStaffVenue } from "@/lib/staff/require-staff-venue";
 import { getDayWindow } from "@/lib/staff/get-day-window";
@@ -79,7 +79,9 @@ export default async function DiaryPage({
     tableIds: b.bookingTables.map((bt) => bt.tableId),
     checkedInAt: b.checkedInAt ? b.checkedInAt.toISOString() : null,
     checkedOutAt: b.checkedOutAt ? b.checkedOutAt.toISOString() : null,
-    notes: b.notes,
+    notes: [b.notes, b.staffNotes].filter(Boolean).join(" / ") || null,
+    allergy: b.dietaryNotes,
+    occasion: b.occasion,
     hasPreOrder: Boolean(b.preOrder),
     hasUnreadMessage: b.messages.length > 0,
     hasPayment: b.payments.length > 0,
@@ -114,6 +116,10 @@ export default async function DiaryPage({
             <Link href={`/staff/${venue.slug}/enquiries/new?date=${dateStr}`} className={buttonStyles("secondary", "sm")}>
               <MessageCirclePlus className="h-3.5 w-3.5" strokeWidth={2.25} />
               Add enquiry
+            </Link>
+            <Link href={`/staff/${venue.slug}/run-sheet?date=${dateStr}`} className={buttonStyles("ghost", "sm")}>
+              <Printer className="h-3.5 w-3.5" strokeWidth={2.25} />
+              Run sheet
             </Link>
             <Link href={`/staff/${venue.slug}/list`} className={buttonStyles("ghost", "sm")}>
               <List className="h-3.5 w-3.5" strokeWidth={2.25} />
