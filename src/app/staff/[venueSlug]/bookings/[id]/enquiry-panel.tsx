@@ -42,7 +42,7 @@ export function EnquiryPanel({
     <section>
       <h2 className="text-base font-semibold tracking-tight text-zinc-900">Enquiry</h2>
       <Card className="mt-3 flex flex-col gap-5">
-        <ActionForm action={updateEnquiryPipeline} className="flex flex-col gap-4">
+        <ActionForm action={updateEnquiryPipeline} resetOnSuccess={false} className="flex flex-col gap-4">
           {hidden}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="flex flex-col gap-1">

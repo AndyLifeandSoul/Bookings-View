@@ -1,6 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
+import { useActionFormPending } from "./action-form";
 
 /**
  * Reads pending state from the nearest enclosing <form> via useFormStatus
@@ -17,7 +18,9 @@ export function SubmitButton({
   pendingLabel?: string;
   className?: string;
 }) {
-  const { pending } = useFormStatus();
+  const { pending: nativePending } = useFormStatus();
+  const formPending = useActionFormPending();
+  const pending = nativePending || formPending;
   return (
     <button type="submit" disabled={pending} className={className}>
       {pending && (

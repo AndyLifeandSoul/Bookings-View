@@ -101,7 +101,7 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
         </a>
       </div>
 
-      <ActionForm action={updateVenueDetails} className="flex flex-col gap-5" encType="multipart/form-data">
+      <ActionForm action={updateVenueDetails} resetOnSuccess={false} className="flex flex-col gap-5" encType="multipart/form-data">
         <input type="hidden" name="venueId" value={venue.id} />
 
         <Block title="Online booking">

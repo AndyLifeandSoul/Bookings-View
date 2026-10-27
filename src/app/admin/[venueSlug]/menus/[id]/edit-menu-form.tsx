@@ -52,7 +52,7 @@ export function EditMenuForm({
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:items-start">
-      <ActionForm action={updateMenu} className="flex flex-col gap-4 rounded-2xl border border-zinc-200/80 bg-white p-5 [box-shadow:var(--shadow-sm)]">
+      <ActionForm action={updateMenu} resetOnSuccess={false} className="flex flex-col gap-4 rounded-2xl border border-zinc-200/80 bg-white p-5 [box-shadow:var(--shadow-sm)]">
         <input type="hidden" name="id" value={menuId} />
         <input type="hidden" name="venueId" value={venueId} />
         <div className="grid gap-4 sm:grid-cols-2">
