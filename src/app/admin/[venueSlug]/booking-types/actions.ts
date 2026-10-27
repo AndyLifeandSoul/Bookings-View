@@ -66,6 +66,43 @@ interface ParsedFields {
   latestBookingTime: string | null;
   availableDaysOfWeek: number[];
   tableFillMode: TableFillMode;
+  minLeadMinutes: number | null;
+  maxDaysAhead: number | null;
+  maxCoversPerInterval: number | null;
+  coversIntervalMinutes: number;
+  minSpendPence: number | null;
+  minSpendPerGuest: boolean;
+  minSpendPrepaid: boolean;
+  requiresAgeConfirmation: boolean;
+  capacityMode: "TABLES" | "TICKETED";
+  ticketCapacity: number | null;
+  waitlistEnabled: boolean;
+  preOrderDeadlineDays: number | null;
+  isGroupParty: boolean;
+  noShowFeePence: number | null;
+  noShowFeePerGuest: boolean;
+}
+
+/** Blank = null; otherwise a whole number at least `min`, or an error message. */
+function optionalInt(formData: FormData, name: string, min: number, label: string): number | null | { error: string } {
+  const raw = String(formData.get(name) ?? "").trim();
+  if (raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min) return { error: `${label} must be a whole number of at least ${min}, or left blank.` };
+  return n;
+}
+
+/** Blank = null; otherwise pounds to pence, more than zero. */
+function optionalPence(formData: FormData, name: string, label: string): number | null | { error: string } {
+  const raw = String(formData.get(name) ?? "").trim();
+  if (raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return { error: `${label} must be more than £0, or left blank.` };
+  return Math.round(n * 100);
+}
+
+function isErr(v: unknown): v is { error: string } {
+  return typeof v === "object" && v !== null && "error" in v;
 }
 
 type ParseResult = { ok: true; fields: ParsedFields } | { ok: false; error: string };
@@ -226,6 +263,32 @@ function parseFields(formData: FormData): ParseResult {
   }
   const tableFillMode = tableFillModeRaw as TableFillMode;
 
+  const minLeadMinutes = optionalInt(formData, "minLeadMinutes", 0, "Minimum notice");
+  const maxDaysAhead = optionalInt(formData, "maxDaysAhead", 1, "How far ahead");
+  const maxCoversPerInterval = optionalInt(formData, "maxCoversPerInterval", 1, "Guests per time slot");
+  const coversInterval = optionalInt(formData, "coversIntervalMinutes", 5, "Time slot length");
+  const ticketCapacity = optionalInt(formData, "ticketCapacity", 1, "Places per session");
+  const preOrderDeadlineDays = optionalInt(formData, "preOrderDeadlineDays", 1, "Food choices deadline");
+  const minSpendPence = optionalPence(formData, "minSpendPounds", "Minimum spend");
+  const noShowFeePence = optionalPence(formData, "noShowFeePounds", "No-show fee");
+  for (const v of [minLeadMinutes, maxDaysAhead, maxCoversPerInterval, coversInterval, ticketCapacity, preOrderDeadlineDays, minSpendPence, noShowFeePence]) {
+    if (isErr(v)) return { ok: false, error: v.error };
+  }
+  const capacityMode = formData.get("capacityMode") === "TICKETED" ? "TICKETED" : "TABLES";
+  if (capacityMode === "TICKETED" && ticketCapacity == null) {
+    return { ok: false, error: "Set how many places each session has." };
+  }
+  if (requiresPreOrder && !preOrderMenuId) {
+    return { ok: false, error: "Choose which menu the pre-order uses." };
+  }
+  if (formData.get("isGroupParty") === "on") {
+    if (!requiresPreOrder) return { ok: false, error: "Turn on the pre-order to let each guest pick their own food." };
+    if (preOrderPaymentRequired) return { ok: false, error: "Group food choices are paid on the night. Set the pre-order to paid on the day." };
+  }
+  if (noShowFeePence != null && depositType !== "NONE") {
+    return { ok: false, error: "Use either a deposit or a card guarantee, not both. A deposit already covers no-shows." };
+  }
+
   return {
     ok: true,
     fields: {
@@ -257,8 +320,29 @@ function parseFields(formData: FormData): ParseResult {
       latestBookingTime: null,
       availableDaysOfWeek,
       tableFillMode,
+      minLeadMinutes: minLeadMinutes as number | null,
+      maxDaysAhead: maxDaysAhead as number | null,
+      maxCoversPerInterval: maxCoversPerInterval as number | null,
+      coversIntervalMinutes: (coversInterval as number | null) ?? 30,
+      minSpendPence: minSpendPence as number | null,
+      minSpendPerGuest: formData.get("minSpendPerGuest") === "on",
+      minSpendPrepaid: formData.get("minSpendPrepaid") === "on",
+      requiresAgeConfirmation: formData.get("requiresAgeConfirmation") === "on",
+      capacityMode,
+      ticketCapacity: capacityMode === "TICKETED" ? (ticketCapacity as number) : null,
+      waitlistEnabled: formData.get("waitlistEnabled") === "on",
+      preOrderDeadlineDays: preOrderDeadlineDays as number | null,
+      isGroupParty: formData.get("isGroupParty") === "on",
+      noShowFeePence: noShowFeePence as number | null,
+      noShowFeePerGuest: formData.get("noShowFeePerGuest") !== "off",
     },
   };
+}
+
+/** Extras offered on this type: addOn_<id> checkboxes, limited to the venue's own add-ons. */
+async function parseAddOns(formData: FormData, venueId: string): Promise<string[]> {
+  const all = await prisma.addOn.findMany({ where: { venueId }, select: { id: true } });
+  return all.filter((a) => formData.get(`addOn_${a.id}`) === "on").map((a) => a.id);
 }
 
 /**
@@ -363,6 +447,7 @@ export async function createBookingType(formData: FormData): Promise<ActionResul
   if (!dayWindows.ok) return { error: dayWindows.error };
 
   const slug = await uniqueSlug(venue.id, slugify(fields.name));
+  const addOnIds = await parseAddOns(formData, venue.id);
 
   await prisma.bookingType.create({
     data: {
@@ -372,6 +457,7 @@ export async function createBookingType(formData: FormData): Promise<ActionResul
       areaPriorities: { createMany: { data: areaPriorities.rows } },
       dateOverrides: { createMany: { data: dateOverrides.rows } },
       dayWindows: { createMany: { data: dayWindows.rows } },
+      addOns: { createMany: { data: addOnIds.map((addOnId) => ({ addOnId })) } },
     },
   });
   revalidatePath(`/admin/${venue.slug}/booking-types`);
@@ -395,6 +481,7 @@ export async function updateBookingType(formData: FormData): Promise<ActionResul
 
   const owned = await prisma.bookingType.findFirst({ where: { id, venueId: venue.id }, select: { id: true } });
   if (!owned) return { error: "Booking type not found for this venue." };
+  const addOnIds = await parseAddOns(formData, venue.id);
 
   // Whole-row replace for both join tables, in the same transaction as the
   // scalar update, simpler and safer than diffing old vs. new rows, and
@@ -418,6 +505,8 @@ export async function updateBookingType(formData: FormData): Promise<ActionResul
     ...(dayWindows.rows.length > 0
       ? [prisma.bookingTypeDayWindow.createMany({ data: dayWindows.rows.map((r) => ({ ...r, bookingTypeId: id })) })]
       : []),
+    prisma.addOnBookingType.deleteMany({ where: { bookingTypeId: id } }),
+    ...(addOnIds.length > 0 ? [prisma.addOnBookingType.createMany({ data: addOnIds.map((addOnId) => ({ addOnId, bookingTypeId: id })) })] : []),
   ]);
 
   revalidatePath(`/admin/${venue.slug}/booking-types`);

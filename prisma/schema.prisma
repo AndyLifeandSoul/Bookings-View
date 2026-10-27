@@ -551,6 +551,11 @@ model BookingType {
   /// Treat as a group / party booking: per-guest pre-order links are offered
   /// to the organiser straight after booking.
   isGroupParty Boolean @default(false)
+  /// Card guarantee: when set, guests save a card (Dojo setup intent) and
+  /// this fee, per guest or per booking, can be charged once if they don't
+  /// show or cancel late. Nothing is taken at booking.
+  noShowFeePence    Int?
+  noShowFeePerGuest Boolean @default(true)
   addOns AddOnBookingType[]
 
   createdAt DateTime @default(now())
@@ -913,6 +918,11 @@ model Booking {
   promoCodeId String?
   promoCode   PromoCode? @relation(fields: [promoCodeId], references: [id])
   discountPence Int @default(0)
+  /// Card guarantee (see BookingType.noShowFeePence).
+  cardHoldSetupIntentId String?   @unique
+  cardHoldStatus        String?
+  cardHoldAmountPence   Int?
+  noShowFeeChargedAt    DateTime?
   addOns  BookingAddOn[]
   events  BookingEvent[]
   /// Enquiry pipeline (used while status is ENQUIRY): stage NEW, CONTACTED,
@@ -1267,6 +1277,7 @@ enum PaymentPurpose {
   DEPOSIT
   BALANCE
   FULL
+  NO_SHOW_FEE
 }
 
 enum PaymentCaptureMode {
@@ -1348,6 +1359,8 @@ model Payment {
   createdAt  DateTime  @default(now())
   capturedAt DateTime?
   refundedAt DateTime?
+  /// Running total refunded, in pence (a partial refund keeps status CAPTURED).
+  refundedAmountInPence Int @default(0)
 
   /// Set when this payment is a customer self-service "add guests" top-up
   /// (mirror of lifeandsoul-bookings); the change is applied on capture.

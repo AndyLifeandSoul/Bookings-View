@@ -27,6 +27,24 @@ export interface SummaryInput {
   enquiryThresholdPartySize: number | null;
   autoConfirmMinLeadMinutes: number | null;
   dateExceptions: { from: string; to: string; start: string; end: string }[];
+  // Optional so older callers and checks still work.
+  capacityMode?: "TABLES" | "TICKETED";
+  ticketCapacity?: number | null;
+  minLeadMinutes?: number | null;
+  maxDaysAhead?: number | null;
+  waitlistEnabled?: boolean;
+  requiresAgeConfirmation?: boolean;
+  cardGuarantee?: boolean;
+  noShowFeePounds?: number | null;
+  noShowFeePerGuest?: boolean;
+  minSpendPounds?: number | null;
+  minSpendPerGuest?: boolean;
+  minSpendPrepaid?: boolean;
+  isGroupParty?: boolean;
+  preOrderDeadlineDays?: number | null;
+  maxCoversPerInterval?: number | null;
+  coversIntervalMinutes?: number | null;
+  extras?: string[];
 }
 
 export interface Summary {
@@ -90,6 +108,7 @@ export function buildSummary(s: SummaryInput): Summary {
 
   lines.push(s.active ? "Shown on the booking page." : "Switched off, so customers can't see it.");
   if (s.isPrivateHireType) lines.push("Private hire: can use your private-hire-only days and hours.");
+  if (s.requiresAgeConfirmation) lines.push("Over 18s only: guests confirm their age when booking.");
 
   // Who
   const minP = s.minPartySize;
@@ -104,6 +123,11 @@ export function buildSummary(s: SummaryInput): Summary {
     lines.push(`Up to ${maxP} guests.`);
   } else {
     lines.push(`Groups of ${minP} to ${maxP} guests.`);
+  }
+
+  if (s.capacityMode === "TICKETED") {
+    if (!s.ticketCapacity || s.ticketCapacity < 1) warnings.push("Set how many places each session has.");
+    else lines.push(`${s.ticketCapacity} places per session, no tables used.`);
   }
 
   // How long
@@ -146,6 +170,10 @@ export function buildSummary(s: SummaryInput): Summary {
     lines.push(`Bookings close ${n} ${n === 1 ? "day" : "days"} before each arrival time.`);
   }
 
+  if (s.minLeadMinutes) lines.push(`Online bookings close ${formatDuration(s.minLeadMinutes)} before arrival.`);
+  if (s.maxDaysAhead) lines.push(`Bookable up to ${s.maxDaysAhead} days ahead.`);
+  if (s.waitlistEnabled) lines.push("When it's full, guests can join a waitlist and are emailed if a time frees up.");
+
   // Where
   const fill =
     s.tableFillMode === "WHOLE_AREA"
@@ -153,7 +181,9 @@ export function buildSummary(s: SummaryInput): Summary {
       : s.tableFillMode === "WHOLE_VENUE"
         ? "each booking takes the whole venue"
         : "using just enough tables for the group";
-  if (s.hasAreas && s.areaNames.length > 0) {
+  if (s.capacityMode === "TICKETED") {
+    // No seating line: ticketed sessions don't take tables.
+  } else if (s.hasAreas && s.areaNames.length > 0) {
     lines.push(`Seats in ${list(s.areaNames)}, ${fill}.`);
   } else {
     lines.push(`${capitalise(s.hasAreas ? `any area, ${fill}` : fill)}.`);
@@ -168,14 +198,36 @@ export function buildSummary(s: SummaryInput): Summary {
       pay.push(`${formatPounds(s.depositPounds)} deposit ${s.depositType === "FIXED" ? "per booking" : "per guest"}`);
     }
   }
-  if (s.preOrderMode !== "none") {
+  if (s.cardGuarantee) {
+    if (s.noShowFeePounds == null || !(s.noShowFeePounds > 0)) {
+      warnings.push("Enter the no-show fee for the card guarantee.");
+    } else {
+      pay.push(`card saved as a guarantee, ${formatPounds(s.noShowFeePounds)} ${s.noShowFeePerGuest ? "per guest" : "per booking"} if they don't show`);
+    }
+  }
+  if (s.minSpendPounds != null && s.minSpendPounds > 0) {
+    pay.push(
+      `minimum spend ${formatPounds(s.minSpendPounds)} ${s.minSpendPerGuest ? "per guest" : "per booking"}${s.minSpendPrepaid ? ", taken up front as credit" : ""}`,
+    );
+  }
+  if (s.preOrderMode !== "none" && s.isGroupParty) {
+    if (!s.menuName) warnings.push("Choose the pre-order menu.");
+    if (s.preOrderMode === "inFull") warnings.push("Group food choices are paid on the night, so switch the pre-order to paid on the day.");
+    const close = s.preOrderDeadlineDays ? `${s.preOrderDeadlineDays} days before` : "24 hours before";
+    pay.push(`each guest picks their own food from a shared link, closing ${close}`);
+  } else if (s.preOrderMode !== "none") {
     if (!s.menuName) warnings.push("Choose the pre-order menu.");
     const menu = s.menuName ? ` from ${s.menuName}` : "";
     pay.push(s.preOrderMode === "inFull" ? `pre-order${menu}, paid in full when booking` : `pre-order${menu}, paid on the day`);
   }
   lines.push(pay.length > 0 ? `${capitalise(list(pay))}.` : "Nothing to pay when booking.");
 
+  if (s.extras && s.extras.length > 0) lines.push(`Extras offered: ${list(s.extras)}.`);
+
   // Advanced
+  if (s.maxCoversPerInterval) {
+    lines.push(`At most ${s.maxCoversPerInterval} guests arriving in any ${formatDuration(s.coversIntervalMinutes ?? 30)}.`);
+  }
   if (s.enquiryThresholdPartySize != null) {
     if (maxP != null && s.enquiryThresholdPartySize > maxP) {
       warnings.push("The enquiry limit is above the largest group, so it would never apply.");
@@ -213,6 +265,7 @@ export function readSummaryInput(
   fd: FormDataLike,
   areas: { id: string; name: string }[],
   menus: { id: string; name: string }[],
+  addOns: { id: string; name: string }[] = [],
 ): SummaryInput {
   const str = (k: string) => String(fd.get(k) ?? "").trim();
   const num = (k: string) => {
@@ -248,6 +301,23 @@ export function readSummaryInput(
     preOrderMode: requiresPreOrder ? (paidInFull ? "inFull" : "onDay") : "none",
     menuName: menus.find((m) => m.id === menuId)?.name ?? null,
     enquiryThresholdPartySize: num("enquiryThresholdPartySize"),
+    capacityMode: str("capacityMode") === "TICKETED" ? "TICKETED" : "TABLES",
+    ticketCapacity: num("ticketCapacity"),
+    minLeadMinutes: num("minLeadMinutes"),
+    maxDaysAhead: num("maxDaysAhead"),
+    waitlistEnabled: fd.get("waitlistEnabled") === "on",
+    requiresAgeConfirmation: fd.get("requiresAgeConfirmation") === "on",
+    cardGuarantee: str("depositChoice") === "CARD",
+    noShowFeePounds: num("noShowFeePounds"),
+    noShowFeePerGuest: str("noShowFeePerGuest") !== "off",
+    minSpendPounds: num("minSpendPounds"),
+    minSpendPerGuest: fd.get("minSpendPerGuest") === "on",
+    minSpendPrepaid: fd.get("minSpendPrepaid") === "on",
+    isGroupParty: fd.get("isGroupParty") === "on",
+    preOrderDeadlineDays: num("preOrderDeadlineDays"),
+    maxCoversPerInterval: num("maxCoversPerInterval"),
+    coversIntervalMinutes: num("coversIntervalMinutes"),
+    extras: addOns.filter((a) => fd.get(`addOn_${a.id}`) === "on").map((a) => a.name),
     autoConfirmMinLeadMinutes: num("autoConfirmMinLeadMinutes"),
     dateExceptions: fd.getAll("dateOverrideDateFrom").map((from, i) => ({
       from: String(from),
@@ -257,3 +327,4 @@ export function readSummaryInput(
     })),
   };
 }
+

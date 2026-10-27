@@ -4,7 +4,7 @@
  * saving, and nothing here is stored until the form is submitted. Field
  * meanings match BookingType in schema.prisma.
  */
-export type PresetId = "table" | "drinks" | "brunch" | "event" | "area" | "private" | "blank";
+export type PresetId = "table" | "drinks" | "brunch" | "christmas" | "event" | "area" | "private" | "blank";
 
 export interface PresetValues {
   name: string;
@@ -25,6 +25,17 @@ export interface PresetValues {
   preOrderMinItemsPerPerson: number | null;
   preOrderMaxItemsPerPerson: number | null;
   bookingCutoffDays: number | null;
+  // Optional extras; anything left out uses the form's plain default.
+  minLeadMinutes?: number | null;
+  requiresAgeConfirmation?: boolean;
+  capacityMode?: "TABLES" | "TICKETED";
+  ticketCapacity?: number | null;
+  preOrderDeadlineDays?: number | null;
+  isGroupParty?: boolean;
+  depositType?: "NONE" | "FIXED" | "PER_HEAD";
+  depositPounds?: string;
+  enquiryThresholdPartySize?: number | null;
+  waitlistEnabled?: boolean;
 }
 
 const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
@@ -82,17 +93,45 @@ export const PRESETS: { id: PresetId; label: string; blurb: string; values: Pres
       preOrderMinItemsPerPerson: 1,
       preOrderMaxItemsPerPerson: 1,
       bookingCutoffDays: 2,
+      requiresAgeConfirmation: true,
+    },
+  },
+  {
+    id: "christmas",
+    label: "Christmas party",
+    blurb: "Groups book with a deposit per head, then each guest picks their own food from a shared link.",
+    values: {
+      ...BASE,
+      name: "Christmas party",
+      minPartySize: 8,
+      maxPartySize: 40,
+      minDurationMinutes: 180,
+      maxDurationMinutes: 180,
+      startTimeStepMinutes: 30,
+      requiresPreOrder: true,
+      preOrderPaymentRequired: false,
+      preOrderMinItemsPerPerson: 1,
+      isGroupParty: true,
+      preOrderDeadlineDays: 7,
+      depositType: "PER_HEAD",
+      depositPounds: "10",
+      enquiryThresholdPartySize: 30,
     },
   },
   {
     id: "event",
     label: "Class or event",
-    blurb: "A masterclass, tasting or event at set times.",
+    blurb: "A masterclass, tasting or quiz night sold by the place, up to a set number per session.",
     values: {
       ...BASE,
       name: "Cocktail masterclass",
-      minPartySize: 2,
+      minPartySize: 1,
       maxPartySize: 10,
+      capacityMode: "TICKETED",
+      ticketCapacity: 16,
+      depositType: "PER_HEAD",
+      depositPounds: "35",
+      waitlistEnabled: true,
       minDurationMinutes: 90,
       maxDurationMinutes: 90,
       startTimeStepMinutes: 30,

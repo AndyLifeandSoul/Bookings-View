@@ -14,6 +14,7 @@ type BookingTypeDefaults = BookingType & {
   dateOverrides?: { dateFrom: Date; dateTo: Date; startTime: string | null; endTime: string | null; allow: boolean; note: string | null }[];
   areaPriorities?: { areaId: string; priority: number }[];
   dayWindows?: { dayOfWeek: number; earliestBookingTime: string; latestBookingTime: string }[];
+  addOns?: { addOnId: string }[];
 };
 
 type PreOrderMode = "none" | "onDay" | "inFull";
@@ -49,6 +50,22 @@ interface Initial {
   preOrderMinItemsPerPerson: number | null;
   preOrderMaxItemsPerPerson: number | null;
   sortOrder: number;
+  minLeadMinutes: number | null;
+  maxDaysAhead: number | null;
+  maxCoversPerInterval: number | null;
+  coversIntervalMinutes: number;
+  minSpendPounds: string;
+  minSpendPerGuest: boolean;
+  minSpendPrepaid: boolean;
+  requiresAgeConfirmation: boolean;
+  capacityMode: "TABLES" | "TICKETED";
+  ticketCapacity: number | null;
+  waitlistEnabled: boolean;
+  preOrderDeadlineDays: number | null;
+  isGroupParty: boolean;
+  noShowFeePounds: string;
+  noShowFeePerGuest: boolean;
+  addOnIds: Set<string>;
 }
 
 function fromSaved(d: BookingTypeDefaults): Initial {
@@ -89,6 +106,22 @@ function fromSaved(d: BookingTypeDefaults): Initial {
     preOrderMinItemsPerPerson: d.preOrderMinItemsPerPerson,
     preOrderMaxItemsPerPerson: d.preOrderMaxItemsPerPerson,
     sortOrder: d.sortOrder,
+    minLeadMinutes: d.minLeadMinutes,
+    maxDaysAhead: d.maxDaysAhead,
+    maxCoversPerInterval: d.maxCoversPerInterval,
+    coversIntervalMinutes: d.coversIntervalMinutes,
+    minSpendPounds: d.minSpendPence != null ? (d.minSpendPence / 100).toString() : "",
+    minSpendPerGuest: d.minSpendPerGuest,
+    minSpendPrepaid: d.minSpendPrepaid,
+    requiresAgeConfirmation: d.requiresAgeConfirmation,
+    capacityMode: d.capacityMode,
+    ticketCapacity: d.ticketCapacity,
+    waitlistEnabled: d.waitlistEnabled,
+    preOrderDeadlineDays: d.preOrderDeadlineDays,
+    isGroupParty: d.isGroupParty,
+    noShowFeePounds: d.noShowFeePence != null ? (d.noShowFeePence / 100).toString() : "",
+    noShowFeePerGuest: d.noShowFeePerGuest,
+    addOnIds: new Set((d.addOns ?? []).map((a) => a.addOnId)),
   };
 }
 
@@ -113,16 +146,32 @@ function fromPreset(p: PresetValues, label: string): Initial {
     dateOverrides: [],
     areaPriorities: new Map(),
     tableFillMode: p.tableFillMode,
-    enquiryThresholdPartySize: null,
+    enquiryThresholdPartySize: p.enquiryThresholdPartySize ?? null,
     autoConfirmMinLeadMinutes: null,
     bookingCutoffDays: p.bookingCutoffDays,
-    depositType: "NONE",
-    depositPounds: "",
+    depositType: p.depositType ?? "NONE",
+    depositPounds: p.depositPounds ?? "",
     preOrderMode: p.requiresPreOrder ? (p.preOrderPaymentRequired ? "inFull" : "onDay") : "none",
     preOrderMenuId: "",
     preOrderMinItemsPerPerson: p.preOrderMinItemsPerPerson,
     preOrderMaxItemsPerPerson: p.preOrderMaxItemsPerPerson,
     sortOrder: 0,
+    minLeadMinutes: p.minLeadMinutes ?? null,
+    maxDaysAhead: null,
+    maxCoversPerInterval: null,
+    coversIntervalMinutes: 30,
+    minSpendPounds: "",
+    minSpendPerGuest: false,
+    minSpendPrepaid: false,
+    requiresAgeConfirmation: p.requiresAgeConfirmation ?? false,
+    capacityMode: p.capacityMode ?? "TABLES",
+    ticketCapacity: p.ticketCapacity ?? null,
+    waitlistEnabled: p.waitlistEnabled ?? false,
+    preOrderDeadlineDays: p.preOrderDeadlineDays ?? null,
+    isGroupParty: p.isGroupParty ?? false,
+    noShowFeePounds: "",
+    noShowFeePerGuest: true,
+    addOnIds: new Set(),
   };
 }
 
@@ -138,6 +187,7 @@ export function BookingTypeFields({
   areas,
   menus,
   submitLabel,
+  addOns = [],
 }: {
   defaults?: BookingTypeDefaults;
   /** Every area for this venue, for the area picker. */
@@ -145,11 +195,13 @@ export function BookingTypeFields({
   /** The venue's active pre-order menus. */
   menus: { id: string; name: string }[];
   submitLabel: string;
+  /** The venue's extras, to choose which this type offers. */
+  addOns?: { id: string; name: string; pricePence: number; perGuest: boolean }[];
 }) {
   const [presetId, setPresetId] = useState<PresetId | null>(null);
 
   if (defaults) {
-    return <FormBody initial={fromSaved(defaults)} editingId={defaults.id} areas={areas} menus={menus} submitLabel={submitLabel} />;
+    return <FormBody initial={fromSaved(defaults)} editingId={defaults.id} areas={areas} menus={menus} addOns={addOns} submitLabel={submitLabel} />;
   }
 
   const preset = PRESETS.find((p) => p.id === presetId);
@@ -195,6 +247,7 @@ export function BookingTypeFields({
           initial={fromPreset(preset.values, preset.label)}
           areas={areas}
           menus={menus}
+          addOns={addOns}
           submitLabel={submitLabel}
         />
       )}
@@ -212,9 +265,9 @@ function withCurrent(options: number[], current: number | null): number[] {
 const inputClass = "rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900";
 const selectClass = "rounded-md border border-zinc-300 bg-white px-2.5 py-2 text-sm text-zinc-900";
 
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Section({ title, hint, hidden, children }: { title: string; hint?: string; hidden?: boolean; children: React.ReactNode }) {
   return (
-    <section className="flex min-w-0 flex-col gap-4 rounded-2xl border border-zinc-200/80 bg-white p-5 [box-shadow:var(--shadow-sm)]">
+    <section hidden={hidden} className="flex min-w-0 flex-col gap-4 rounded-2xl border border-zinc-200/80 bg-white p-5 [box-shadow:var(--shadow-sm)]">
       <div>
         <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
         {hint && <p className="mt-0.5 text-sm text-zinc-500">{hint}</p>}
@@ -269,18 +322,22 @@ function FormBody({
   editingId,
   areas,
   menus,
+  addOns,
   submitLabel,
 }: {
   initial: Initial;
   editingId?: string;
   areas: { id: string; name: string }[];
   menus: { id: string; name: string }[];
+  addOns: { id: string; name: string; pricePence: number; perGuest: boolean }[];
   submitLabel: string;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const advancedRef = useRef<HTMLDetailsElement>(null);
   const [runsUntilClose, setRunsUntilClose] = useState(initial.runsUntilClose);
-  const [depositType, setDepositType] = useState(initial.depositType);
+  const [depositType, setDepositType] = useState(initial.depositType === "NONE" && initial.noShowFeePounds ? "CARD" : initial.depositType);
+  const [capacityMode, setCapacityMode] = useState(initial.capacityMode);
+  const [isGroupParty, setIsGroupParty] = useState(initial.isGroupParty);
   const [preOrderMode, setPreOrderMode] = useState<PreOrderMode>(initial.preOrderMode);
   const [fillMode, setFillMode] = useState(initial.tableFillMode);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -292,8 +349,8 @@ function FormBody({
   const recompute = useCallback(() => {
     const form = rootRef.current?.closest("form");
     if (!form) return;
-    setSummary(buildSummary(readSummaryInput(new FormData(form), areas, menus)));
-  }, [areas, menus]);
+    setSummary(buildSummary(readSummaryInput(new FormData(form), areas, menus, addOns)));
+  }, [areas, menus, addOns]);
   const schedule = useCallback(() => {
     setTimeout(recompute, 0);
   }, [recompute]);
@@ -368,6 +425,18 @@ function FormBody({
               </span>
             </span>
           </label>
+          <label className="flex items-start gap-2.5">
+            <input
+              type="checkbox"
+              name="requiresAgeConfirmation"
+              defaultChecked={initial.requiresAgeConfirmation}
+              className="mt-0.5 h-4 w-4 rounded border-zinc-300"
+            />
+            <span className="flex flex-col">
+              <span className="text-sm font-medium text-zinc-800">Over 18s only</span>
+              <span className="text-xs text-zinc-500">Guests confirm everyone in their group is 18 or over, and are reminded to bring ID.</span>
+            </span>
+          </label>
         </Section>
 
         <Section title="Who and how long">
@@ -379,6 +448,31 @@ function FormBody({
               <input type="number" name="maxPartySize" min={1} required defaultValue={initial.maxPartySize} className={`${inputClass} w-28`} />
             </Field>
             <span className="pb-2 text-sm text-zinc-500">guests</span>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-zinc-800">How places are counted</span>
+            <Choice
+              name="capacityMode"
+              value="TABLES"
+              checked={capacityMode === "TABLES"}
+              onChange={() => setCapacityMode("TABLES")}
+              title="Tables"
+              detail="Each booking gets a table. The usual choice."
+            />
+            <Choice
+              name="capacityMode"
+              value="TICKETED"
+              checked={capacityMode === "TICKETED"}
+              onChange={() => setCapacityMode("TICKETED")}
+              title="Places per session"
+              detail="Sold by headcount up to a limit, no tables: masterclasses, quiz nights, events. Set a price per guest under Payment."
+            />
+            <div hidden={capacityMode !== "TICKETED"} className="ml-1">
+              <Field label="Places per session">
+                <input type="number" name="ticketCapacity" min={1} defaultValue={initial.ticketCapacity ?? ""} className={`${inputClass} w-28`} />
+              </Field>
+            </div>
           </div>
 
           <label className="flex items-start gap-2.5">
@@ -442,9 +536,38 @@ function FormBody({
               {initial.bookingCutoffDays === 0 && <option value={0}>0 days before</option>}
             </select>
           </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Minimum notice" hint="Online bookings must be made at least this long before arrival.">
+              <select name="minLeadMinutes" defaultValue={initial.minLeadMinutes ?? ""} className={`${selectClass} w-fit`}>
+                <option value="">None, book right up to the time</option>
+                {withCurrent([30, 60, 120, 180, 360, 720, 1440, 2880], initial.minLeadMinutes).map((m) => (
+                  <option key={m} value={m}>
+                    {formatDuration(m)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Open for bookings" hint="How far ahead guests can book online.">
+              <select name="maxDaysAhead" defaultValue={initial.maxDaysAhead ?? ""} className={`${selectClass} w-fit`}>
+                <option value="">Any time ahead</option>
+                {withCurrent([7, 14, 30, 60, 90, 180, 365], initial.maxDaysAhead).map((d) => (
+                  <option key={d} value={d}>
+                    Up to {d} days ahead
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <label className="flex items-start gap-2.5">
+            <input type="checkbox" name="waitlistEnabled" defaultChecked={initial.waitlistEnabled} className="mt-0.5 h-4 w-4 rounded border-zinc-300" />
+            <span className="flex flex-col">
+              <span className="text-sm font-medium text-zinc-800">Offer a waitlist when it&apos;s full</span>
+              <span className="text-xs text-zinc-500">Guests leave their details; we email them automatically if a time frees up.</span>
+            </span>
+          </label>
         </Section>
 
-        <Section title="Where they sit">
+        <Section title="Where they sit" hidden={capacityMode === "TICKETED"}>
           {areas.length === 0 ? (
             <p className="text-sm text-zinc-500">No areas set up for this venue yet, so any table can be used. Add areas under Tables.</p>
           ) : (
@@ -508,25 +631,46 @@ function FormBody({
           </div>
         </Section>
 
-        <Section title="Deposits and pre-orders">
+        <Section title="Payment">
           <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-zinc-800">Deposit</span>
-            <Choice name="depositType" value="NONE" checked={depositType === "NONE"} onChange={() => setDepositType("NONE")} title="No deposit" />
+            <span className="text-sm font-medium text-zinc-800">{capacityMode === "TICKETED" ? "Ticket price or deposit" : "Deposit"}</span>
+            <input type="hidden" name="depositType" value={depositType === "CARD" ? "NONE" : depositType} />
+            <Choice name="depositChoice" value="NONE" checked={depositType === "NONE"} onChange={() => setDepositType("NONE")} title="Nothing up front" />
             <Choice
-              name="depositType"
+              name="depositChoice"
+              value="CARD"
+              checked={depositType === "CARD"}
+              onChange={() => setDepositType("CARD")}
+              title="Card guarantee"
+              detail="Guests save a card, nothing is charged. You can charge a no-show or late-cancel fee once."
+            />
+            <div hidden={depositType !== "CARD"} className="ml-1 mt-1 flex flex-wrap items-end gap-3">
+              <Field label="No-show fee">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-sm text-zinc-500">£</span>
+                  <input type="number" name="noShowFeePounds" min={0} step="any" disabled={depositType !== "CARD"} defaultValue={initial.noShowFeePounds} className={`${inputClass} w-28`} />
+                </span>
+              </Field>
+              <select name="noShowFeePerGuest" defaultValue={initial.noShowFeePerGuest ? "on" : "off"} className={selectClass} aria-label="Fee per guest or per booking">
+                <option value="on">per guest</option>
+                <option value="off">per booking</option>
+              </select>
+            </div>
+            <Choice
+              name="depositChoice"
               value="FIXED"
               checked={depositType === "FIXED"}
               onChange={() => setDepositType("FIXED")}
               title="A set amount per booking"
             />
             <Choice
-              name="depositType"
+              name="depositChoice"
               value="PER_HEAD"
               checked={depositType === "PER_HEAD"}
               onChange={() => setDepositType("PER_HEAD")}
-              title="An amount per guest"
+              title={capacityMode === "TICKETED" ? "A price per guest (ticket)" : "An amount per guest"}
             />
-            <div hidden={depositType === "NONE"} className="ml-1 mt-1">
+            <div hidden={depositType === "NONE" || depositType === "CARD"} className="ml-1 mt-1">
               <Field label={depositType === "PER_HEAD" ? "Amount per guest" : "Amount per booking"}>
                 <span className="flex items-center gap-1.5">
                   <span className="text-sm text-zinc-500">£</span>
@@ -542,6 +686,25 @@ function FormBody({
                 </span>
               </Field>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-zinc-800">Minimum spend</span>
+            <div className="flex flex-wrap items-end gap-3">
+              <span className="flex items-center gap-1.5">
+                <span className="text-sm text-zinc-500">£</span>
+                <input type="number" name="minSpendPounds" min={0} step="any" aria-label="Minimum spend" placeholder="None" defaultValue={initial.minSpendPounds} className={`${inputClass} w-28`} />
+              </span>
+              <label className="flex items-center gap-2 pb-2 text-sm text-zinc-700">
+                <input type="checkbox" name="minSpendPerGuest" defaultChecked={initial.minSpendPerGuest} className="h-4 w-4 rounded border-zinc-300" />
+                per guest
+              </label>
+              <label className="flex items-center gap-2 pb-2 text-sm text-zinc-700">
+                <input type="checkbox" name="minSpendPrepaid" defaultChecked={initial.minSpendPrepaid} className="h-4 w-4 rounded border-zinc-300" />
+                take it up front as credit
+              </label>
+            </div>
+            <span className="text-xs text-zinc-500">Shown to guests when they book. For booths and VIP tables.</span>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -610,8 +773,54 @@ function FormBody({
                 </div>
                 <span className="text-xs text-zinc-500">For bottomless brunch, set both to 1. Leave blank for no limit.</span>
               </div>
+              <label className="flex items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  name="isGroupParty"
+                  checked={isGroupParty}
+                  onChange={(e) => setIsGroupParty(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-zinc-300"
+                />
+                <span className="flex flex-col">
+                  <span className="text-sm font-medium text-zinc-800">Each guest picks their own food</span>
+                  <span className="text-xs text-zinc-500">
+                    For Christmas parties and big groups: the organiser books, then shares a link so everyone chooses. Food is paid on the night.
+                  </span>
+                </span>
+              </label>
+              <div hidden={!isGroupParty}>
+                <Field label="Food choices close">
+                  <select name="preOrderDeadlineDays" defaultValue={initial.preOrderDeadlineDays ?? ""} className={`${selectClass} w-fit`}>
+                    <option value="">24 hours before</option>
+                    {withCurrent([2, 3, 5, 7, 10, 14, 21], initial.preOrderDeadlineDays).map((d) => (
+                      <option key={d} value={d}>
+                        {d} days before
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
             </div>
           </div>
+        </Section>
+
+        <Section title="Extras" hint="Optional add-ons guests can choose when booking this.">
+          {addOns.length === 0 ? (
+            <p className="text-sm text-zinc-500">No extras set up yet. Add things like prosecco on arrival or a birthday cake under Settings, Extras.</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {addOns.map((a) => (
+                <label key={a.id} className="flex items-center gap-2.5 rounded-lg border border-zinc-200 px-3 py-2 text-sm">
+                  <input type="checkbox" name={`addOn_${a.id}`} defaultChecked={initial.addOnIds.has(a.id)} className="h-4 w-4 rounded border-zinc-300" />
+                  <span className="flex-1 text-zinc-800">{a.name}</span>
+                  <span className="text-xs text-zinc-500">
+                    £{(a.pricePence / 100).toFixed(2)}
+                    {a.perGuest ? " pp" : ""}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
         </Section>
 
         <details
@@ -684,6 +893,19 @@ function FormBody({
                     </option>
                   ))}
                 </select>
+              </Field>
+              <Field label="Most guests arriving together" hint="Caps guests starting in any window, to pace the kitchen. Blank for no cap.">
+                <span className="flex items-center gap-1.5">
+                  <input type="number" name="maxCoversPerInterval" min={1} defaultValue={initial.maxCoversPerInterval ?? ""} placeholder="No cap" className={`${inputClass} w-24`} />
+                  <span className="text-sm text-zinc-500">per</span>
+                  <select name="coversIntervalMinutes" defaultValue={initial.coversIntervalMinutes} className={selectClass}>
+                    {withCurrent([15, 30, 60], initial.coversIntervalMinutes).map((m) => (
+                      <option key={m} value={m}>
+                        {formatDuration(m)}
+                      </option>
+                    ))}
+                  </select>
+                </span>
               </Field>
               <Field label="Position in the list" hint="Lower numbers show first on the booking page.">
                 <input type="number" name="sortOrder" defaultValue={initial.sortOrder} className={`${inputClass} w-24`} />
