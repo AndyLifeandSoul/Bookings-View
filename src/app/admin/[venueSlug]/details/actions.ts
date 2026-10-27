@@ -76,6 +76,47 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
     logoData = { logoImage: null, logoImageType: null };
   }
 
+  // Header photo for the booking page, same handling as the logo.
+  const removeHeader = formData.get("removeHeaderImage") === "on";
+  const headerEntry = formData.get("headerImage");
+  const hasHeader = headerEntry != null && typeof headerEntry !== "string" && headerEntry.size > 0;
+  let headerData: { headerImage?: Uint8Array<ArrayBuffer> | null; headerImageType?: string | null } = {};
+  if (hasHeader) {
+    const file = headerEntry as File;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      return { error: "The header photo must be a JPG, PNG or WEBP image." };
+    }
+    if (file.size > 5 * 1024 * 1024) return { error: "The header photo must be 5MB or smaller." };
+    headerData = { headerImage: new Uint8Array(await file.arrayBuffer()), headerImageType: file.type };
+  } else if (removeHeader) {
+    headerData = { headerImage: null, headerImageType: null };
+  }
+
+  const tagline = String(formData.get("tagline") ?? "").trim().slice(0, 90) || null;
+
+  const intOrNull = (key: string, label: string, min: number, max: number): number | null | { error: string } => {
+    const raw = String(formData.get(key) ?? "").trim();
+    if (raw === "") return null;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < min || n > max) return { error: `${label} must be a whole number from ${min} to ${max}, or left blank.` };
+    return n;
+  };
+  const maxCovers = intOrNull("maxCoversPer30Min", "Most guests arriving together", 1, 2000);
+  if (maxCovers && typeof maxCovers === "object") return maxCovers;
+  const refundHours = intOrNull("refundCutoffHours", "Free cancellation hours", 0, 720);
+  if (refundHours && typeof refundHours === "object") return refundHours;
+
+  const notificationEmail = String(formData.get("notificationEmail") ?? "").trim() || null;
+  if (notificationEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) return { error: "The notification email doesn't look valid." };
+
+  const googleReviewUrl = String(formData.get("googleReviewUrl") ?? "").trim() || null;
+  if (googleReviewUrl && !/^https:\/\/\S+$/.test(googleReviewUrl)) return { error: "The Google review link should start with https://" };
+
+  const ga4MeasurementId = String(formData.get("ga4MeasurementId") ?? "").trim().toUpperCase() || null;
+  if (ga4MeasurementId && !/^G-[A-Z0-9]{4,16}$/.test(ga4MeasurementId)) return { error: "The Google Analytics ID should look like G-ABC123XYZ." };
+  const metaPixelId = String(formData.get("metaPixelId") ?? "").trim() || null;
+  if (metaPixelId && !/^\d{6,20}$/.test(metaPixelId)) return { error: "The Meta pixel ID should be numbers only." };
+
   const brandColorRaw = String(formData.get("brandColorHex") ?? "").trim();
   if (brandColorRaw && !/^#[0-9a-fA-F]{6}$/.test(brandColorRaw)) {
     return { error: 'Brand colour must be a 6-digit hex code like "#7c3aed".' };
@@ -84,7 +125,29 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
 
   await prisma.venue.update({
     where: { id: venue.id },
-    data: { name, address, phone, email, bookingCode, maxArrivalsPer30Min, brandColorHex, ...logoData },
+    data: {
+      name,
+      address,
+      phone,
+      email,
+      bookingCode,
+      maxArrivalsPer30Min,
+      brandColorHex,
+      tagline,
+      maxCoversPer30Min: maxCovers as number | null,
+      ...(refundHours != null ? { refundCutoffHours: refundHours as number } : {}),
+      notificationEmail,
+      notifyOnNewBooking: formData.get("notifyOnNewBooking") === "on",
+      notifyOnEnquiry: formData.get("notifyOnEnquiry") === "on",
+      notifyOnCancellation: formData.get("notifyOnCancellation") === "on",
+      dailyDigest: formData.get("dailyDigest") === "on",
+      onlineBookingLive: formData.get("onlineBookingLive") === "on",
+      googleReviewUrl,
+      ga4MeasurementId,
+      metaPixelId,
+      ...logoData,
+      ...headerData,
+    },
   });
 
   revalidatePath(`/admin/${venue.slug}/details`);

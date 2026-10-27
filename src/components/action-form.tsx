@@ -58,7 +58,11 @@ export function ActionForm({
   );
 
   return (
-    <form action={formAction} className={className} encType={encType}>
+    // encType is accepted for readability at call sites but not rendered:
+    // React sends function actions as multipart already (files included)
+    // and drops the attribute on the server, so rendering it only causes a
+    // hydration mismatch.
+    <form action={formAction} className={className} data-enctype={encType}>
       {state?.error && (
         <p className="animate-in mb-3 rounded-lg border border-red-100 bg-[var(--danger-soft)] px-3 py-2 text-sm text-[var(--danger-soft-text)]">
           {state.error}

@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: {
+    // Logo and header photo uploads go through a server action; the 1MB
+    // default turns away an ordinary phone photo.
+    serverActions: { bodySizeLimit: "8mb" },
     // Railway's build cache mount doesn't survive between builds the way
     // Turbopack's persistent filesystem cache expects, and it corrupts
     // ("Invalid block type" / "Batch data restore failed" panics, exit

@@ -11,7 +11,7 @@
  * at the one domain that's ever actually hosted this in practice.
  */
 export function getCustomerAppUrl(): string {
-  return process.env.CUSTOMER_APP_URL || "https://ls-bookings.up.railway.app";
+  return (process.env.CUSTOMER_APP_URL || "https://bookmein.now").replace(/\/+$/, "");
 }
 
 /** The link staff copy/paste to send a customer to their pre-order portal (manual delivery for now, see PreOrderInvite's doc comment - no automated email). */
