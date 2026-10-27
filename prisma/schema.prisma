@@ -167,6 +167,40 @@ model Venue {
   /// is gone (Booking is on a flat 13-month retention clock, Payment on
   /// its own ~6-year one).
   payments              Payment[]
+
+  /// Launch and guest-facing settings added for the Book Me In rebuild.
+  /// tagline: one line under the venue name on the booking page.
+  tagline String?
+  /// Optional wide photo for the top of the booking page, stored like logoImage.
+  headerImage     Bytes?
+  headerImageType String?
+  /// Link to the venue's Google review form, used in the follow-up email.
+  googleReviewUrl String?
+  /// Analytics on the booking page: GA4 measurement id (G-XXXX) and Meta pixel id.
+  ga4MeasurementId String?
+  metaPixelId      String?
+  /// Where staff notifications go (new booking, cancellation, enquiry). Falls
+  /// back to Venue.email when null.
+  notificationEmail String?
+  notifyOnNewBooking   Boolean @default(true)
+  notifyOnCancellation Boolean @default(true)
+  notifyOnEnquiry      Boolean @default(true)
+  /// Morning email listing the day's bookings.
+  dailyDigest          Boolean @default(false)
+  /// Guests can cancel or reduce online and get an automatic refund when
+  /// they do it at least this many hours before arrival. Matches the refund
+  /// policy text, which reads this value.
+  refundCutoffHours Int @default(48)
+  /// Venue-wide cap on guests (covers) starting in any 30 minute window,
+  /// alongside maxArrivalsPer30Min which caps bookings. Null = no cap.
+  maxCoversPer30Min Int?
+  /// Setup checklist: online booking only opens once this is set.
+  onlineBookingLive Boolean @default(true)
+  addOns       AddOn[]
+  waitlist     WaitlistEntry[]
+  emailCopies  EmailCopy[]
+  promoCodes   PromoCode[]
+  guestListEntries GuestListEntry[]
 }
 
 // ---------------------------------------------------------------------------
@@ -490,6 +524,35 @@ model BookingType {
   /// too, not just protected from what came before.
   bufferMinutes Int @default(0)
 
+  /// Online bookings must be made at least this many minutes before arrival.
+  minLeadMinutes Int?
+  /// Online bookings open this many days ahead at most. Null = no limit.
+  maxDaysAhead Int?
+  /// Cap on guests starting in any coversIntervalMinutes window for this type.
+  maxCoversPerInterval Int?
+  coversIntervalMinutes Int @default(30)
+  /// Minimum spend in pence, per booking or per guest (minSpendPerGuest).
+  /// Shown to the guest; taken up front when minSpendPrepaid is true.
+  minSpendPence    Int?
+  minSpendPerGuest Boolean @default(false)
+  minSpendPrepaid  Boolean @default(false)
+  /// Guest must confirm everyone in the party is 18 or over.
+  requiresAgeConfirmation Boolean @default(false)
+  /// TABLES = seated on tables (default). TICKETED = sold by headcount per
+  /// start time up to ticketCapacity, no table allocation (masterclasses,
+  /// quiz nights).
+  capacityMode   CapacityMode @default(TABLES)
+  ticketCapacity Int?
+  /// Offer a waitlist when a date has no times left.
+  waitlistEnabled Boolean @default(false)
+  /// Pre-orders (including each guest's own picks) close this many days
+  /// before arrival, with reminder emails before then. Christmas parties.
+  preOrderDeadlineDays Int?
+  /// Treat as a group / party booking: per-guest pre-order links are offered
+  /// to the organiser straight after booking.
+  isGroupParty Boolean @default(false)
+  addOns AddOnBookingType[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -514,6 +577,11 @@ model BookingType {
 /// "Terrace". `priority` controls fill order for auto-assignment: lower
 /// fills first, so the algorithm exhausts one area's capacity before
 /// spilling a booking into the next, see assignTables in generate-slots.ts.
+enum CapacityMode {
+  TABLES
+  TICKETED
+}
+
 model Area {
   id       String @id @default(cuid())
   venueId  String
@@ -650,6 +718,14 @@ model Table {
   /// overlapping combinations. Replaces the inferred-from-adjacency combos
   /// the pairwise TableLink model produced. See TableCombination.
   combinationEntries TableCombinationEntry[]
+
+  /// Floor plan position and size, in plan units (1 unit = 1% of plan width).
+  planX      Float?
+  planY      Float?
+  planW      Float?
+  planH      Float?
+  planShape  String? // "rect" | "round"
+  planRotate Int     @default(0)
 
   @@unique([venueId, label])
 }
@@ -814,6 +890,42 @@ model Booking {
   preOrder       PreOrder?
   preOrderInvite PreOrderInvite?
   messages       Message[]
+
+  /// Occasion picked by the guest: BIRTHDAY, ANNIVERSARY, DATE, CELEBRATION,
+  /// BUSINESS, OTHER. Null = none given.
+  occasion     String?
+  /// Allergies and dietary needs, shown to staff and on the run sheet.
+  dietaryNotes String?
+  /// Internal note only staff see (notes is the guest's own message).
+  staffNotes   String?
+  /// Set when the guest confirmed everyone is 18+.
+  ageConfirmedAt DateTime?
+  /// Where the booking came from: "website", "google", "instagram",
+  /// "facebook", or any ?source= value on the booking link.
+  channel String?
+  /// Minimum spend agreed for this booking, in pence.
+  minSpendPence Int?
+  cancelledAt        DateTime?
+  cancelledBy        String?
+  cancellationReason String?
+  /// Pre-order deadline reminder emails.
+  preOrderReminderSentAt DateTime?
+  promoCodeId String?
+  promoCode   PromoCode? @relation(fields: [promoCodeId], references: [id])
+  discountPence Int @default(0)
+  addOns  BookingAddOn[]
+  events  BookingEvent[]
+  /// Enquiry pipeline (used while status is ENQUIRY): stage NEW, CONTACTED,
+  /// PROPOSAL_SENT, WON or LOST; owner; date to chase; rough budget.
+  enquiryStage   String?
+  assignedToId   String?
+  assignedTo     StaffUser? @relation("BookingAssignee", fields: [assignedToId], references: [id])
+  followUpDate   DateTime?  @db.Date
+  budgetPence    Int?
+  lostReason     String?
+  proposalSentAt DateTime?
+  proposalNote   String?
+  paymentStages  BookingPaymentStage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1292,6 +1404,7 @@ model StaffUser {
   createdAt   DateTime  @default(now())
 
   sentMessages Message[]
+  assignedBookings Booking[] @relation("BookingAssignee")
 }
 
 enum MessageDirection {
@@ -1402,6 +1515,9 @@ model Customer {
   /// customer notes field." Not legal advice, worth a real compliance check
   /// if this venue group wants that assumption confirmed.
   staffNotes String?
+  /// Free tags staff add, e.g. VIP, Regular, Press. Shown in the diary.
+  tags      String[] @default([])
+  allergies String?
 
   /// Max booking.date across every Booking that reconciled into this row -
   /// the anchor for this row's own retention window (12 months if
@@ -1474,4 +1590,154 @@ model BookingTypeDayWindow {
   maxPartySize       Int?
 
   @@unique([bookingTypeId, dayOfWeek])
+}
+
+/// Something a guest can add to a booking: prosecco on arrival, a birthday
+/// cake, a bottle package. Priced per booking or per guest.
+model AddOn {
+  id          String  @id @default(cuid())
+  venueId     String
+  venue       Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  pricePence  Int
+  perGuest    Boolean @default(false)
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+  createdAt   DateTime @default(now())
+  bookingTypes AddOnBookingType[]
+  bookingAddOns BookingAddOn[]
+}
+
+model AddOnBookingType {
+  addOnId       String
+  addOn         AddOn       @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+  bookingTypeId String
+  bookingType   BookingType @relation(fields: [bookingTypeId], references: [id], onDelete: Cascade)
+  @@id([addOnId, bookingTypeId])
+}
+
+model BookingAddOn {
+  id             String  @id @default(cuid())
+  bookingId      String
+  booking        Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  addOnId        String?
+  addOn          AddOn?  @relation(fields: [addOnId], references: [id], onDelete: SetNull)
+  nameSnapshot   String
+  unitPricePence Int
+  quantity       Int     @default(1)
+  @@index([bookingId])
+}
+
+/// Change history for a booking: who did what and when.
+model BookingEvent {
+  id        String   @id @default(cuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  at        DateTime @default(now())
+  /// "Guest", "System", or the staff member's name.
+  actor     String
+  /// Short machine kind, e.g. created, confirmed, moved, cancelled, refunded.
+  kind      String
+  /// Human-readable line shown in the history list.
+  detail    String
+  @@index([bookingId, at])
+}
+
+enum WaitlistStatus {
+  WAITING
+  OFFERED
+  BOOKED
+  EXPIRED
+  CANCELLED
+}
+
+model WaitlistEntry {
+  id            String         @id @default(cuid())
+  venueId       String
+  venue         Venue          @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  bookingTypeId String
+  date          DateTime       @db.Date
+  /// Rough preferred time "HH:mm"; null = any time.
+  preferredTime String?
+  partySize     Int
+  name          String
+  email         String
+  phone         String?
+  status        WaitlistStatus @default(WAITING)
+  token         String         @unique
+  offeredAt     DateTime?
+  createdAt     DateTime       @default(now())
+  @@index([venueId, date])
+}
+
+/// Per-venue wording for guest emails. Null fields fall back to the default.
+model EmailCopy {
+  id        String  @id @default(cuid())
+  venueId   String
+  venue     Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  /// confirmation | reminder | follow_up | cancellation | payment_reminder
+  kind      String
+  subject   String?
+  intro     String?
+  footer    String?
+  updatedAt DateTime @updatedAt
+  @@unique([venueId, kind])
+}
+
+model PromoCode {
+  id           String    @id @default(cuid())
+  venueId      String
+  venue        Venue     @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  code         String
+  description  String?
+  percentOff   Int?
+  amountOffPence Int?
+  validFrom    DateTime? @db.Date
+  validTo      DateTime? @db.Date
+  maxUses      Int?
+  uses         Int       @default(0)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  bookings     Booking[]
+  @@unique([venueId, code])
+}
+
+/// A staged payment on a private hire proposal: deposit, then balance.
+model BookingPaymentStage {
+  id          String    @id @default(cuid())
+  bookingId   String
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  label       String
+  amountPence Int
+  dueDate     DateTime? @db.Date
+  paymentId   String?   @unique
+  paidAt      DateTime?
+  sortOrder   Int       @default(0)
+}
+
+enum GuestListStatus {
+  LISTED
+  ARRIVED
+  NO_SHOW
+  CANCELLED
+}
+
+/// Names on a door list for a night: free or paid entry, arrival cut-off.
+model GuestListEntry {
+  id           String          @id @default(cuid())
+  venueId      String
+  venue        Venue           @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  date         DateTime        @db.Date
+  name         String
+  email        String?
+  phone        String?
+  guests       Int             @default(1)
+  arriveBy     String?
+  note         String?
+  status       GuestListStatus @default(LISTED)
+  arrivedCount Int             @default(0)
+  addedBy      String?
+  createdAt    DateTime        @default(now())
+  @@index([venueId, date])
 }
