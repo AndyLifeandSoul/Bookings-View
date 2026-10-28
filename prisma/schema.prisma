@@ -174,6 +174,13 @@ model Venue {
   /// Optional wide photo for the top of the booking page, stored like logoImage.
   headerImage     Bytes?
   headerImageType String?
+  /// How the header photo sits in its banner: focus point as a percentage
+  /// across and down (50/50 is the centre), zoom in percent (100 = cover),
+  /// and how much it is darkened under the venue name (0 to 80).
+  headerPosX Int @default(50)
+  headerPosY Int @default(50)
+  headerZoom Int @default(100)
+  headerDim  Int @default(30)
   /// Link to the venue's Google review form, used in the follow-up email.
   googleReviewUrl String?
   /// Analytics on the booking page: GA4 measurement id (G-XXXX) and Meta pixel id.

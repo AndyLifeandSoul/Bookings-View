@@ -117,6 +117,14 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
   const metaPixelId = String(formData.get("metaPixelId") ?? "").trim() || null;
   if (metaPixelId && !/^\d{6,20}$/.test(metaPixelId)) return { error: "The Meta pixel ID should be numbers only." };
 
+  // Header photo framing, sent only when there's a photo to frame.
+  const framing: Record<string, number> = {};
+  for (const [key, lo, hi] of [["headerPosX", 0, 100], ["headerPosY", 0, 100], ["headerZoom", 100, 300], ["headerDim", 0, 80]] as const) {
+    if (!formData.has(key)) continue;
+    const n = Math.round(Number(formData.get(key)));
+    if (Number.isFinite(n)) framing[key] = Math.min(hi, Math.max(lo, n));
+  }
+
   // Card payment settings: owners only, and only when the form sent them.
   let ownerData: { legalEntityName?: string | null; paymentAccountId?: string | null } = {};
   if (session.role === "OWNER" && formData.has("paymentAccountId")) {
@@ -158,6 +166,7 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
       ...logoData,
       ...headerData,
       ...ownerData,
+      ...framing,
     },
   });
 

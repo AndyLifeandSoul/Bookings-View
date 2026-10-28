@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { DEFAULT_FRAMING, headerImageStyle, headerOverlayStyle, type HeaderFraming } from "@/lib/venues/header-style";
+import { HeaderFramingFields } from "./header-framing";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/gif,image/svg+xml";
@@ -39,13 +41,16 @@ export function VenueLookFields({
   brandColorHex,
   logoSrc,
   headerSrc,
+  framing,
 }: {
   venueName: string;
   tagline: string;
   brandColorHex: string | null;
   logoSrc: string | null;
   headerSrc: string | null;
+  framing: HeaderFraming;
 }) {
+  const [frame, setFrame] = useState(framing);
   const [colour, setColour] = useState(brandColorHex && HEX.test(brandColorHex) ? brandColorHex.toLowerCase() : "#0f8c7b");
   const [colourText, setColourText] = useState(colour);
   const [line, setLine] = useState(tagline);
@@ -98,7 +103,10 @@ export function VenueLookFields({
             type="file"
             name="headerImage"
             accept={PHOTO_TYPES}
-            onChange={(e) => setHeaderPreview(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              setHeaderPreview(e.target.files?.[0] ?? null);
+              setFrame(DEFAULT_FRAMING);
+            }}
             className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm"
           />
           <span className="text-xs text-zinc-500">A wide photo of the venue, at least 1600 pixels across. JPG, PNG or WEBP, up to 5MB. Without one, the top of the page uses your brand colour.</span>
@@ -108,6 +116,7 @@ export function VenueLookFields({
               Remove the current photo
             </label>
           )}
+          {shownHeader && <HeaderFramingFields src={shownHeader} value={frame} onChange={setFrame} />}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -144,8 +153,8 @@ export function VenueLookFields({
           {shownHeader ? (
             <div className="relative h-24 w-full overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={shownHeader} alt="" className="h-full w-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/20 to-black/60" />
+              <img src={shownHeader} alt="" className="h-full w-full object-cover" style={headerImageStyle(frame)} />
+              <div className="absolute inset-0" style={headerOverlayStyle(frame)} />
             </div>
           ) : (
             <div className="h-16 w-full" style={{ background: colour }} />

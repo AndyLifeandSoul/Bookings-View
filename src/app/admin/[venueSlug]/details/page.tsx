@@ -74,6 +74,10 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
       logoUrl: true,
       logoImageType: true,
       headerImageType: true,
+      headerPosX: true,
+      headerPosY: true,
+      headerZoom: true,
+      headerDim: true,
       brandColorHex: true,
       googleReviewUrl: true,
       ga4MeasurementId: true,
@@ -200,6 +204,7 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
             brandColorHex={venue.brandColorHex}
             logoSrc={logoSrc ?? null}
             headerSrc={headerSrc}
+            framing={{ headerPosX: venue.headerPosX, headerPosY: venue.headerPosY, headerZoom: venue.headerZoom, headerDim: venue.headerDim }}
           />
         </Block>
 
