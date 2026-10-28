@@ -12,6 +12,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "staff:create": "tsx scripts/create-staff-user.ts",
+    "staff:reset-password": "tsx scripts/reset-staff-password.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
