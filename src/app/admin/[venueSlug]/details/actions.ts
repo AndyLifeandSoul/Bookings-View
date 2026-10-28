@@ -15,7 +15,7 @@ async function resolveVenue(formData: FormData): Promise<{ id: string; slug: str
 }
 
 export async function updateVenueDetails(formData: FormData): Promise<ActionResult> {
-  await requireAdminSession();
+  const session = await requireAdminSession();
   const venue = await resolveVenue(formData);
   if ("error" in venue) return venue;
 
@@ -117,6 +117,16 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
   const metaPixelId = String(formData.get("metaPixelId") ?? "").trim() || null;
   if (metaPixelId && !/^\d{6,20}$/.test(metaPixelId)) return { error: "The Meta pixel ID should be numbers only." };
 
+  // Card payment settings: owners only, and only when the form sent them.
+  let ownerData: { legalEntityName?: string | null; paymentAccountId?: string | null } = {};
+  if (session.role === "OWNER" && formData.has("paymentAccountId")) {
+    const accountId = String(formData.get("paymentAccountId") ?? "") || null;
+    if (accountId && !(await prisma.paymentAccount.findUnique({ where: { id: accountId }, select: { id: true } }))) {
+      return { error: "That Dojo account no longer exists." };
+    }
+    ownerData = { paymentAccountId: accountId, legalEntityName: String(formData.get("legalEntityName") ?? "").trim().slice(0, 120) || null };
+  }
+
   const brandColorRaw = String(formData.get("brandColorHex") ?? "").trim();
   if (brandColorRaw && !/^#[0-9a-fA-F]{6}$/.test(brandColorRaw)) {
     return { error: 'Brand colour must be a 6-digit hex code like "#7c3aed".' };
@@ -147,6 +157,7 @@ export async function updateVenueDetails(formData: FormData): Promise<ActionResu
       metaPixelId,
       ...logoData,
       ...headerData,
+      ...ownerData,
     },
   });
 

@@ -92,7 +92,7 @@ export async function venueReadiness(venueId: string): Promise<{ items: Readines
       done: !takesMoney || (!!venue.paymentAccountId && !!venue.legalEntityName),
       required: true,
       detail: takesMoney
-        ? "Some booking types take payment, so the venue needs a Dojo account linked and its trading name set. Book Me In sets this up."
+        ? "Some booking types take payment, so the venue needs its Dojo account and company name set. Owners do this in Venue details, Card payments."
         : "Not needed yet: nothing you offer takes payment.",
       href: `${base}/details`,
     },

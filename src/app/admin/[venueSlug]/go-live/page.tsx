@@ -96,7 +96,7 @@ export default async function GoLivePage({ params }: { params: Promise<{ venueSl
               </span>
               <span className="block text-xs text-zinc-500">{item.detail}</span>
             </span>
-            {!item.done && <span className="text-sm font-medium text-[var(--accent)]">{item.key === "payments" ? "Ask Book Me In" : "Set up"}</span>}
+            {!item.done && <span className="text-sm font-medium text-[var(--accent)]">Set up</span>}
           </Link>
         ))}
       </Card>

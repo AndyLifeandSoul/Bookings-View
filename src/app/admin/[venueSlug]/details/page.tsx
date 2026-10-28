@@ -53,7 +53,8 @@ function Toggle({ name, label, detail, defaultChecked }: { name: string; label: 
  */
 export default async function VenueDetailsPage({ params }: { params: Promise<{ venueSlug: string }> }) {
   const { venueSlug } = await params;
-  const { venue: venueRef } = await requireAdminVenue(venueSlug);
+  const { venue: venueRef, session } = await requireAdminVenue(venueSlug);
+  const isOwner = session.role === "OWNER";
 
   const venue = await prisma.venue.findUniqueOrThrow({
     where: { id: venueRef.id },
@@ -66,6 +67,7 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
       phone: true,
       email: true,
       legalEntityName: true,
+      paymentAccount: { select: { id: true, code: true, name: true } },
       bookingCode: true,
       maxArrivalsPer30Min: true,
       maxCoversPer30Min: true,
@@ -90,6 +92,7 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
   const logoSrc = venue.logoImageType ? `/api/venue-logo/${venue.slug}?v=${v}` : venue.logoUrl;
   const headerSrc = venue.headerImageType ? `/api/venue-header/${venue.slug}?v=${v}` : null;
   const bookingPage = `${getCustomerAppUrl()}/book/${venue.slug}`;
+  const accounts = isOwner ? await prisma.paymentAccount.findMany({ orderBy: { name: "asc" }, select: { id: true, code: true, name: true } }) : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -150,12 +153,45 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
               <input type="email" name="email" defaultValue={venue.email ?? ""} placeholder="bookings@venuename.co.uk" className={input} />
             </Field>
           </div>
-          {venue.legalEntityName && (
+          {venue.legalEntityName && !isOwner && (
             <p className="text-xs text-zinc-500">
               Trading as {venue.legalEntityName} on the payment page and policies. Ask Book Me In to change this, as it must match your card payment account.
             </p>
           )}
         </Block>
+
+        {isOwner && (
+          <Block title="Card payments" hint="Only owners see this. Which Dojo account takes this venue's payments.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Company name" hint="Shown on the payment page and policies. Must match the Dojo account.">
+                <input type="text" name="legalEntityName" defaultValue={venue.legalEntityName ?? ""} className={input} />
+              </Field>
+              <Field label="Dojo account">
+                <select name="paymentAccountId" defaultValue={venue.paymentAccount?.id ?? ""} className={input}>
+                  <option value="">None, takes no payments</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({a.code})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            {venue.paymentAccount && (
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-600">
+                <p>For this account to take payments, the customer site on Railway needs:</p>
+                <p className="mt-1 font-mono text-zinc-800">
+                  DOJO_API_KEY_{venue.paymentAccount.code}
+                  <br />
+                  DOJO_WEBHOOK_SECRET_{venue.paymentAccount.code}
+                </p>
+                <p className="mt-1">
+                  and a webhook in Dojo pointing to <span className="font-mono text-zinc-800">{getCustomerAppUrl()}/api/webhooks/dojo/{venue.paymentAccount.code}</span>
+                </p>
+              </div>
+            )}
+          </Block>
+        )}
 
         <Block title="How your booking page looks">
           <VenueLookFields
