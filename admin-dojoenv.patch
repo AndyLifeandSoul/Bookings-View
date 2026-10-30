@@ -1,0 +1,16 @@
+diff --git a/src/app/admin/[venueSlug]/details/page.tsx b/src/app/admin/[venueSlug]/details/page.tsx
+index c354664..9e57969 100644
+--- a/src/app/admin/[venueSlug]/details/page.tsx
++++ b/src/app/admin/[venueSlug]/details/page.tsx
+@@ -192,6 +192,11 @@ export default async function VenueDetailsPage({ params }: { params: Promise<{ v
+                 <p className="mt-1">
+                   and a webhook in Dojo pointing to <span className="font-mono text-zinc-800">{getCustomerAppUrl()}/api/webhooks/dojo/{venue.paymentAccount.code}</span>
+                 </p>
++                <p className="mt-1">
++                  Sandbox or live: set <span className="font-mono text-zinc-800">DOJO_ENV_{venue.paymentAccount.code}</span> to <span className="font-mono">live</span> or{" "}
++                  <span className="font-mono">sandbox</span> to override <span className="font-mono">DOJO_ENV</span> for this account only. Live needs an <span className="font-mono">sk_prod_</span> key, sandbox an{" "}
++                  <span className="font-mono">sk_sandbox_</span> key.
++                </p>
+               </div>
+             )}
+           </Block>
