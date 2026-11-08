@@ -96,7 +96,35 @@ export async function resetStaffPassword(formData: FormData): Promise<CreateStaf
 
   const plaintextPassword = generatePassword();
   const passwordHash = await hashPassword(plaintextPassword);
-  await prisma.staffUser.update({ where: { id }, data: { passwordHash } });
+  // A new password also lifts any lockout from wrong attempts.
+  await prisma.staffUser.update({ where: { id }, data: { passwordHash, failedLoginCount: 0, lockedUntil: null } });
 
   return { generatedPassword: plaintextPassword };
+}
+
+/**
+ * For a staff member who has lost the phone with their authenticator app:
+ * switches their two-step sign-in off (and lifts any lockout) so they can
+ * sign in with their password and set it up again.
+ */
+export async function turnOffStaffTwoStep(formData: FormData): Promise<ActionResult> {
+  const access = await requireOwnerSession();
+  if ("error" in access) return access;
+  const id = String(formData.get("id") ?? "");
+  const staffUser = await prisma.staffUser.findUnique({ where: { id }, select: { id: true } });
+  if (!staffUser) return { error: "Account not found." };
+  await prisma.staffUser.update({
+    where: { id },
+    data: { totpSecretEnc: null, totpEnabledAt: null, totpLastStep: null, failedLoginCount: 0, lockedUntil: null },
+  });
+  revalidatePath("/admin/staff");
+}
+
+/** Lifts a lockout from too many wrong passwords or codes before the 15 minutes are up. */
+export async function unlockStaff(formData: FormData): Promise<ActionResult> {
+  const access = await requireOwnerSession();
+  if ("error" in access) return access;
+  const id = String(formData.get("id") ?? "");
+  await prisma.staffUser.updateMany({ where: { id }, data: { failedLoginCount: 0, lockedUntil: null } });
+  revalidatePath("/admin/staff");
 }

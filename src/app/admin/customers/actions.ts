@@ -9,9 +9,11 @@ import type { ActionResult } from "@/components/action-form";
 
 /**
  * On-demand GDPR erasure of one customer's personal data, for a "delete my
- * data" request. Nulls the identity fields on every Booking that customer
- * made (the booking itself survives, only who it was for is removed) and
- * deletes their Customer row and staff notes. Immediate and irreversible,
+ * data" request. Nulls the identity fields, their notes, allergies and
+ * staff notes on every Booking that customer made (the booking itself
+ * survives, only who it was for is removed), deletes the emails stored on
+ * those bookings, their waiting list and guest list entries, and their
+ * Customer row. Immediate and irreversible,
  * regardless of the automatic retention windows the data-retention cron
  * applies on a timer. Admin-only (requireAdminSession blocks STAFF); the
  * two-step confirm lives in the button component (see

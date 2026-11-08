@@ -15,6 +15,7 @@ import {
   Users,
   UserCog,
   MessageSquare,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import { LogoutButton } from "@/components/logout-button";
@@ -125,6 +126,9 @@ export function TopBar({
             <div className="font-medium text-zinc-200">{userName}</div>
             <div className="text-zinc-500">{roleLabel(userRole)}</div>
           </div>
+          <Link href="/account/security" title="Sign-in security" aria-label="Sign-in security" className="text-zinc-400 transition-colors hover:text-white">
+            <ShieldCheck className="h-4 w-4" strokeWidth={2} />
+          </Link>
           <span className="[&_button]:text-zinc-400 [&_button:hover]:text-white">
             <LogoutButton />
           </span>

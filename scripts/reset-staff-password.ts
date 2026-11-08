@@ -13,6 +13,7 @@ import { hashPassword } from "../src/lib/auth/password";
  *
  *   npm run staff:reset-password
  *   npm run staff:reset-password -- --email=andy@lifeandsoul.ltd
+ *   npm run staff:reset-password -- --email=andy@lifeandsoul.ltd --clear-2fa
  *
  * Point DATABASE_URL at the database you mean (the live one for live
  * logins), for example by prefixing the command with DATABASE_URL="...".
@@ -41,7 +42,19 @@ async function main() {
       process.exit(1);
     }
     const password = crypto.randomBytes(15).toString("base64url");
-    await prisma.staffUser.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(password), active: true } });
+    // Also lifts any lockout, and with --clear-2fa switches two-step sign-in off
+    // (for an owner who has lost the phone with their authenticator app).
+    const clear2fa = process.argv.includes("--clear-2fa");
+    await prisma.staffUser.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await hashPassword(password),
+        active: true,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        ...(clear2fa ? { totpSecretEnc: null, totpEnabledAt: null, totpLastStep: null } : {}),
+      },
+    });
     console.log(`\nNew password for ${email} (${user.role}):\n\n  ${password}\n\nShown once. Save it in your password manager now, then sign in.`);
   } finally {
     await prisma.$disconnect();

@@ -97,40 +97,61 @@ export async function setStaffNotes(params: {
  * means there was nothing left to erase.
  */
 export async function eraseCustomerData(identity: CustomerIdentity): Promise<{ bookingsScrubbed: number }> {
+  // Everything that could say who the guest was or something about them:
+  // their contact details, their own notes, allergies and staff notes. The
+  // booking itself (date, time, party size, status, money) stays for the
+  // venue's records and reports.
   const scrubData = {
     customerName: "Deleted customer",
     customerEmail: null,
     customerPhone: null,
     customerDateOfBirth: null,
     marketingOptIn: false,
+    notes: null,
+    dietaryNotes: null,
+    staffNotes: null,
   };
 
+  let bookingIds: string[];
   if (identity.email) {
-    const [updated] = await prisma.$transaction([
-      prisma.booking.updateMany({
-        where: { customerEmail: { equals: identity.email, mode: "insensitive" } },
-        data: scrubData,
-      }),
-      prisma.customer.deleteMany({ where: { email: identity.email } }),
-    ]);
-    return { bookingsScrubbed: updated.count };
+    const rows = await prisma.booking.findMany({
+      where: { customerEmail: { equals: identity.email, mode: "insensitive" } },
+      select: { id: true },
+    });
+    bookingIds = rows.map((r) => r.id);
+  } else {
+    // Phone-only: Booking.customerPhone is stored raw (whitespace and all)
+    // while Customer.phone is stored stripped, so no single query can
+    // compare them - fetch candidates and match in JS. Same approach as the
+    // cron's scrubExpiredCustomers.
+    const candidates = await prisma.booking.findMany({
+      where: { customerEmail: null, customerPhone: { not: null } },
+      select: { id: true, customerPhone: true },
+    });
+    bookingIds = candidates.filter((b) => b.customerPhone!.replace(/\s+/g, "") === identity.phone).map((b) => b.id);
   }
 
-  // Phone-only: Booking.customerPhone is stored raw (whitespace and all)
-  // while Customer.phone is stored stripped, so no single query can compare
-  // them - fetch candidates and match in JS, then update by id. Same
-  // approach as the cron's scrubExpiredCustomers.
-  const candidates = await prisma.booking.findMany({
-    where: { customerEmail: null, customerPhone: { not: null } },
-    select: { id: true, customerPhone: true },
-  });
-  const matchingIds = candidates
-    .filter((b) => b.customerPhone!.replace(/\s+/g, "") === identity.phone)
-    .map((b) => b.id);
+  // Waiting list and guest list entries are kept by email/phone, not by
+  // booking. Phone numbers there are stored as typed, so match stripped.
+  const samePhone = (p: string | null) => !!p && p.replace(/\s+/g, "") === identity.phone;
+  const [waitIds, guestIds] = identity.email
+    ? [null, null]
+    : [
+        (await prisma.waitlistEntry.findMany({ where: { phone: { not: null } }, select: { id: true, phone: true } })).filter((w) => samePhone(w.phone)).map((w) => w.id),
+        (await prisma.guestListEntry.findMany({ where: { phone: { not: null } }, select: { id: true, phone: true } })).filter((g) => samePhone(g.phone)).map((g) => g.id),
+      ];
+  const byEmail = identity.email ? { email: { equals: identity.email, mode: "insensitive" as const } } : null;
 
   const [updated] = await prisma.$transaction([
-    prisma.booking.updateMany({ where: { id: { in: matchingIds } }, data: scrubData }),
-    prisma.customer.deleteMany({ where: { email: null, phone: identity.phone } }),
+    prisma.booking.updateMany({ where: { id: { in: bookingIds } }, data: scrubData }),
+    // Emails to and from the guest about those bookings, copies of which
+    // would otherwise keep their name, address and anything they wrote.
+    prisma.message.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+    prisma.waitlistEntry.deleteMany({ where: byEmail ?? { id: { in: waitIds! } } }),
+    prisma.guestListEntry.deleteMany({ where: byEmail ?? { id: { in: guestIds! } } }),
+    identity.email
+      ? prisma.customer.deleteMany({ where: { email: identity.email } })
+      : prisma.customer.deleteMany({ where: { email: null, phone: identity.phone } }),
   ]);
   return { bookingsScrubbed: updated.count };
 }

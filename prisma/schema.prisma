@@ -1423,6 +1423,20 @@ model StaffUser {
   lastLoginAt DateTime?
   createdAt   DateTime  @default(now())
 
+  /// Wrong passwords or codes in a row since the last good sign-in. At 5 the
+  /// login locks until lockedUntil, then the count starts again.
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+
+  /// Two-step sign-in with an authenticator app (TOTP). The secret is
+  /// encrypted by the staff app (AES-256-GCM, key derived from AUTH_SECRET),
+  /// never stored in plain text. totpEnabledAt is set once the first code is
+  /// confirmed; null means two-step sign-in is off. totpLastStep is the last
+  /// 30-second step a code was accepted for, so one code can't be used twice.
+  totpSecretEnc String?
+  totpEnabledAt DateTime?
+  totpLastStep  Int?
+
   sentMessages Message[]
   assignedBookings Booking[] @relation("BookingAssignee")
 }

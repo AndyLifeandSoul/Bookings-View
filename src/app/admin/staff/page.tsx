@@ -6,7 +6,7 @@ import { listActiveVenues } from "@/lib/venues/list-active-venues";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CreateStaffForm } from "./create-staff-form";
-import { ToggleActiveButton, ResetPasswordButton } from "./staff-row-actions";
+import { ToggleActiveButton, ResetPasswordButton, TurnOffTwoStepButton, UnlockButton } from "./staff-row-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +29,7 @@ export default async function StaffAccountsPage() {
     }),
     listActiveVenues(),
   ]);
+  const now = new Date();
 
   return (
     <div className="animate-in mx-auto max-w-4xl px-4 py-8 sm:px-8 sm:py-10">
@@ -49,6 +50,7 @@ export default async function StaffAccountsPage() {
                 <th className="px-4 py-2.5">Role</th>
                 <th className="px-4 py-2.5">Venue</th>
                 <th className="px-4 py-2.5">Status</th>
+                <th className="px-4 py-2.5">Two-step</th>
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
@@ -61,10 +63,16 @@ export default async function StaffAccountsPage() {
                   <td className="px-4 py-3 text-zinc-600">{user.venue?.name ?? "Every venue"}</td>
                   <td className="px-4 py-3">
                     <Badge variant={user.active ? "success" : "neutral"}>{user.active ? "Active" : "Deactivated"}</Badge>
+                    {user.lockedUntil && user.lockedUntil > now && <span className="ml-1.5"><Badge variant="warning">Locked</Badge></span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={user.totpEnabledAt ? "success" : "neutral"}>{user.totpEnabledAt ? "On" : "Off"}</Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex flex-col items-end gap-1">
                       <div className="flex items-center gap-3">
+                        {user.lockedUntil && user.lockedUntil > now && <UnlockButton id={user.id} />}
+                        {user.totpEnabledAt && <TurnOffTwoStepButton id={user.id} />}
                         <ResetPasswordButton id={user.id} />
                         <ToggleActiveButton id={user.id} active={user.active} />
                       </div>
