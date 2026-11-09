@@ -21,6 +21,7 @@ import { resolveVenueLogoUrl } from "@/lib/venues/logo";
 import { logBookingEvent } from "@/lib/bookings/events";
 import { isOccasion, occasionLabel } from "@/lib/bookings/occasions";
 import { bookingMoneyAction } from "@/lib/payments/remote-money";
+import { guestEmailsHandledElsewhere } from "@/lib/email/other-system";
 
 /** Who to name in the booking history for this request. */
 async function actorName(): Promise<string> {
@@ -227,7 +228,7 @@ export async function cancelBookingAction(formData: FormData): Promise<ActionRes
   if (booking.cardHoldSetupIntentId) await bookingMoneyAction(id, { action: "release_hold", actor });
   await logBookingEvent({ bookingId: id, actor, kind: "cancelled", detail: `Cancelled by staff${reason ? `: ${reason}` : ""}.${refundNote}`.trim() });
 
-  if (notify && booking.customerEmail && booking.venue.email) {
+  if (notify && booking.customerEmail && booking.venue.email && !guestEmailsHandledElsewhere(booking.bookingRef)) {
     const brand: VenueBrand = {
       name: booking.venue.name,
       logoUrl: resolveVenueLogoUrl(booking.venue),
@@ -672,7 +673,7 @@ export async function requestPayment(formData: FormData): Promise<ActionResult> 
     // throws (returns ok:false), so a mail hiccup never fails the request,
     // which is already saved. The checkout URL is the whole point, so skip
     // the email if the provider didn't hand one back.
-    if (booking.customerEmail && intent.checkoutUrl) {
+    if (booking.customerEmail && intent.checkoutUrl && !guestEmailsHandledElsewhere(booking.bookingRef)) {
       const brand: VenueBrand = {
         name: booking.venue.name,
         logoUrl: resolveVenueLogoUrl(booking.venue),

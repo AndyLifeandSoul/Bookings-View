@@ -3,6 +3,7 @@ import { renderVenueEmail, type VenueBrand } from "./templates";
 import { buildManageBookingLink } from "@/lib/pre-order/links";
 import { logOutboundEmail } from "./log-message";
 import { resolveVenueLogoUrl } from "@/lib/venues/logo";
+import { guestEmailsHandledElsewhere } from "@/lib/email/other-system";
 
 /**
  * Sends the branded booking/enquiry confirmation for a staff-entered
@@ -48,6 +49,7 @@ export async function sendBookingConfirmationEmail(params: {
 }): Promise<void> {
   const { venue, customerEmail } = params;
   if (!venue.email || !customerEmail) return;
+  if (guestEmailsHandledElsewhere(params.bookingRef)) return;
 
   const brand: VenueBrand = {
     name: venue.name,

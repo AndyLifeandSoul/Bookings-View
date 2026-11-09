@@ -14,6 +14,7 @@ import { renderVenueEmail } from "@/lib/email/templates";
 import { logOutboundEmail } from "@/lib/email/log-message";
 import { resolveVenueLogoUrl } from "@/lib/venues/logo";
 import { ENQUIRY_STAGES } from "@/lib/bookings/enquiry-stages";
+import { guestEmailsHandledElsewhere } from "@/lib/email/other-system";
 
 
 async function access(venueId: string): Promise<{ name: string } | { error: string }> {
@@ -168,6 +169,7 @@ export async function sendProposal(formData: FormData): Promise<ActionResult> {
   });
   if (!booking) return { error: "Enquiry not found." };
   if (!booking.customerEmail) return { error: "Add the guest's email first, the proposal goes by email." };
+  if (guestEmailsHandledElsewhere(booking.bookingRef)) return { error: "This booking came from DesignMyNight, so its guest gets emails from there, not from here." };
 
   const labels = formData.getAll("stageLabel").map(String);
   const amounts = formData.getAll("stageAmount").map(String);
