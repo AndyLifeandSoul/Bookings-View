@@ -99,7 +99,7 @@ export async function BookingDetailsBody({
     // No orderBy, see naturalSortTables' doc comment.
     prisma.table.findMany({
       where: { venueId: venue.id, active: true },
-      select: { id: true, label: true, areaId: true },
+      select: { id: true, label: true, areaId: true, sortOrder: true },
     }),
     prisma.area.findMany({ where: { venueId: venue.id }, orderBy: { priority: "asc" }, select: { id: true, name: true } }),
     prisma.menu.findMany({ where: { venueId: venue.id, active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
