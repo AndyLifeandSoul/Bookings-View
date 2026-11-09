@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2 } from "lucide-react";
+import { Building2, ChevronsUpDown } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import type { VenueOption } from "@/lib/venues/list-active-venues";
 
@@ -54,10 +54,13 @@ export function VenueSwitcher({
         value={currentSlug}
         onChange={(e) => handleChange(e.target.value)}
         aria-label="Switch venue"
+        // appearance-none: Safari draws its own native select and ignores the
+        // left padding, which put the building icon on top of the venue
+        // name. Drawing the arrow ourselves keeps the padding in every browser.
         className={
           variant === "dark"
-            ? "rounded-md border border-zinc-700 bg-zinc-800 py-1 pl-7 pr-2 text-sm font-medium text-zinc-100 transition-colors hover:border-zinc-600 hover:bg-zinc-700"
-            : "rounded-md border border-zinc-300 bg-white py-1 pl-7 pr-2 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:border-zinc-400"
+            ? "cursor-pointer appearance-none rounded-md border border-zinc-700 bg-zinc-800 py-1 pl-7 pr-7 text-sm font-medium text-zinc-100 transition-colors hover:border-zinc-600 hover:bg-zinc-700"
+            : "cursor-pointer appearance-none rounded-md border border-zinc-300 bg-white py-1 pl-7 pr-7 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:border-zinc-400"
         }
       >
         {venues.map((v) => (
@@ -66,6 +69,7 @@ export function VenueSwitcher({
           </option>
         ))}
       </select>
+      <ChevronsUpDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" strokeWidth={2.25} aria-hidden />
     </div>
   );
 }

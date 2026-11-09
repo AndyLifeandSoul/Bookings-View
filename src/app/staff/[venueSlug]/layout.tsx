@@ -61,7 +61,8 @@ export default async function StaffVenueLayout({
         userRole={session.role}
         rightExtra={
           <div className="flex items-center gap-3">
-            <span className="hidden text-sm font-medium text-zinc-200 sm:inline">{venue.name}</span>
+            {/* The switcher already shows the venue; the plain name is for logins with only one venue. */}
+            {venues.length <= 1 && <span className="hidden text-sm font-medium text-zinc-200 sm:inline">{venue.name}</span>}
             <VenueSwitcher venues={venues} currentSlug={venue.slug} variant="dark" />
             {session.role !== "STAFF" && (
               <Link
