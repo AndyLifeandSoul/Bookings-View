@@ -15,7 +15,8 @@ export function DateJump({ venueSlug, dateStr, label }: { venueSlug: string; dat
 
   return (
     <span className="relative inline-flex">
-      <span className="cursor-pointer text-sm font-medium text-zinc-900 underline decoration-dotted decoration-zinc-400 underline-offset-4 transition-colors hover:text-[var(--accent)] hover:decoration-[var(--accent)]">
+      {/* Fixed width and lining figures, so the label is the same size every day. */}
+      <span className="inline-block w-[8.5rem] cursor-pointer whitespace-nowrap text-center text-sm font-medium tabular-nums text-zinc-900 underline decoration-dotted decoration-zinc-400 underline-offset-4 transition-colors hover:text-[var(--accent)] hover:decoration-[var(--accent)]">
         {label}
       </span>
       <input

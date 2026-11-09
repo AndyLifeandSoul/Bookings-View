@@ -136,7 +136,7 @@ export default async function DiaryPage({
             <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.25} />
             Prev
           </Link>
-          <DateJump venueSlug={venue.slug} dateStr={dateStr} label={formatDate(date)} />
+          <DateJump venueSlug={venue.slug} dateStr={dateStr} label={shortDate(dateStr)} />
           <Link href={`/staff/${venue.slug}/diary?date=${nextDate}`} className={buttonStyles("secondary", "sm")}>
             Next
             <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.25} />
@@ -198,6 +198,20 @@ function addDays(dateStr: string, days: number): string {
   const d = new Date(`${dateStr}T00:00:00.000Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * The diary's date label, always the same shape ("Wed 05 Nov 2026") so it
+ * doesn't change width from day to day and nudge the Prev/Next buttons.
+ * Built by hand rather than with toLocaleDateString, which writes
+ * September as "Sept" in en-GB.
+ */
+function shortDate(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  return `${DAYS[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
 function formatDate(date: Date): string {
