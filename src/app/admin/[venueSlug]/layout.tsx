@@ -33,6 +33,7 @@ export default async function AdminVenueLayout({
     { href: `/admin/${venue.slug}/offers`, label: "Offer Codes", icon: "offer" },
     { href: `/admin/${venue.slug}/emails`, label: "Guest Emails", icon: "mail" },
     { href: `/admin/${venue.slug}/marketing`, label: "Marketing", icon: "megaphone" },
+    { href: `/admin/${venue.slug}/import`, label: "Import Bookings", icon: "upload" },
   ];
 
   return (

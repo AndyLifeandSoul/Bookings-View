@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Store, Clock, Tag, LayoutGrid, UtensilsCrossed, Megaphone, Gift, TicketPercent, Mail, Code2, ListChecks, Map as MapIcon, type LucideIcon } from "lucide-react";
+import { Store, Clock, Tag, LayoutGrid, UtensilsCrossed, Megaphone, Gift, TicketPercent, Mail, Code2, ListChecks, Map as MapIcon, Upload, type LucideIcon } from "lucide-react";
 
 /** Icon lookup by name, not a component reference, see TopBar's ICONS doc comment for why (Server Component -> Client Component prop serialisation). */
 const ICONS = {
@@ -12,6 +12,7 @@ const ICONS = {
   grid: LayoutGrid,
   menu: UtensilsCrossed,
   megaphone: Megaphone,
+  upload: Upload,
   gift: Gift,
   offer: TicketPercent,
   mail: Mail,
