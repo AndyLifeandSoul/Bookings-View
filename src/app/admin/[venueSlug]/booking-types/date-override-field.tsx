@@ -79,14 +79,14 @@ export function DateOverrideField({ defaultRows }: { defaultRows: DateOverrideRo
               <option value="closed">Closed</option>
               <option value="open">Open</option>
             </select>
-            <span className="text-xs text-zinc-500">from</span>
+            <span className="text-xs text-zinc-500">{row.allow ? "first booking" : "from"}</span>
             <TimeSelect
               name="dateOverrideStartTime"
               value={row.startTime}
               onChange={(v) => update(row.key, { startTime: v })}
               label={`Exception ${i + 1} start time`}
             />
-            <span className="text-xs text-zinc-500">to</span>
+            <span className="text-xs text-zinc-500">{row.allow ? "last booking" : "to"}</span>
             <TimeSelect
               name="dateOverrideEndTime"
               value={row.endTime}
