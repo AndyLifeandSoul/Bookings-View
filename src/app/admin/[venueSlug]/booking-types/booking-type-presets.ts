@@ -36,6 +36,7 @@ export interface PresetValues {
   depositPounds?: string;
   enquiryThresholdPartySize?: number | null;
   waitlistEnabled?: boolean;
+  openOnSpecialDates?: boolean;
 }
 
 const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
@@ -79,6 +80,7 @@ export const PRESETS: { id: PresetId; label: string; blurb: string; values: Pres
     label: "Bottomless brunch",
     blurb: "A set sitting with a pre-order paid upfront. Closes two days ahead so you can order stock.",
     values: {
+      openOnSpecialDates: false,
       ...BASE,
       name: "Bottomless brunch",
       minPartySize: 2,
@@ -101,6 +103,7 @@ export const PRESETS: { id: PresetId; label: string; blurb: string; values: Pres
     label: "Christmas party",
     blurb: "Groups book with a deposit per head, then each guest picks their own food from a shared link.",
     values: {
+      openOnSpecialDates: false,
       ...BASE,
       name: "Christmas party",
       minPartySize: 8,
@@ -123,6 +126,7 @@ export const PRESETS: { id: PresetId; label: string; blurb: string; values: Pres
     label: "Class or event",
     blurb: "A masterclass, tasting or quiz night sold by the place, up to a set number per session.",
     values: {
+      openOnSpecialDates: false,
       ...BASE,
       name: "Cocktail masterclass",
       minPartySize: 1,

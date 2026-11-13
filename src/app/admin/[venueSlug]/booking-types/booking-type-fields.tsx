@@ -61,6 +61,7 @@ interface Initial {
   capacityMode: "TABLES" | "TICKETED";
   ticketCapacity: number | null;
   waitlistEnabled: boolean;
+  openOnSpecialDates: boolean;
   preOrderDeadlineDays: number | null;
   isGroupParty: boolean;
   noShowFeePounds: string;
@@ -117,6 +118,7 @@ function fromSaved(d: BookingTypeDefaults): Initial {
     capacityMode: d.capacityMode,
     ticketCapacity: d.ticketCapacity,
     waitlistEnabled: d.waitlistEnabled,
+    openOnSpecialDates: d.openOnSpecialDates,
     preOrderDeadlineDays: d.preOrderDeadlineDays,
     isGroupParty: d.isGroupParty,
     noShowFeePounds: d.noShowFeePence != null ? (d.noShowFeePence / 100).toString() : "",
@@ -167,6 +169,7 @@ function fromPreset(p: PresetValues, label: string): Initial {
     capacityMode: p.capacityMode ?? "TABLES",
     ticketCapacity: p.ticketCapacity ?? null,
     waitlistEnabled: p.waitlistEnabled ?? false,
+    openOnSpecialDates: p.openOnSpecialDates ?? true,
     preOrderDeadlineDays: p.preOrderDeadlineDays ?? null,
     isGroupParty: p.isGroupParty ?? false,
     noShowFeePounds: "",
@@ -525,6 +528,15 @@ function FormBody({
 
         <Section title="When people can book" hint="Tick the days this runs. Times are optional.">
           <DayWindowsField selectedDays={initial.availableDaysOfWeek} dayWindows={initial.dayWindows} />
+          <label className="flex items-start gap-2.5">
+            <input type="checkbox" name="openOnSpecialDates" defaultChecked={initial.openOnSpecialDates} className="mt-0.5 h-4 w-4 rounded border-zinc-300" />
+            <span className="flex flex-col">
+              <span className="text-sm font-medium text-zinc-800">Also open on the venue&apos;s special dates</span>
+              <span className="text-xs text-zinc-500">
+                When a Special Date opens the venue on a day not ticked above (Christmas week, say), this can be booked that day too, within the times above. Untick for things that only run at set times, like brunch.
+              </span>
+            </span>
+          </label>
           <Field
             label="Stop taking bookings"
             hint="Counted to the minute from each arrival time. With 2 days, a 3pm Saturday table stops being bookable at 3pm on Thursday. Applies to online bookings; staff can still add them in the diary."

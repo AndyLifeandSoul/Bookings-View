@@ -520,6 +520,15 @@ model BookingType {
   /// before this field existed.
   isPrivateHireType Boolean @default(false)
 
+  /// When the venue opens on a day this type doesn't normally run (a
+  /// Special Date with opening hours, e.g. Christmas week), offer this type
+  /// that day too, within its own booking times and the venue's special
+  /// hours. Off for things that only run at set times (Bottomless Brunch,
+  /// ticketed events) so a special Tuesday doesn't suddenly sell brunch.
+  /// The type's own date exceptions still win.
+  openOnSpecialDates Boolean @default(true)
+
+
   /// Minutes of turnaround/reset time this booking type needs on its
   /// table(s) after it ends before the next booking can start there, e.g.
   /// a bottomless brunch needing 15-20 minutes to clear and reset a table.

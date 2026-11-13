@@ -77,6 +77,7 @@ interface ParsedFields {
   capacityMode: "TABLES" | "TICKETED";
   ticketCapacity: number | null;
   waitlistEnabled: boolean;
+  openOnSpecialDates: boolean;
   preOrderDeadlineDays: number | null;
   isGroupParty: boolean;
   noShowFeePence: number | null;
@@ -338,6 +339,7 @@ function parseFields(formData: FormData): ParseResult {
       capacityMode,
       ticketCapacity: capacityMode === "TICKETED" ? (ticketCapacity as number) : null,
       waitlistEnabled: formData.get("waitlistEnabled") === "on",
+      openOnSpecialDates: formData.get("openOnSpecialDates") === "on",
       preOrderDeadlineDays: preOrderDeadlineDays as number | null,
       isGroupParty: formData.get("isGroupParty") === "on",
       noShowFeePence: noShowFeePence as number | null,
