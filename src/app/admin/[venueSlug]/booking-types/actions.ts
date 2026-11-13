@@ -203,8 +203,15 @@ function parseFields(formData: FormData): ParseResult {
     return { ok: false, error: "Min items per guest can't be more than max items per guest." };
   }
 
-  const enquiryThresholdRaw = String(formData.get("enquiryThresholdPartySize") ?? "").trim();
-  let enquiryThresholdPartySize: number | null = null;
+  // "Online bookings": confirm straight away (null), always an enquiry (0,
+  // since every party is bigger than 0, which the guest site already
+  // treats as an enquiry), or an enquiry above a group size (that number).
+  const enquiryMode = String(formData.get("enquiryMode") ?? "");
+  const enquiryThresholdRaw = enquiryMode === "over" || enquiryMode === "" ? String(formData.get("enquiryThresholdPartySize") ?? "").trim() : "";
+  let enquiryThresholdPartySize: number | null = enquiryMode === "always" ? 0 : null;
+  if (enquiryMode === "over" && enquiryThresholdRaw === "") {
+    return { ok: false, error: "Enter the group size above which bookings come in as enquiries." };
+  }
   if (enquiryThresholdRaw !== "") {
     const parsed = Number(enquiryThresholdRaw);
     if (!Number.isFinite(parsed) || parsed < 1) {

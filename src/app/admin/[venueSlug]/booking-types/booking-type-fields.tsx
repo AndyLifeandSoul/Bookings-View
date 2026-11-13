@@ -337,6 +337,12 @@ function FormBody({
   const [runsUntilClose, setRunsUntilClose] = useState(initial.runsUntilClose);
   const [depositType, setDepositType] = useState(initial.depositType === "NONE" && initial.noShowFeePounds ? "CARD" : initial.depositType);
   const [capacityMode, setCapacityMode] = useState(initial.capacityMode);
+  // 0 is stored for "always an enquiry" (every party size is bigger than 0),
+  // null for "confirm straight away", and a positive number for the old
+  // "groups bigger than N" rule.
+  const [enquiryMode, setEnquiryMode] = useState<"none" | "over" | "always">(
+    initial.enquiryThresholdPartySize === 0 ? "always" : initial.enquiryThresholdPartySize == null ? "none" : "over",
+  );
   const [isGroupParty, setIsGroupParty] = useState(initial.isGroupParty);
   const [preOrderMode, setPreOrderMode] = useState<PreOrderMode>(initial.preOrderMode);
   const [fillMode, setFillMode] = useState(initial.tableFillMode);
@@ -867,15 +873,39 @@ function FormBody({
                   ))}
                 </select>
               </Field>
-              <Field label="Groups bigger than this come in as enquiries" hint="Leave blank to let any group size book straight in.">
-                <input
-                  type="number"
-                  name="enquiryThresholdPartySize"
-                  min={1}
-                  defaultValue={initial.enquiryThresholdPartySize ?? ""}
-                  placeholder="No limit"
-                  className={`${inputClass} w-28`}
-                />
+              <Field
+                label="Online bookings"
+                hint={
+                  enquiryMode === "always"
+                    ? "Every booking of this type waits for staff to confirm it in the diary, whatever the group size."
+                    : enquiryMode === "over"
+                      ? "Bigger groups wait for staff to confirm them in the diary."
+                      : "Every booking is confirmed straight away."
+                }
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    name="enquiryMode"
+                    value={enquiryMode}
+                    onChange={(e) => setEnquiryMode(e.target.value as "none" | "over" | "always")}
+                    className={`${selectClass} w-fit`}
+                  >
+                    <option value="none">Confirm straight away</option>
+                    <option value="over">Enquiry for groups bigger than</option>
+                    <option value="always">Always an enquiry</option>
+                  </select>
+                  {enquiryMode === "over" && (
+                    <input
+                      type="number"
+                      name="enquiryThresholdPartySize"
+                      min={1}
+                      required
+                      defaultValue={initial.enquiryThresholdPartySize && initial.enquiryThresholdPartySize > 0 ? initial.enquiryThresholdPartySize : ""}
+                      aria-label="Group size"
+                      className={`${inputClass} w-24`}
+                    />
+                  )}
+                </div>
               </Field>
               <Field
                 label="Bookings with less notice than this come in as enquiries"
