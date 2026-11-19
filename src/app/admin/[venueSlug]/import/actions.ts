@@ -47,6 +47,27 @@ async function readFile(venueSlug: string, text: string) {
     ? new Set((await prisma.booking.findMany({ where: { bookingRef: { in: refs } }, select: { bookingRef: true } })).map((b) => b.bookingRef))
     : new Set<string | null>();
   for (const r of parsed.rows) if (!r.skip && r.ref && existing.has(r.ref)) r.skip = "Already imported";
+
+  // The same booking already in BookMeIn under a different (or no)
+  // reference, e.g. imported from an earlier export or added by hand: same
+  // date and the same guest name or email. Cancelled bookings don't count.
+  const pending = parsed.rows.filter((r) => !r.skip && r.dateStr);
+  if (pending.length) {
+    const dates = [...new Set(pending.map((r) => r.dateStr!))].map((d) => new Date(`${d}T00:00:00.000Z`));
+    const sameDay = await prisma.booking.findMany({
+      where: { venueId: venue.id, date: { in: dates }, status: { notIn: ["CANCELLED"] } },
+      select: { date: true, startTime: true, customerName: true, customerEmail: true },
+    });
+    const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    for (const r of pending) {
+      const match = sameDay.find(
+        (b) =>
+          b.date.toISOString().slice(0, 10) === r.dateStr &&
+          ((norm(b.customerName) && norm(b.customerName) === norm(r.name)) || (norm(b.customerEmail) && norm(b.customerEmail) === norm(r.email))),
+      );
+      if (match) r.skip = match.startTime === r.startTime ? "Already in BookMeIn" : `Already in BookMeIn at ${match.startTime} (file says ${r.startTime})`;
+    }
+  }
   const bookingTypes = await prisma.bookingType.findMany({
     where: { venueId: venue.id },
     orderBy: [{ active: "desc" }, { sortOrder: "asc" }],

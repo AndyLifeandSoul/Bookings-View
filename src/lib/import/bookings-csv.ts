@@ -79,21 +79,25 @@ const ALIASES: Record<string, string[]> = {
   requests: ["customerrequests", "requests", "specialrequests"],
   customerNotes: ["customernotes", "notes", "comments", "guestnotes"],
   internal: ["internalnotes", "staffnotes"],
+  runSheet: ["runsheetnotes"],
+  labels: ["bookinglabels"],
+  areas: ["mainarea"],
+  moreAreas: ["additionalareas"],
   adminComments: ["admincomments"],
-  guests: ["guests", "partysize", "covers", "people", "pax", "numberofguests"],
-  date: ["date", "bookingdate", "visitdate"],
-  time: ["time", "bookingtime", "arrivaltime", "starttime"],
+  guests: ["guests", "partysize", "covers", "people", "pax", "numberofguests", "numpeople"],
+  date: ["date", "bookingdate", "visitdate", "dateyyyymmdd"],
+  time: ["time", "bookingtime", "arrivaltime", "starttime", "timehhmm"],
   duration: ["duration", "durationminutes", "length"],
   type: ["type", "bookingtype", "area", "experience"],
   walkIn: ["walkin"],
   status: ["status", "bookingstatus"],
   lost: ["lost"],
   cancelled: ["customercancelled", "cancelled"],
-  source: ["source", "channel", "bookingsource"],
-  createdBy: ["createdby", "takenby"],
+  source: ["source", "channel", "bookingsource", "partnersource"],
+  createdBy: ["createdby", "takenby", "assignedname"],
   minSpend: ["minimumspend", "minspend"],
   depositPaid: ["depositpaid", "depositstaken"],
-  preOrderTotal: ["preordertotal"],
+  preOrderTotal: ["preordertotal", "preordervalue"],
 };
 
 function headerIndex(header: string[]): Record<string, number> {
@@ -141,6 +145,16 @@ function money(v: string | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null;
 }
 
+/** Short stable id for a row with no reference of its own (FNV-1a, base 36). */
+function shortHash(s: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36).toUpperCase().padStart(7, "0");
+}
+
 const yes = (v: string | undefined) => /^(yes|y|true|1)$/i.test((v ?? "").trim());
 
 function mapStatus(raw: string): ImportStatus | "skip" | null {
@@ -180,9 +194,10 @@ export function readBookingsCsv(text: string, todayStr: string): ParsedImport {
   if (problems.length) return { rows: [], problems };
 
   const get = (r: string[], f: string) => (ix[f] != null ? (r[ix[f]] ?? "").trim() : "");
+  const dateStrRaw = (r: string[]) => parseDate(get(r, "date"));
 
   const rows = body.map((r, i): ImportRow => {
-    const ref = get(r, "ref") || null;
+    const fileRef = get(r, "ref") || null;
     const name = get(r, "name") || [get(r, "firstName"), get(r, "lastName")].filter(Boolean).join(" ");
     const dateStr = parseDate(get(r, "date"));
     const startTime = parseTime(get(r, "time"));
@@ -191,6 +206,20 @@ export function readBookingsCsv(text: string, todayStr: string): ParsedImport {
     const dur = Number(get(r, "duration"));
     const durationMinutes = Number.isFinite(dur) && dur >= 15 && dur <= 24 * 60 ? Math.round(dur) : null;
     const status = mapStatus(get(r, "status"));
+    // DesignMyNight's "Booking Labels": keep the useful ones (Birthday, a
+    // note like "whole snug area"), drop its own system labels.
+    const labels = get(r, "labels")
+      .split(/[,\n]/)
+      .map((l) => l.trim())
+      .filter((l) => l && !/^(auto_confirmed|classic|confirmed|unconfirmed)$/i.test(l))
+      .join(", ");
+    const areas = [get(r, "areas"), get(r, "moreAreas")].filter(Boolean).join(", ");
+    const phoneRaw = get(r, "phone");
+    // Exports without a booking reference still need one: it stops the same
+    // file importing twice, and the "DMN-" prefix keeps BookMeIn's automated
+    // guest emails off a booking the other system is already emailing about
+    // (see guestEmailsHandledElsewhere). Stable, so a re-import matches.
+    const ref = fileRef ?? (dateStrRaw(r) ? `DMN-${shortHash([name, get(r, "email"), get(r, "date"), get(r, "time")].join("|").toLowerCase())}` : null);
     const sourceRaw = get(r, "source");
     const createdBy = get(r, "createdBy") || null;
     const online = /website|online|widget|google|instagram|facebook/i.test(sourceRaw);
@@ -217,7 +246,7 @@ export function readBookingsCsv(text: string, todayStr: string): ParsedImport {
       ref,
       name: name || "(no name)",
       email: get(r, "email") || null,
-      phone: get(r, "phone") || null,
+      phone: phoneRaw.replace(/\D/g, "").length >= 6 ? phoneRaw : null,
       dateStr,
       startTime,
       durationMinutes,
@@ -228,7 +257,15 @@ export function readBookingsCsv(text: string, todayStr: string): ParsedImport {
       channel: online ? "website" : sourceRaw ? sourceRaw.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40) : null,
       takenBy: createdBy,
       notes: joinNotes([get(r, "requests"), get(r, "customerNotes")]),
-      staffNotes: joinNotes([get(r, "internal"), get(r, "adminComments"), ...moneyNote, ref ? `Imported, old ref ${ref}` : "Imported"]),
+      staffNotes: joinNotes([
+        get(r, "internal"),
+        get(r, "runSheet"),
+        get(r, "adminComments"),
+        labels,
+        areas ? `Tables in the old system: ${areas}` : null,
+        ...moneyNote,
+        fileRef ? `Imported, old ref ${fileRef}` : "Imported from DesignMyNight",
+      ]),
       minSpendPence: money(get(r, "minSpend")),
       skip,
     };
